@@ -118,6 +118,7 @@ extern void SDL_DBus_FreeReply(DBusMessage **saved_reply);
 
 extern void SDL_DBus_ScreensaverTickle(void);
 extern bool SDL_DBus_ScreensaverInhibit(bool inhibit);
+extern int SDL_DBus_ShowNotification(const SDL_NotificationData *notificationdata);
 
 extern bool SDL_DBus_OpenURI(const char *uri, const char *window_id, const char *activation_token);
 
