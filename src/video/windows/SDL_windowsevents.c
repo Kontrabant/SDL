@@ -1327,14 +1327,27 @@ WIN_WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
         Uint32 window_flags = SDL_GetWindowFlags(data->window);
         if (wParam == TRUE && (window_flags & SDL_WINDOW_BORDERLESS) && !(window_flags & SDL_WINDOW_FULLSCREEN)) {
+            NCCALCSIZE_PARAMS *params = (NCCALCSIZE_PARAMS *)lParam;
             /* When borderless, need to tell windows that the size of the non-client area is 0 */
             if (!(window_flags & SDL_WINDOW_RESIZABLE)) {
                 int w, h;
-                NCCALCSIZE_PARAMS *params = (NCCALCSIZE_PARAMS *)lParam;
                 w = data->window->windowed.w;
                 h = data->window->windowed.h;
                 params->rgrc[0].right = params->rgrc[0].left + w;
                 params->rgrc[0].bottom = params->rgrc[0].top + h;
+            } else if (window_flags & SDL_WINDOW_MAXIMIZED) {
+                RECT border_thickness;
+                SetRectEmpty(&border_thickness);
+
+                /* Maximized windows have non-client borders that hang over the
+                 * edges of the screen, which need to be compensated for.
+                 */
+                AdjustWindowRectEx(&border_thickness, GetWindowLongPtr(hwnd, GWL_STYLE) & ~WS_CAPTION, FALSE, 0);
+
+                params->rgrc[0].left -= border_thickness.left - 1;
+                params->rgrc[0].top -= border_thickness.top - 1;
+                params->rgrc[0].right -= border_thickness.right + 1;
+                params->rgrc[0].bottom -= border_thickness.bottom + 1;
             }
             return 0;
         }

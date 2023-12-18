@@ -1987,26 +1987,21 @@ static int video_getSetWindowState(void *arg)
     SDLTest_AssertPass("SDL_GetWindowFlags()");
     SDLTest_AssertCheck(flags & SDL_WINDOW_MAXIMIZED, "Verify the `SDL_WINDOW_MAXIMIZED` flag is set: %s", (flags & SDL_WINDOW_MAXIMIZED) ? "true" : "false");
 
-    /* Check that the maximized window doesn't extend beyond the usable display bounds.
-     * FIXME: Maximizing Win32 borderless windows is broken, so this always fails.
-     *        Skip it for now.
-     */
-    if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "windows") != 0) {
-        result = SDL_GetDisplayUsableBounds(SDL_GetDisplayForWindow(window), &display);
-        SDLTest_AssertPass("SDL_GetDisplayUsableBounds()");
-        SDLTest_AssertCheck(result == 0, "Verify return value; expected: 0, got: %d", result);
+    /* Check that the maximized window doesn't extend beyond the usable display bounds. */
+    result = SDL_GetDisplayUsableBounds(SDL_GetDisplayForWindow(window), &display);
+    SDLTest_AssertPass("SDL_GetDisplayUsableBounds()");
+    SDLTest_AssertCheck(result == 0, "Verify return value; expected: 0, got: %d", result);
 
-        desiredW = display.w;
-        desiredH = display.h;
-        currentW = windowedW + 1;
-        currentH = windowedH + 1;
-        SDL_GetWindowSize(window, &currentW, &currentH);
-        SDLTest_AssertPass("Call to SDL_GetWindowSize()");
-        SDLTest_AssertCheck(currentW <= desiredW, "Verify returned width; expected: <= %d, got: %d", desiredW,
-                            currentW);
-        SDLTest_AssertCheck(currentH <= desiredH, "Verify returned height; expected: <= %d, got: %d", desiredH,
-                            currentH);
-    }
+    desiredW = display.w;
+    desiredH = display.h;
+    currentW = windowedW + 1;
+    currentH = windowedH + 1;
+    SDL_GetWindowSize(window, &currentW, &currentH);
+    SDLTest_AssertPass("Call to SDL_GetWindowSize()");
+    SDLTest_AssertCheck(currentW <= desiredW, "Verify returned width; expected: <= %d, got: %d", desiredW,
+                        currentW);
+    SDLTest_AssertCheck(currentH <= desiredH, "Verify returned height; expected: <= %d, got: %d", desiredH,
+                        currentH);
 
     /* Restore and check the dimensions */
     result = SDL_RestoreWindow(window);
