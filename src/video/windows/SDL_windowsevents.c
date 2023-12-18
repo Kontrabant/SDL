@@ -1026,7 +1026,10 @@ WIN_WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             SDL_SendWindowEvent(data->window, SDL_EVENT_WINDOW_MAXIMIZED, 0, 0);
         } else {
             SDL_bool was_fixed_size = !!(data->window->flags & (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_MINIMIZED));
-            SDL_SendWindowEvent(data->window, SDL_EVENT_WINDOW_RESTORED, 0, 0);
+
+            if (!data->in_border_change) {
+                SDL_SendWindowEvent(data->window, SDL_EVENT_WINDOW_RESTORED, 0, 0);
+            }
 
             /* Send the stored floating size if moving from a fixed-size to floating state. */
             if (was_fixed_size && !(data->window->flags & SDL_WINDOW_FULLSCREEN)) {

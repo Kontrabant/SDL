@@ -1026,15 +1026,28 @@ void WIN_SetWindowBordered(SDL_VideoDevice *_this, SDL_Window *window, SDL_bool 
     SDL_WindowData *data = window->driverdata;
     HWND hwnd = data->hwnd;
     DWORD style;
+    const SDL_bool maximized = !!(window->flags & SDL_WINDOW_MAXIMIZED);
+
+    data->in_border_change = SDL_TRUE;
+    if (maximized) {
+        data->expected_resize = SDL_TRUE;
+        ShowWindow(hwnd, SW_RESTORE);
+        data->expected_resize = SDL_FALSE;
+    }
 
     style = GetWindowLong(hwnd, GWL_STYLE);
     style &= ~STYLE_MASK;
     style |= GetWindowStyle(window);
 
-    data->in_border_change = SDL_TRUE;
     SetWindowLong(hwnd, GWL_STYLE, style);
     WIN_SetWindowPositionInternal(window, data->copybits_flag | SWP_FRAMECHANGED | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE, SDL_WINDOWRECT_CURRENT);
     data->in_border_change = SDL_FALSE;
+
+    if (maximized) {
+        data->expected_resize = SDL_TRUE;
+        ShowWindow(hwnd, SW_MAXIMIZE);
+        data->expected_resize = SDL_FALSE;
+    }
 }
 
 void WIN_SetWindowResizable(SDL_VideoDevice *_this, SDL_Window *window, SDL_bool resizable)
