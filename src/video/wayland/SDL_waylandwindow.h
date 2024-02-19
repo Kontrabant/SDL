@@ -162,6 +162,8 @@ struct SDL_WindowData
     SDL_bool active;
     SDL_bool is_fullscreen;
     SDL_bool fullscreen_exclusive;
+    SDL_bool resizing;
+    SDL_bool drop_interactive_resizes;
     SDL_bool drop_fullscreen_requests;
     SDL_bool fullscreen_was_positioned;
     SDL_bool show_hide_sync_required;
