@@ -644,8 +644,8 @@ static SDL_bool ProcessHitTest(SDL_WindowData *window_data,
             } else
 #endif
                 if (window_data->shell_surface_type == WAYLAND_SURFACE_XDG_TOPLEVEL) {
-                if (window_data->shell_surface.xdg.roleobj.toplevel) {
-                    xdg_toplevel_move(window_data->shell_surface.xdg.roleobj.toplevel,
+                if (window_data->shell_surface.xdg.roleobj.toplevel.toplevel) {
+                    xdg_toplevel_move(window_data->shell_surface.xdg.roleobj.toplevel.toplevel,
                                       seat,
                                       serial);
                 }
@@ -671,8 +671,8 @@ static SDL_bool ProcessHitTest(SDL_WindowData *window_data,
             } else
 #endif
                 if (window_data->shell_surface_type == WAYLAND_SURFACE_XDG_TOPLEVEL) {
-                if (window_data->shell_surface.xdg.roleobj.toplevel) {
-                    xdg_toplevel_resize(window_data->shell_surface.xdg.roleobj.toplevel,
+                if (window_data->shell_surface.xdg.roleobj.toplevel.toplevel) {
+                    xdg_toplevel_resize(window_data->shell_surface.xdg.roleobj.toplevel.toplevel,
                                         seat,
                                         serial,
                                         directions[window_data->hit_test_result - SDL_HITTEST_RESIZE_TOPLEFT]);
