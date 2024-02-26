@@ -56,13 +56,28 @@ struct SDL_WindowData
             struct xdg_surface *surface;
             union
             {
-                struct xdg_toplevel *toplevel;
                 struct
                 {
-                    struct xdg_popup *popup;
-                    struct xdg_positioner *positioner;
+                    struct xdg_toplevel *xdg_toplevel;
+                    enum
+                    {
+                        WAYLAND_XDG_TOPLEVEL_WM_CAPS_WINDOW_MENU = 0x01,
+                        WAYLAND_XDG_TOPLEVEL_WM_CAPS_MAXIMIZE = 0x02,
+                        WAYLAND_XDG_TOPLEVEL_WM_CAPS_FULLSCREEN = 0x04,
+                        WAYLAND_XDG_TOPLEVEL_WM_CAPS_MINIMIZE = 0x08,
+
+                        WAYLAND_XDG_TOPLEVEL_WM_CAPS_ALL = WAYLAND_XDG_TOPLEVEL_WM_CAPS_WINDOW_MENU |
+                                                           WAYLAND_XDG_TOPLEVEL_WM_CAPS_MAXIMIZE |
+                                                           WAYLAND_XDG_TOPLEVEL_WM_CAPS_FULLSCREEN |
+                                                           WAYLAND_XDG_TOPLEVEL_WM_CAPS_MINIMIZE
+                    } wm_caps;
+                } toplevel;
+                struct
+                {
+                    struct xdg_popup *xdg_popup;
+                    struct xdg_positioner *xdg_positioner;
                 } popup;
-            } roleobj;
+            };
             bool initial_configure_seen;
         } xdg;
     } shell_surface;
