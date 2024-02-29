@@ -98,6 +98,7 @@
 #define HAVE_STRNCMP 1
 #define HAVE__STRICMP 1
 #define HAVE__STRNICMP 1
+#define HAVE_STRFTIME 1
 #define HAVE_VSNPRINTF 1
 /* TODO, WinRT: consider using ??_s versions of the following */
 /* #undef HAVE__STRLWR */
@@ -188,6 +189,9 @@
 /* WinRT on Windows 8.0 and Windows Phone 8.0 don't support CreateThread() */
 #define SDL_THREAD_STDCPP   1
 #endif
+
+/* Enable RTC system */
+#define SDL_TIME_WINDOWS   1
 
 /* Enable various timer systems */
 #define SDL_TIMER_WINDOWS   1

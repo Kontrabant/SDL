@@ -164,6 +164,7 @@ typedef unsigned int uintptr_t;
 #define HAVE__WCSICMP 1
 #define HAVE__WCSNICMP 1
 #define HAVE__WCSDUP 1
+#define HAVE_STRFTIME 1
 #define HAVE_SSCANF 1
 #define HAVE_VSSCANF 1
 #define HAVE_VSNPRINTF 1
@@ -262,6 +263,9 @@ typedef unsigned int uintptr_t;
 #define SDL_THREAD_GENERIC_COND_SUFFIX 1
 #define SDL_THREAD_GENERIC_RWLOCK_SUFFIX 1
 #define SDL_THREAD_WINDOWS  1
+
+/* Enable RTC system */
+#define SDL_TIME_WINDOWS   1
 
 /* Enable various timer systems */
 #define SDL_TIMER_WINDOWS   1

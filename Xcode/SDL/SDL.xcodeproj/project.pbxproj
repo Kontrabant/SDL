@@ -500,6 +500,8 @@
 		F3FA5A242B59ACE000FEAD97 /* yuv_rgb_lsx.h in Headers */ = {isa = PBXBuildFile; fileRef = F3FA5A1B2B59ACE000FEAD97 /* yuv_rgb_lsx.h */; };
 		F3FA5A252B59ACE000FEAD97 /* yuv_rgb_common.h in Headers */ = {isa = PBXBuildFile; fileRef = F3FA5A1C2B59ACE000FEAD97 /* yuv_rgb_common.h */; };
 		FA73671D19A540EF004122E4 /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FA73671C19A540EF004122E4 /* CoreVideo.framework */; platformFilters = (ios, maccatalyst, macos, tvos, watchos, ); };
+		0000494CC93F3E624D3C0000 /* SDL_systime.c in Sources */ = {isa = PBXBuildFile; fileRef = 00003F472C51CE7DF6160000 /* SDL_systime.c */; };
+		000095FA1BDE436CF3AF0000 /* SDL_time.c in Sources */ = {isa = PBXBuildFile; fileRef = 0000641A9BAC11AB3FBE0000 /* SDL_time.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1028,6 +1030,8 @@
 		F59C710600D5CB5801000001 /* SDL.info */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text; path = SDL.info; sourceTree = "<group>"; };
 		F5A2EF3900C6A39A01000001 /* BUGS.txt */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text; name = BUGS.txt; path = ../../BUGS.txt; sourceTree = SOURCE_ROOT; };
 		FA73671C19A540EF004122E4 /* CoreVideo.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreVideo.framework; path = System/Library/Frameworks/CoreVideo.framework; sourceTree = SDKROOT; };
+		00003F472C51CE7DF6160000 /* SDL_systime.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = SDL_systime.c; path = SDL_systime.c; sourceTree = "<group>"; };
+		0000641A9BAC11AB3FBE0000 /* SDL_time.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = SDL_time.c; path = SDL_time.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1248,6 +1252,7 @@
 				F386F6E52884663E001840AA /* SDL_utils_c.h */,
 				F386F6E62884663E001840AA /* SDL_utils.c */,
 				A7D8A57123E2513D00DCD162 /* SDL.c */,
+				0000F5E7419220E3A8AB0000 /* time */,
 			);
 			name = "Library Source";
 			path = ../../src;
@@ -2176,6 +2181,23 @@
 			path = resources;
 			sourceTree = "<group>";
 		};
+		0000F5E7419220E3A8AB0000 /* time */ = {
+			isa = PBXGroup;
+			children = (
+				000004752BA2F77DECDF0000 /* unix */,
+				0000641A9BAC11AB3FBE0000 /* SDL_time.c */,
+			);
+			path = time;
+			sourceTree = "<group>";
+		};
+		000004752BA2F77DECDF0000 /* unix */ = {
+			isa = PBXGroup;
+			children = (
+				00003F472C51CE7DF6160000 /* SDL_systime.c */,
+			);
+			path = unix;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXHeadersBuildPhase section */
@@ -2756,6 +2778,8 @@
 				000098E9DAA43EF6FF7F0000 /* SDL_camera.c in Sources */,
 				00001B2471F503DD3C1B0000 /* SDL_camera_dummy.c in Sources */,
 				00002B20A48E055EB0350000 /* SDL_camera_coremedia.m in Sources */,
+				0000494CC93F3E624D3C0000 /* SDL_systime.c in Sources */,
+				000095FA1BDE436CF3AF0000 /* SDL_time.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -80,6 +80,8 @@
 #define HAVE_STRCASECMP 1
 #define HAVE_STRNCASECMP 1
 #define HAVE_STRCASESTR 1
+#define HAVE_STRFTIME 1
+#define HAVE_TM_GMTOFF 1
 #define HAVE_VSSCANF 1
 #define HAVE_VSNPRINTF  1
 #define HAVE_ACOS   1
@@ -129,6 +131,8 @@
 #define HAVE_SIGACTION  1
 #define HAVE_SETJMP 1
 #define HAVE_NANOSLEEP  1
+#define HAVE_GMTIME_R 1
+#define HAVE_LOCALTIME_R 1
 #define HAVE_SYSCONF    1
 #define HAVE_SYSCTLBYNAME 1
 #define HAVE_O_CLOEXEC 1
@@ -160,6 +164,9 @@
 /* Enable various threading systems */
 #define SDL_THREAD_PTHREAD  1
 #define SDL_THREAD_PTHREAD_RECURSIVE_MUTEX  1
+
+/* Enable various RTC system */
+#define SDL_TIME_UNIX  1
 
 /* Enable various timer systems */
 #define SDL_TIMER_UNIX  1
