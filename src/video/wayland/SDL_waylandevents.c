@@ -1595,16 +1595,22 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard,
                                 uint32_t state_w)
 {
     struct SDL_WaylandInput *input = data;
-    enum wl_keyboard_key_state state = state_w;
     SDL_Scancode scancode = SDL_SCANCODE_UNKNOWN;
     char text[8];
     SDL_bool has_text = SDL_FALSE;
     SDL_bool handled_by_ime = SDL_FALSE;
     const Uint64 timestamp_raw_ns = Wayland_GetKeyboardTimestampRaw(input, time);
+    Uint8 pressed = state_w == WL_KEYBOARD_KEY_STATE_PRESSED ? SDL_PRESSED : SDL_RELEASED;
+
+#ifdef WL_KEYBOARD_KEY_STATE_REPEATED_SINCE
+    if (state_w == WL_KEYBOARD_KEY_STATE_REPEATED) {
+        pressed = SDL_PRESSED;
+    }
+#endif
 
     Wayland_UpdateImplicitGrabSerial(input, serial);
 
-    if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+    if (pressed) {
         if (SDL_TextInputActive()) {
             has_text = keyboard_input_get_text(text, input, key, SDL_PRESSED, &handled_by_ime);
         }
@@ -1623,11 +1629,11 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard,
 
     if (!handled_by_ime) {
         scancode = Wayland_get_scancode_from_key(input, key + 8);
-        Wayland_HandleModifierKeys(input, scancode, state == WL_KEYBOARD_KEY_STATE_PRESSED);
-        SDL_SendKeyboardKeyIgnoreModifiers(Wayland_GetKeyboardTimestamp(input, time), input->keyboard_id, state == WL_KEYBOARD_KEY_STATE_PRESSED ? SDL_PRESSED : SDL_RELEASED, scancode);
+        Wayland_HandleModifierKeys(input, scancode, pressed == SDL_PRESSED);
+        SDL_SendKeyboardKeyIgnoreModifiers(Wayland_GetKeyboardTimestamp(input, time), input->keyboard_id, pressed, scancode);
     }
 
-    if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+    if (pressed) {
         if (has_text && !(SDL_GetModState() & SDL_KMOD_CTRL)) {
             if (!handled_by_ime) {
                 SDL_SendKeyboardText(text);
