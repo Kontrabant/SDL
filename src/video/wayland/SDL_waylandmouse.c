@@ -257,7 +257,7 @@ static void Wayland_DBusFinishCursorProperties()
 
 #endif
 
-static SDL_bool wayland_get_system_cursor(SDL_VideoData *vdata, Wayland_CursorData *cdata, float *scale)
+static SDL_bool wayland_get_system_cursor(SDL_VideoData *vdata, Wayland_CursorData *cdata, Sint32 *scale)
 {
     struct wl_cursor_theme *theme = NULL;
     struct wl_cursor *cursor;
@@ -289,7 +289,7 @@ static SDL_bool wayland_get_system_cursor(SDL_VideoData *vdata, Wayland_CursorDa
     focusdata = focus->driverdata;
 
     /* Cursors use integer scaling. */
-    *scale = SDL_ceilf(focusdata->windowed_scale_factor);
+    *scale = (focusdata->scale_factor + 60) / 120;
     size *= *scale;
     for (i = 0; i < vdata->num_cursor_themes; i += 1) {
         if (vdata->cursor_themes[i].size == size) {
@@ -525,7 +525,7 @@ static int Wayland_ShowCursor(SDL_Cursor *cursor)
     SDL_VideoData *d = vd->driverdata;
     struct SDL_WaylandInput *input = d->input;
     struct wl_pointer *pointer = d->pointer;
-    float scale = 1.0f;
+    Sint32 scale = 1;
 
     if (!pointer) {
         return -1;

@@ -806,25 +806,25 @@ static void display_handle_done(void *data,
             /* ...and the compositor scales the logical viewport... */
             if (video->viewporter) {
                 /* ...and viewports are supported, calculate the true scale of the output. */
-                driverdata->scale_factor = (float)native_mode.w / (float)driverdata->screen_width;
+                driverdata->scale_factor = (native_mode.w * 120 + 60) / driverdata->screen_width;
             } else {
                 /* ...otherwise, the 'native' pixel values are a multiple of the logical screen size. */
-                driverdata->pixel_width = driverdata->screen_width * (int)driverdata->scale_factor;
-                driverdata->pixel_height = driverdata->screen_height * (int)driverdata->scale_factor;
+                driverdata->pixel_width = (driverdata->screen_width * driverdata->scale_factor + 60) / 120;
+                driverdata->pixel_height = (driverdata->screen_height * driverdata->scale_factor + 60) / 120;
             }
         } else {
             /* ...and the output viewport is not scaled in the global compositing
              * space, the output dimensions need to be divided by the scale factor.
              */
-            driverdata->screen_width /= (int)driverdata->scale_factor;
-            driverdata->screen_height /= (int)driverdata->scale_factor;
+            driverdata->screen_width = (driverdata->screen_width * 120) / driverdata->scale_factor;
+            driverdata->screen_height = (driverdata->screen_height * 120) / driverdata->scale_factor;
         }
     } else {
         /* Calculate the points from the pixel values, if xdg-output isn't present.
          * Use the native mode pixel values since they are pre-transformed.
          */
-        driverdata->screen_width = native_mode.w / (int)driverdata->scale_factor;
-        driverdata->screen_height = native_mode.h / (int)driverdata->scale_factor;
+        driverdata->screen_width = (native_mode.w * 120) / driverdata->scale_factor;
+        driverdata->screen_height = (native_mode.h * 120) / driverdata->scale_factor;
     }
 
     /* The scaled desktop mode */
@@ -833,7 +833,7 @@ static void display_handle_done(void *data,
 
     desktop_mode.w = driverdata->screen_width;
     desktop_mode.h = driverdata->screen_height;
-    desktop_mode.pixel_density = driverdata->scale_factor;
+    desktop_mode.pixel_density = (float)driverdata->scale_factor / 120.f;
     desktop_mode.refresh_rate = ((100 * driverdata->refresh) / 1000) / 100.0f; /* mHz to Hz */
 
     if (driverdata->display > 0) {
@@ -846,7 +846,7 @@ static void display_handle_done(void *data,
     SDL_SetDesktopDisplayMode(dpy, &desktop_mode);
 
     /* Expose the unscaled, native resolution if the scale is 1.0 or viewports are available... */
-    if (driverdata->scale_factor == 1.0f || video->viewporter) {
+    if (driverdata->scale_factor == 120 || video->viewporter) {
         SDL_AddFullscreenDisplayMode(dpy, &native_mode);
     } else {
         /* ...otherwise expose the integer scaled variants of the desktop resolution down to 1. */
@@ -854,7 +854,7 @@ static void display_handle_done(void *data,
 
         desktop_mode.pixel_density = 1.0f;
 
-        for (i = (int)driverdata->scale_factor; i > 0; --i) {
+        for (i = SDL_max(driverdata->scale_factor / 120, 1); i > 0; --i) {
             desktop_mode.w = driverdata->screen_width * i;
             desktop_mode.h = driverdata->screen_height * i;
             SDL_AddFullscreenDisplayMode(dpy, &desktop_mode);
@@ -893,7 +893,7 @@ static void display_handle_scale(void *data,
                                  int32_t factor)
 {
     SDL_DisplayData *driverdata = (SDL_DisplayData *)data;
-    driverdata->scale_factor = factor;
+    driverdata->scale_factor = factor * 120;
 }
 
 static void display_handle_name(void *data, struct wl_output *wl_output, const char *name)
@@ -937,7 +937,7 @@ static int Wayland_add_display(SDL_VideoData *d, uint32_t id, uint32_t version)
     data->videodata = d;
     data->output = output;
     data->registry_id = id;
-    data->scale_factor = 1.0f;
+    data->scale_factor = 120;
 
     wl_output_add_listener(output, &output_listener, data);
     SDL_WAYLAND_register_output(output);

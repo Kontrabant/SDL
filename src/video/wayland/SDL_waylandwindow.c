@@ -45,24 +45,16 @@
 #include <libdecor.h>
 #endif
 
-/* These are *NOT* roundtrip safe! */
+/* These are point->pixel->point round trip safe for scale values >= 1.0 (120) */
 static int PointToPixel(SDL_Window *window, int point)
 {
-    /* Rounds halfway away from zero as per the Wayland fractional scaling protocol spec. */
-    return (int)SDL_lroundf((float)point * window->driverdata->windowed_scale_factor);
+    /* Round per the Wayland fractional scaling protocol spec. */
+    return (window->driverdata->scale_factor * point + 60) / 120;
 }
 
 static int PixelToPoint(SDL_Window *window, int pixel)
 {
-    return (int)SDL_lroundf((float)pixel / window->driverdata->windowed_scale_factor);
-}
-
-static SDL_bool FloatEqual(float a, float b)
-{
-    const float diff = SDL_fabsf(a - b);
-    const float largest = SDL_max(SDL_fabsf(a), SDL_fabsf(b));
-
-    return diff <= largest * SDL_FLT_EPSILON;
+    return (pixel * 120 + 60) / window->driverdata->scale_factor;
 }
 
 /* According to the Wayland spec:
@@ -379,7 +371,7 @@ static void ConfigureWindowGeometry(SDL_Window *window)
                 wp_viewport_set_destination(data->viewport, window_width, window_height);
             } else if (window->flags & SDL_WINDOW_HIGH_PIXEL_DENSITY) {
                 /* Don't change this if the DPI awareness flag is unset, as an application may have set this manually on a custom or external surface. */
-                wl_surface_set_buffer_scale(data->surface, (int32_t)data->windowed_scale_factor);
+                wl_surface_set_buffer_scale(data->surface, (data->scale_factor + 60) / 120);
             }
 
             /* Clamp the physical window size to the system minimum required size. */
@@ -390,8 +382,9 @@ static void ConfigureWindowGeometry(SDL_Window *window)
                 data->pointer_scale.x = 1.0f;
                 data->pointer_scale.y = 1.0f;
             } else {
-                data->pointer_scale.x = data->windowed_scale_factor;
-                data->pointer_scale.y = data->windowed_scale_factor;
+                const float scale = (float)data->scale_factor / 120.f;
+                data->pointer_scale.x = scale;
+                data->pointer_scale.y = scale;
             }
         }
     }
@@ -1247,9 +1240,9 @@ static struct libdecor_frame_interface libdecor_frame_interface = {
 };
 #endif
 
-static void Wayland_HandlePreferredScaleChanged(SDL_WindowData *window_data, float factor)
+static void Wayland_HandlePreferredScaleChanged(SDL_WindowData *window_data, int factor)
 {
-    const float old_factor = window_data->windowed_scale_factor;
+    const int old_factor = window_data->scale_factor;
 
     if (!(window_data->sdlwindow->flags & SDL_WINDOW_HIGH_PIXEL_DENSITY) && !window_data->scale_to_display) {
         /* Scale will always be 1, just ignore this */
@@ -1261,8 +1254,8 @@ static void Wayland_HandlePreferredScaleChanged(SDL_WindowData *window_data, flo
         factor = SDL_ceilf(factor);
     }
 
-    if (!FloatEqual(factor, old_factor)) {
-        window_data->windowed_scale_factor = factor;
+    if (factor != old_factor) {
+        window_data->scale_factor = factor;
 
         if (window_data->scale_to_display) {
             /* If the window is in the floating state with a user/application specified size, calculate the new
@@ -1306,7 +1299,7 @@ static void Wayland_MaybeUpdateScaleFactor(SDL_WindowData *window)
         }
     } else {
         /* All outputs removed, just fall back. */
-        factor = window->windowed_scale_factor;
+        factor = window->scale_factor;
     }
 
     Wayland_HandlePreferredScaleChanged(window, factor);
@@ -1382,7 +1375,7 @@ static void handle_preferred_buffer_scale(void *data, struct wl_surface *wl_surf
      * only listen to this event if the fractional scaling protocol is not present.
      */
     if (!wind->fractional_scale) {
-        Wayland_HandlePreferredScaleChanged(data, (float)factor);
+        Wayland_HandlePreferredScaleChanged(data, factor * 120);
     }
 }
 
@@ -1400,8 +1393,7 @@ static const struct wl_surface_listener surface_listener = {
 
 static void handle_preferred_fractional_scale(void *data, struct wp_fractional_scale_v1 *wp_fractional_scale_v1, uint32_t scale)
 {
-    const float factor = scale / 120.; /* 120 is a magic number defined in the spec as a common denominator */
-    Wayland_HandlePreferredScaleChanged(data, factor);
+    Wayland_HandlePreferredScaleChanged(data, scale);
 }
 
 static const struct wp_fractional_scale_v1_listener fractional_scale_listener = {
@@ -2244,16 +2236,16 @@ int Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Propert
     data->waylandData = c;
     data->sdlwindow = window;
 
-    data->windowed_scale_factor = 1.0f;
+    data->scale_factor = 120;
 
     if (SDL_WINDOW_IS_POPUP(window)) {
         data->scale_to_display = window->parent->driverdata->scale_to_display;
-        data->windowed_scale_factor = window->parent->driverdata->windowed_scale_factor;
+        data->scale_factor = window->parent->driverdata->scale_factor;
         EnsurePopupPositionIsValid(window, &window->x, &window->y);
     } else if ((window->flags & SDL_WINDOW_HIGH_PIXEL_DENSITY) || scale_to_display) {
         for (int i = 0; i < _this->num_displays; i++) {
             float scale = _this->displays[i]->driverdata->scale_factor;
-            data->windowed_scale_factor = SDL_max(data->windowed_scale_factor, scale);
+            data->scale_factor = SDL_max(data->scale_factor, scale);
         }
     }
 
