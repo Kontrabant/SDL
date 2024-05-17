@@ -1257,12 +1257,12 @@ EGLSurface SDL_EGL_CreateSurface(SDL_VideoDevice *_this, SDL_Window *window, Nat
     }
 
 #ifdef EGL_EXT_present_opaque
-    /* XXX: Some Nvidia EGL implementations ignore the value for this extension and enable it based only
-     *      on the presence of the EGL_PRESENT_OPAQUE_EXT enum in the attribute array. Only ask for this
-     *      extension if the intent is to enable it.
+    /* XXX: Some Nvidia EGL implementations ignore the value parameter and enable this extension based
+     *      solely on the presence of the EGL_PRESENT_OPAQUE_EXT enum in the attribute array. Only ask
+     *      for this extension if the intent is to enable it.
      */
     if (SDL_EGL_HasExtension(_this, SDL_EGL_DISPLAY_EXTENSION, "EGL_EXT_present_opaque")) {
-        if (!window && !(window->flags & SDL_WINDOW_TRANSPARENT)) {
+        if (!window || !(window->flags & SDL_WINDOW_TRANSPARENT)) {
             attribs[attr++] = EGL_PRESENT_OPAQUE_EXT;
             attribs[attr++] = EGL_TRUE;
         }
