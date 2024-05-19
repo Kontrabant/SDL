@@ -424,6 +424,11 @@ static SDL_VideoDevice *Wayland_CreateDevice(void)
     data->input = input;
     data->display_externally_owned = display_is_external;
     data->scale_to_display_enabled = SDL_GetHintBoolean(SDL_HINT_VIDEO_WAYLAND_SCALE_TO_DISPLAY, SDL_FALSE);
+    data->input_queue_display_wrapper = WAYLAND_wl_proxy_create_wrapper(display);
+    data->input_queue = WAYLAND_wl_display_create_queue(display);
+    WAYLAND_wl_proxy_set_queue((struct wl_proxy *)data->input_queue_display_wrapper, data->input_queue);
+    data->input_thread_mutex = SDL_CreateMutex();
+    data->input_thread_cond = SDL_CreateCondition();
     WAYLAND_wl_list_init(&data->output_list);
     WAYLAND_wl_list_init(&data->output_order);
     WAYLAND_wl_list_init(&external_window_list);

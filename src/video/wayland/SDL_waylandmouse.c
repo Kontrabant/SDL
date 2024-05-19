@@ -516,7 +516,7 @@ static void Wayland_SetSystemCursorShape(struct SDL_WaylandInput *input, SDL_Sys
         shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
     }
 
-    wp_cursor_shape_device_v1_set_shape(input->cursor_shape, input->pointer_enter_serial, shape);
+    wp_cursor_shape_device_v1_set_shape(input->cursor_shape, (uint32_t)SDL_AtomicGet(&input->pointer_enter_serial), shape);
 }
 
 static int Wayland_ShowCursor(SDL_Cursor *cursor)
@@ -554,7 +554,7 @@ static int Wayland_ShowCursor(SDL_Cursor *cursor)
 
         wl_surface_set_buffer_scale(data->surface, scale);
         wl_pointer_set_cursor(pointer,
-                              input->pointer_enter_serial,
+                              (uint32_t)SDL_AtomicGet(&input->pointer_enter_serial),
                               data->surface,
                               data->hot_x / scale,
                               data->hot_y / scale);
@@ -571,7 +571,7 @@ static int Wayland_ShowCursor(SDL_Cursor *cursor)
 
     } else {
         input->cursor_visible = SDL_FALSE;
-        wl_pointer_set_cursor(pointer, input->pointer_enter_serial, NULL, 0, 0);
+        wl_pointer_set_cursor(pointer, (uint32_t)SDL_AtomicGet(&input->pointer_enter_serial), NULL, 0, 0);
     }
 
     return 0;

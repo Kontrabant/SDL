@@ -95,6 +95,16 @@ struct SDL_VideoData
     SDL_bool display_externally_owned;
 
     SDL_bool scale_to_display_enabled;
+
+    struct wl_display *input_queue_display_wrapper;
+    struct wl_event_queue *input_queue;
+    SDL_Thread *input_thread;
+    SDL_AtomicInt input_thread_done;
+    SDL_AtomicInt default_queue_sync_pending;
+    int input_thread_sync_count;
+    int input_thread_sync_target;
+    SDL_Mutex *input_thread_mutex;
+    SDL_Condition *input_thread_cond;
 };
 
 struct SDL_DisplayData

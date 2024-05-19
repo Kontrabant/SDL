@@ -93,6 +93,12 @@ typedef struct
     char text[8];
 } SDL_WaylandKeyboardRepeat;
 
+typedef struct Wayland_Keymap
+{
+    xkb_layout_index_t layout;
+    SDL_Keycode keymap[SDL_NUM_SCANCODES];
+} Wayland_Keymap;
+
 struct SDL_WaylandInput
 {
     SDL_VideoData *display;
@@ -112,7 +118,8 @@ struct SDL_WaylandInput
     SDL_WindowData *keyboard_focus;
     Uint32 keyboard_id;
     Uint32 pointer_id;
-    uint32_t pointer_enter_serial;
+
+    Wayland_Keymap pending_keymap;
 
     /* High-resolution event timestamps */
     Uint64 keyboard_timestamp_ns;
@@ -125,8 +132,9 @@ struct SDL_WaylandInput
 
     uint32_t buttons_pressed;
 
-    /* The serial of the last implicit grab event for window activation and selection data. */
-    Uint32 last_implicit_grab_serial;
+    /* The serials of the last enter and implicit grab event for window activation and selection data. */
+    SDL_AtomicInt pointer_enter_serial;
+    SDL_AtomicInt last_implicit_grab_serial;
 
     struct
     {

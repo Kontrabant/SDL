@@ -332,31 +332,61 @@ static SDL_bool keyboard_repeat_key_is_set(SDL_WaylandKeyboardRepeat *repeat_inf
     return repeat_info->is_initialized && repeat_info->is_key_down && key == repeat_info->key;
 }
 
-static void sync_done_handler(void *data, struct wl_callback *callback, uint32_t callback_data)
+static void default_queue_sync_done_handler(void *data, struct wl_callback *callback, uint32_t callback_data)
 {
-    /* Nothing to do, just destroy the callback */
+    if (data) {
+        struct SDL_VideoData *viddata = (struct SDL_VideoData *)data;
+        SDL_AtomicSet(&viddata->default_queue_sync_pending, 0);
+    }
     wl_callback_destroy(callback);
 }
 
-static struct wl_callback_listener sync_listener = {
-    sync_done_handler
+static struct wl_callback_listener default_queue_sync_listener = {
+    default_queue_sync_done_handler
+};
+
+static void input_queue_sync_done_handler(void *data, struct wl_callback *callback, uint32_t callback_data)
+{
+    if (data) {
+        struct SDL_VideoData *viddata = (struct SDL_VideoData *)data;
+        SDL_LockMutex(viddata->input_thread_mutex);
+        if (++viddata->input_thread_sync_count == viddata->input_thread_sync_target) {
+            SDL_SignalCondition(viddata->input_thread_cond);
+        }
+        SDL_UnlockMutex(viddata->input_thread_mutex);
+    }
+    wl_callback_destroy(callback);
+}
+
+static struct wl_callback_listener input_queue_sync_listener = {
+    input_queue_sync_done_handler
 };
 
 void Wayland_SendWakeupEvent(SDL_VideoDevice *_this, SDL_Window *window)
 {
     SDL_VideoData *d = _this->driverdata;
 
-    /* Queue a sync event to unblock the event queue fd if it's empty and being waited on.
-     * TODO: Maybe use a pipe to avoid the compositor roundtrip?
-     */
+    /* Queue a sync event to unblock the event queue fd if it's empty and being waited on. */
+    SDL_AtomicSet(&d->default_queue_sync_pending, 1);
+
     struct wl_callback *cb = wl_display_sync(d->display);
-    wl_callback_add_listener(cb, &sync_listener, NULL);
+    wl_callback_add_listener(cb, &default_queue_sync_listener, NULL);
     WAYLAND_wl_display_flush(d->display);
+}
+
+void Wayland_SetInputSyncPoint(SDL_VideoData *viddata)
+{
+    SDL_LockMutex(viddata->input_thread_mutex);
+    viddata->input_thread_sync_target++;
+    SDL_UnlockMutex(viddata->input_thread_mutex);
+
+    struct wl_callback *cb = wl_display_sync(viddata->input_queue_display_wrapper);
+    wl_callback_add_listener(cb, &input_queue_sync_listener, viddata);
 }
 
 static int dispatch_queued_events(SDL_VideoData *viddata)
 {
-    int ret;
+    int ret = 0;
 
     /*
      * NOTE: When reconnection is implemented, check if libdecor needs to be
@@ -364,19 +394,27 @@ static int dispatch_queued_events(SDL_VideoData *viddata)
      */
 #ifdef HAVE_LIBDECOR_H
     if (viddata->shell.libdecor) {
-        libdecor_dispatch(viddata->shell.libdecor, 0);
+        ret = libdecor_dispatch(viddata->shell.libdecor, 0);
     }
 #endif
 
-    ret = WAYLAND_wl_display_dispatch_pending(viddata->display);
-    return ret >= 0 ? 1 : ret;
+    if (ret >= 0) {
+        const int cnt = WAYLAND_wl_display_dispatch_pending(viddata->display);
+        if (cnt >= 0) {
+            ret += cnt;
+        } else {
+            ret = cnt;
+        }
+    }
+    return ret;
 }
 
 int Wayland_WaitEventTimeout(SDL_VideoDevice *_this, Sint64 timeoutNS)
 {
     SDL_VideoData *d = _this->driverdata;
-    struct SDL_WaylandInput *input = d->input;
-    SDL_bool key_repeat_active = SDL_FALSE;
+    Uint64 startTicks = SDL_GetTicksNS();
+    // struct SDL_WaylandInput *input = d->input;
+    // SDL_bool key_repeat_active = SDL_FALSE;
 
     WAYLAND_wl_display_flush(d->display);
 
@@ -389,7 +427,7 @@ int Wayland_WaitEventTimeout(SDL_VideoDevice *_this, Sint64 timeoutNS)
 #ifdef SDL_USE_LIBDBUS
     SDL_DBus_PumpEvents();
 #endif
-
+#if 0
     /* If key repeat is active, we'll need to cap our maximum wait time to handle repeats */
     if (input && keyboard_repeat_is_set(&input->keyboard_repeat)) {
         const Uint64 elapsed = SDL_GetTicksNS() - input->keyboard_repeat.sdl_press_time_ns;
@@ -406,51 +444,66 @@ int Wayland_WaitEventTimeout(SDL_VideoDevice *_this, Sint64 timeoutNS)
             key_repeat_active = SDL_TRUE;
         }
     }
+#endif
 
-    /* wl_display_prepare_read() will return -1 if the default queue is not empty.
-     * If the default queue is empty, it will prepare us for our SDL_IOReady() call. */
-    if (WAYLAND_wl_display_prepare_read(d->display) == 0) {
-        /* Use SDL_IOR_NO_RETRY to ensure SIGINT will break us out of our wait */
-        int err = SDL_IOReady(WAYLAND_wl_display_get_fd(d->display), SDL_IOR_READ | SDL_IOR_NO_RETRY, timeoutNS);
-        if (err > 0) {
-            /* There are new events available to read */
-            WAYLAND_wl_display_read_events(d->display);
-            return dispatch_queued_events(d);
-        } else if (err == 0) {
-            /* No events available within the timeout */
-            WAYLAND_wl_display_cancel_read(d->display);
+    for (;;) {
+        /* wl_display_prepare_read() will return -1 if the default queue is not empty.
+         * If the default queue is empty, it will prepare us for our SDL_IOReady() call.
+         *
+         * Note that if the input thread processed events, a sync event will be on the main queue.
+         */
+        if (WAYLAND_wl_display_prepare_read(d->display) == 0) {
+            /* Use SDL_IOR_NO_RETRY to ensure SIGINT will break us out of our wait */
+            int err = SDL_IOReady(WAYLAND_wl_display_get_fd(d->display), SDL_IOR_READ | SDL_IOR_NO_RETRY, timeoutNS);
+            if (err > 0) {
+                /* There are new events available to read */
+                WAYLAND_wl_display_read_events(d->display);
 
-            /* If key repeat is active, we might have woken up to generate a key event */
-            if (key_repeat_active) {
-                const Uint64 elapsed = SDL_GetTicksNS() - input->keyboard_repeat.sdl_press_time_ns;
-                if (keyboard_repeat_handle(&input->keyboard_repeat, elapsed)) {
+                const int ret = dispatch_queued_events(d);
+                if (ret || !timeoutNS) {
+                    return ret > 0 ? 1 : ret;
+                }
+
+                /* The data wasn't for the default queue. If the deadline hasn't elapsed, see if the input
+                 * thread sends a sync notification.
+                 */
+                if (timeoutNS > 0) {
+                    const Uint64 currentTicks = SDL_GetTicksNS();
+                    if (currentTicks - timeoutNS < startTicks) {
+                        timeoutNS -= currentTicks - startTicks;
+                        startTicks = currentTicks;
+                    } else {
+                        return 0;
+                    }
+                }
+            } else if (err == 0) {
+                /* No events available within the timeout */
+                WAYLAND_wl_display_cancel_read(d->display);
+                return 0;
+            } else {
+                /* Error returned from poll()/select() */
+                WAYLAND_wl_display_cancel_read(d->display);
+
+                if (errno == EINTR) {
+                    /* If the wait was interrupted by a signal, we may have generated a
+                     * SDL_EVENT_QUIT event. Let the caller know to call SDL_PumpEvents(). */
                     return 1;
+                } else {
+                    return err;
                 }
             }
-
-            return 0;
         } else {
-            /* Error returned from poll()/select() */
-            WAYLAND_wl_display_cancel_read(d->display);
-
-            if (errno == EINTR) {
-                /* If the wait was interrupted by a signal, we may have generated a
-                 * SDL_EVENT_QUIT event. Let the caller know to call SDL_PumpEvents(). */
-                return 1;
-            } else {
-                return err;
-            }
+            /* We already had pending events */
+            const int ret = dispatch_queued_events(d);
+            return ret > 0 ? 1 : ret;
         }
-    } else {
-        /* We already had pending events */
-        return dispatch_queued_events(d);
     }
 }
 
 void Wayland_PumpEvents(SDL_VideoDevice *_this)
 {
     SDL_VideoData *d = _this->driverdata;
-    struct SDL_WaylandInput *input = d->input;
+    //struct SDL_WaylandInput *input = d->input;
     int err;
 
 #ifdef SDL_USE_IME
@@ -469,6 +522,7 @@ void Wayland_PumpEvents(SDL_VideoDevice *_this)
     }
 #endif
 
+    Wayland_SetInputSyncPoint(d);
     WAYLAND_wl_display_flush(d->display);
 
     /* wl_display_prepare_read() will return -1 if the default queue is not empty.
@@ -484,10 +538,18 @@ void Wayland_PumpEvents(SDL_VideoDevice *_this)
     /* Dispatch any pre-existing pending events or new events we may have read */
     err = WAYLAND_wl_display_dispatch_pending(d->display);
 
+    SDL_LockMutex(d->input_thread_mutex);
+    if (d->input_thread_sync_count != d->input_thread_sync_target) {
+        SDL_WaitCondition(d->input_thread_cond, d->input_thread_mutex);
+    }
+    SDL_UnlockMutex(d->input_thread_mutex);
+
+#if 0
     if (input && keyboard_repeat_is_set(&input->keyboard_repeat)) {
         const Uint64 elapsed = SDL_GetTicksNS() - input->keyboard_repeat.sdl_press_time_ns;
         keyboard_repeat_handle(&input->keyboard_repeat, elapsed);
     }
+#endif
 
     if (err < 0 && !d->display_disconnected) {
         /* Something has failed with the Wayland connection -- for example,
@@ -506,6 +568,54 @@ void Wayland_PumpEvents(SDL_VideoDevice *_this)
             SDL_SendQuit();
         }
     }
+}
+
+static int Wayland_InputThread(void *data)
+{
+    SDL_VideoDevice *vid = data;
+    SDL_VideoData *viddata = vid->driverdata;
+    struct SDL_WaylandInput *input = viddata->input;
+    Sint64 timeoutNS;
+
+    while (!SDL_AtomicGet(&viddata->input_thread_done)) {
+        WAYLAND_wl_display_flush(viddata->display);
+
+        timeoutNS = -1;
+
+        /* If key repeat is active, we'll need to cap our maximum wait time to handle repeats */
+        if (input && keyboard_repeat_is_set(&input->keyboard_repeat)) {
+            const Uint64 elapsed = SDL_GetTicksNS() - input->keyboard_repeat.sdl_press_time_ns;
+            if (keyboard_repeat_handle(&input->keyboard_repeat, elapsed) && !SDL_AtomicGet(&viddata->default_queue_sync_pending)) {
+                Wayland_SendWakeupEvent(vid, NULL);
+            }
+
+            const Uint64 next_repeat_wait_time = (input->keyboard_repeat.next_repeat_ns - elapsed) + 1;
+            if (timeoutNS >= 0) {
+                timeoutNS = SDL_min(timeoutNS, next_repeat_wait_time);
+            } else {
+                timeoutNS = next_repeat_wait_time;
+            }
+        }
+
+        /* wl_display_prepare_read_queue() will return -1 if the queue is not empty.
+         * If the default queue is empty, it will prepare us for our SDL_IOReady() call.
+         */
+        if (WAYLAND_wl_display_prepare_read_queue(viddata->display, viddata->input_queue) == 0) {
+            const int ret = SDL_IOReady(WAYLAND_wl_display_get_fd(viddata->display), SDL_IOR_READ, timeoutNS);
+            if (ret > 0) {
+                WAYLAND_wl_display_read_events(viddata->display);
+            } else {
+                WAYLAND_wl_display_cancel_read(viddata->display);
+            }
+        }
+
+        /* Dispatch any pre-existing pending events or new events we may have read */
+        if (WAYLAND_wl_display_dispatch_queue_pending(viddata->display, viddata->input_queue) && !SDL_AtomicGet(&viddata->default_queue_sync_pending)) {
+            Wayland_SendWakeupEvent(vid, NULL);
+        }
+    }
+
+    return 0;
 }
 
 static void pointer_handle_motion(void *data, struct wl_pointer *pointer,
@@ -557,7 +667,7 @@ static void pointer_handle_enter(void *data, struct wl_pointer *pointer,
 
     if (window) {
         input->pointer_focus = window;
-        input->pointer_enter_serial = serial;
+        SDL_AtomicSet(&input->pointer_enter_serial, (int)serial);
         SDL_SetMouseFocus(window->sdlwindow);
         /* In the case of e.g. a pointer confine warp, we may receive an enter
          * event with no following motion event, but with the new coordinates
@@ -1082,12 +1192,6 @@ static const struct wl_touch_listener touch_listener = {
     NULL, /* orientation */
 };
 
-typedef struct Wayland_Keymap
-{
-    xkb_layout_index_t layout;
-    SDL_Keycode keymap[SDL_NUM_SCANCODES];
-} Wayland_Keymap;
-
 static void Wayland_keymap_iter(struct xkb_keymap *keymap, xkb_keycode_t key, void *data)
 {
     const xkb_keysym_t *syms;
@@ -1139,6 +1243,22 @@ static void Wayland_keymap_iter(struct xkb_keymap *keymap, xkb_keycode_t key, vo
         }
     }
 }
+
+static void keymap_event_handler(void *data, struct wl_callback *callback, uint32_t callback_data)
+{
+    if (data) {
+        struct SDL_WaylandInput *input = (struct SDL_WaylandInput *)data;
+
+        SDL_LockMutex(input->display->input_thread_mutex);
+        SDL_SetKeymap(0, input->pending_keymap.keymap, SDL_NUM_SCANCODES, SDL_TRUE);
+        SDL_UnlockMutex(input->display->input_thread_mutex);
+    }
+    wl_callback_destroy(callback);
+}
+
+static struct wl_callback_listener keymap_event_listener = {
+    keymap_event_handler
+};
 
 static void keyboard_handle_keymap(void *data, struct wl_keyboard *keyboard,
                                    uint32_t format, int fd, uint32_t size)
@@ -1214,17 +1334,25 @@ static void keyboard_handle_keymap(void *data, struct wl_keyboard *keyboard,
      */
     input->keyboard_is_virtual = WAYLAND_xkb_keymap_layout_get_name(input->xkb.keymap, 0) == NULL;
 
-    /* Update the keymap if changed. Virtual keyboards use the default keymap. */
+    /* Update the keymap if changed. Virtual keyboards use the default keymap.
+     *
+     * The keymap must be updated from the main thread, so queue an event that
+     * will update the layout when events are pumped.
+     */
     if (input->xkb.current_group != XKB_GROUP_INVALID) {
-        Wayland_Keymap keymap;
-        keymap.layout = input->xkb.current_group;
-        SDL_GetDefaultKeymap(keymap.keymap);
+        SDL_LockMutex(input->display->input_thread_mutex);
+        input->pending_keymap.layout = input->xkb.current_group;
+        SDL_GetDefaultKeymap(input->pending_keymap.keymap);
         if (!input->keyboard_is_virtual) {
             WAYLAND_xkb_keymap_key_for_each(input->xkb.keymap,
                                             Wayland_keymap_iter,
-                                            &keymap);
+                                            &input->pending_keymap);
         }
-        SDL_SetKeymap(0, keymap.keymap, SDL_NUM_SCANCODES, SDL_TRUE);
+        SDL_UnlockMutex(input->display->input_thread_mutex);
+
+        struct wl_callback *cb = wl_display_sync(input->display->display);
+        wl_callback_add_listener(cb, &keymap_event_listener, input);
+        WAYLAND_wl_display_flush(input->display->display);
     }
 
     /*
@@ -1646,7 +1774,6 @@ static void keyboard_handle_modifiers(void *data, struct wl_keyboard *keyboard,
                                       uint32_t group)
 {
     struct SDL_WaylandInput *input = data;
-    Wayland_Keymap keymap;
 
     if (input->xkb.state == NULL) {
         /* if we get a modifier notification before the keymap, there's nothing we can do with the information
@@ -1678,14 +1805,20 @@ static void keyboard_handle_modifiers(void *data, struct wl_keyboard *keyboard,
 
     /* The layout changed, remap and fire an event. Virtual keyboards use the default keymap. */
     input->xkb.current_group = group;
-    keymap.layout = group;
-    SDL_GetDefaultKeymap(keymap.keymap);
+
+    SDL_LockMutex(input->display->input_thread_mutex);
+    input->pending_keymap.layout = input->xkb.current_group;
+    SDL_GetDefaultKeymap(input->pending_keymap.keymap);
     if (!input->keyboard_is_virtual) {
         WAYLAND_xkb_keymap_key_for_each(input->xkb.keymap,
                                         Wayland_keymap_iter,
-                                        &keymap);
+                                        &input->pending_keymap);
     }
-    SDL_SetKeymap(0, keymap.keymap, SDL_NUM_SCANCODES, SDL_TRUE);
+    SDL_UnlockMutex(input->display->input_thread_mutex);
+
+    struct wl_callback *cb = wl_display_sync(input->display->display);
+    wl_callback_add_listener(cb, &keymap_event_listener, input);
+    WAYLAND_wl_display_flush(input->display->display);
 }
 
 static void keyboard_handle_repeat_info(void *data, struct wl_keyboard *wl_keyboard,
@@ -1711,8 +1844,13 @@ static void seat_handle_capabilities(void *data, struct wl_seat *seat,
 {
     struct SDL_WaylandInput *input = data;
 
+    if (!input->display->input_thread) {
+        input->display->input_thread = SDL_CreateThread(Wayland_InputThread, "Wayland Input", SDL_GetVideoDevice());
+    }
+
     if ((caps & WL_SEAT_CAPABILITY_POINTER) && !input->pointer) {
         input->pointer = wl_seat_get_pointer(seat);
+        WAYLAND_wl_proxy_set_queue((struct wl_proxy*)input->pointer, input->display->input_queue);
         SDL_memset(&input->pointer_curr_axis_info, 0, sizeof(input->pointer_curr_axis_info));
         input->display->pointer = input->pointer;
 
@@ -1750,6 +1888,7 @@ static void seat_handle_capabilities(void *data, struct wl_seat *seat,
 
     if ((caps & WL_SEAT_CAPABILITY_KEYBOARD) && !input->keyboard) {
         input->keyboard = wl_seat_get_keyboard(seat);
+        WAYLAND_wl_proxy_set_queue((struct wl_proxy*)input->keyboard, input->display->input_queue);
         wl_keyboard_set_user_data(input->keyboard, input);
         wl_keyboard_add_listener(input->keyboard, &keyboard_listener,
                                  input);
@@ -3038,6 +3177,15 @@ void Wayland_display_destroy_input(SDL_VideoData *d)
 {
     struct SDL_WaylandInput *input = d->input;
 
+    if (d->input_thread) {
+        /* Set the quit flag and unblock the input thread. */
+        SDL_AtomicSet(&d->input_thread_done, 1);
+        struct wl_callback *cb = wl_display_sync(d->display);
+        wl_callback_add_listener(cb, &default_queue_sync_listener, NULL);
+        WAYLAND_wl_display_flush(d->display);
+        SDL_WaitThread(d->input_thread, NULL);
+    }
+
     if (input->keyboard_timestamps) {
         zwp_input_timestamps_v1_destroy(input->keyboard_timestamps);
     }
@@ -3277,6 +3425,7 @@ int Wayland_input_enable_relative_pointer(struct SDL_WaylandInput *input)
 
     if (!input->relative_pointer) {
         relative_pointer = zwp_relative_pointer_manager_v1_get_relative_pointer(d->relative_pointer_manager, input->pointer);
+        WAYLAND_wl_proxy_set_queue((struct wl_proxy *)relative_pointer, d->input_queue);
         zwp_relative_pointer_v1_add_listener(relative_pointer,
                                              &relative_pointer_listener,
                                              input);
@@ -3440,8 +3589,8 @@ int Wayland_input_ungrab_keyboard(SDL_Window *window)
 
 void Wayland_UpdateImplicitGrabSerial(struct SDL_WaylandInput *input, Uint32 serial)
 {
-    if (serial > input->last_implicit_grab_serial) {
-        input->last_implicit_grab_serial = serial;
+    if (serial > (Uint32)SDL_AtomicGet(&input->last_implicit_grab_serial)) {
+        SDL_AtomicSet(&input->last_implicit_grab_serial, (int)serial);
         Wayland_data_device_set_serial(input->data_device, serial);
         Wayland_primary_selection_device_set_serial(input->primary_selection_device, serial);
     }
