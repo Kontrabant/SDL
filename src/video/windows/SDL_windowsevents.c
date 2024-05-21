@@ -117,6 +117,18 @@ static SDL_bool SDL_processing_messages;
 static DWORD message_tick;
 static Uint64 timestamp_offset;
 
+static BOOL IsWindowArranged(HWND hwnd)
+{
+    SDL_VideoDevice *dev = SDL_GetVideoDevice();
+    SDL_VideoData *data = dev->driverdata;
+
+    if (data->IsWindowArranged) {
+        return data->IsWindowArranged(hwnd);
+    }
+
+    return FALSE;
+}
+
 static void WIN_SetMessageTick(DWORD tick)
 {
     if (message_tick) {
@@ -1376,6 +1388,7 @@ LRESULT CALLBACK WIN_WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         const WINDOWPOS *windowpos = (WINDOWPOS *)lParam;
         const SDL_bool iconic = IsIconic(hwnd);
         const SDL_bool zoomed = IsZoomed(hwnd);
+        const SDL_bool tiled = IsWindowArranged(hwnd);
         RECT rect;
         int x, y;
         int w, h;
@@ -1395,6 +1408,8 @@ LRESULT CALLBACK WIN_WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         } else if (data->window->flags & (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_MINIMIZED)) {
             SDL_SendWindowEvent(data->window, SDL_EVENT_WINDOW_RESTORED, 0, 0);
         }
+
+        data->window->state_not_floating = tiled;
 
         if (windowpos->flags & SWP_HIDEWINDOW) {
             SDL_SendWindowEvent(data->window, SDL_EVENT_WINDOW_HIDDEN, 0, 0);

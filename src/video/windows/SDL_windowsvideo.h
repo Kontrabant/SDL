@@ -392,6 +392,7 @@ struct SDL_VideoData
     UINT (WINAPI *GetDpiForWindow)( HWND );
     BOOL (WINAPI *AreDpiAwarenessContextsEqual)(DPI_AWARENESS_CONTEXT, DPI_AWARENESS_CONTEXT);
     BOOL (WINAPI *IsValidDpiAwarenessContext)(DPI_AWARENESS_CONTEXT);
+    BOOL (WINAPI *IsWindowArranged)( HWND );
     /* *INDENT-ON* */ /* clang-format on */
 
     void *shcoreDLL;

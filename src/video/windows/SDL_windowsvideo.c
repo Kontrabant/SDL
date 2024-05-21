@@ -151,6 +151,7 @@ static SDL_VideoDevice *WIN_CreateDevice(void)
         data->GetDpiForWindow = (UINT (WINAPI *)(HWND))SDL_LoadFunction(data->userDLL, "GetDpiForWindow");
         data->AreDpiAwarenessContextsEqual = (BOOL (WINAPI *)(DPI_AWARENESS_CONTEXT, DPI_AWARENESS_CONTEXT))SDL_LoadFunction(data->userDLL, "AreDpiAwarenessContextsEqual");
         data->IsValidDpiAwarenessContext = (BOOL (WINAPI *)(DPI_AWARENESS_CONTEXT))SDL_LoadFunction(data->userDLL, "IsValidDpiAwarenessContext");
+        data->IsWindowArranged = (BOOL (WINAPI *)(HWND))SDL_LoadFunction(data->userDLL, "IsWindowArranged");
         /* *INDENT-ON* */ /* clang-format on */
     } else {
         SDL_ClearError();

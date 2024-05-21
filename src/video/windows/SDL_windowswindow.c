@@ -1256,6 +1256,7 @@ int WIN_SetWindowFullscreen(SDL_VideoDevice *_this, SDL_Window *window, SDL_Vide
             data->windowed_mode_was_maximized = SDL_TRUE;
             style &= ~WS_MAXIMIZE;
         }
+        data->windowed_mode_was_tiled = window->state_not_floating;
 
         /* Disable corner rounding & border color (Windows 11+) so the window fills the full screen */
         data->windowed_mode_corner_rounding = WIN_UpdateCornerRoundingForHWND(hwnd, DWMWCP_DONOTROUND);
@@ -1280,8 +1281,9 @@ int WIN_SetWindowFullscreen(SDL_VideoDevice *_this, SDL_Window *window, SDL_Vide
         WIN_AdjustWindowRectWithStyle(window, style, styleEx, menu,
                                       &x, &y,
                                       &w, &h,
-                                      data->windowed_mode_was_maximized ? SDL_WINDOWRECT_WINDOWED : SDL_WINDOWRECT_FLOATING);
+                                      data->windowed_mode_was_maximized || data->windowed_mode_was_tiled ? SDL_WINDOWRECT_WINDOWED : SDL_WINDOWRECT_FLOATING);
         data->windowed_mode_was_maximized = SDL_FALSE;
+        data->windowed_mode_was_tiled = SDL_FALSE;
     }
     SetWindowLong(hwnd, GWL_STYLE, style);
     data->expected_resize = SDL_TRUE;
