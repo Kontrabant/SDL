@@ -495,7 +495,13 @@ static void X11_DispatchMapNotify(SDL_WindowData *data)
 {
     SDL_Window *window = data->window;
     SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_RESTORED, 0, 0);
-    SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_SHOWN, 0, 0);
+
+    /* Defer this if the window is in the process of being mapped, as it will set state that
+     * could override the base window position.
+     */
+    if (!data->in_show_sequence) {
+        SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_SHOWN, 0, 0);
+    }
     if (!(window->flags & SDL_WINDOW_HIDDEN) && (window->flags & SDL_WINDOW_INPUT_FOCUS)) {
         SDL_UpdateWindowGrab(window);
     }
@@ -1368,7 +1374,7 @@ static void X11_DispatchEvent(SDL_VideoDevice *_this, XEvent *xevent)
 
         if (xevent->xconfigure.x != data->last_xconfigure.x ||
             xevent->xconfigure.y != data->last_xconfigure.y) {
-            if (!data->disable_size_position_events) {
+            if (!data->disable_size_position_events && !data->in_show_sequence) {
                 SDL_Window *w;
                 int x = xevent->xconfigure.x;
                 int y = xevent->xconfigure.y;
@@ -1393,7 +1399,7 @@ static void X11_DispatchEvent(SDL_VideoDevice *_this, XEvent *xevent)
         }
         if (xevent->xconfigure.width != data->last_xconfigure.width ||
             xevent->xconfigure.height != data->last_xconfigure.height) {
-            if (!data->disable_size_position_events) {
+            if (!data->disable_size_position_events && !data->in_show_sequence) {
                 data->pending_operation &= ~X11_PENDING_OP_RESIZE;
                 SDL_SendWindowEvent(data->window, SDL_EVENT_WINDOW_RESIZED,
                                     xevent->xconfigure.width,

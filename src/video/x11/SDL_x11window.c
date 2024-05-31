@@ -1373,6 +1373,19 @@ void X11_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
     SDL_bool bActivate = SDL_GetHintBoolean(SDL_HINT_WINDOW_ACTIVATE_WHEN_SHOWN, SDL_TRUE);
     XEvent event;
 
+    /* Prevent functions from recursing back into this one during a show operation. */
+    if (data->in_show_sequence) {
+        return;
+    }
+
+    /* Some window managers can send garbage coordinates while mapping the window, and need the position sent again
+     * after mapping or the window may not be positioned properly.
+     *
+     * Set the flag to suppress size and position events during the initial configure events, they will be sent afterward,
+     * when the final coordinates are available to avoid sending garbage values.
+     */
+    data->in_show_sequence = SDL_TRUE;
+
     if (window->parent) {
         /* Update our position in case our parent moved while we were hidden */
         X11_UpdateWindowPosition(window, SDL_TRUE);
@@ -1412,13 +1425,6 @@ void X11_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
         X11_GetBorderValues(data);
     }
 
-    /* Some window managers can send garbage coordinates while mapping the window, and need the position sent again
-     * after mapping or the window may not be positioned properly.
-     *
-     * Don't emit size and position events during the initial configure events, they will be sent afterwards, when the
-     * final coordinates are available to avoid sending garbage values.
-     */
-    data->disable_size_position_events = SDL_TRUE;
     X11_XSync(display, False);
     X11_PumpEvents(_this);
 
@@ -1428,17 +1434,49 @@ void X11_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
         int y = data->last_xconfigure.y;
         SDL_GlobalToRelativeForWindow(data->window, x, y, &x, &y);
 
-        /* If the borders appeared, this happened automatically in the event system, otherwise, set the position now. */
-        if (data->disable_size_position_events && (window->x != x || window->y != y)) {
-            data->pending_operation = X11_PENDING_OP_MOVE;
+        /* If the compositor didn't place the window where it was asked, try to move it once mapped.
+         * Note: This can't use the sync function, since events are still disabled.
+         */
+        if (window->x != x || window->y != y) {
+            int orig_x = x, orig_y = y;
+            unsigned int childCount;
+            Window childReturn, root, parent;
+            Window *children;
+
+            X11_XQueryTree(display, data->xwindow, &root, &parent, &children, &childCount);
             X11_XMoveWindow(display, data->xwindow, window->x, window->y);
+
+            const Uint64 timeout = SDL_GetTicksNS() + SDL_MS_TO_NS(100);
+            while (SDL_TRUE) {
+                XWindowAttributes attrs;
+                X11_XSync(display, False);
+                X11_XGetWindowAttributes(display, data->xwindow, &attrs);
+                X11_XTranslateCoordinates(display, parent, DefaultRootWindow(display),
+                                          attrs.x, attrs.y, &x, &y, &childReturn);
+                SDL_GlobalToRelativeForWindow(data->window, x, y, &x, &y);
+
+                if (!caught_x11_error) {
+                    if ((x != orig_x) || (y != orig_y)) {
+                        break; /* Something moved, done. */
+                    } else if ((x == window->x) && (y == window->y)) {
+                        break; /* we're at the place we wanted to be anyhow, drop out. */
+                    }
+                }
+
+                if (SDL_GetTicksNS() >= timeout) {
+                    break;
+                }
+
+                SDL_Delay(10);
+            }
         }
 
+        SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_SHOWN, 0, 0);
         SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_RESIZED, data->last_xconfigure.width, data->last_xconfigure.height);
         SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_MOVED, x, y);
     }
 
-    data->disable_size_position_events = SDL_FALSE;
+    data->in_show_sequence = SDL_FALSE;
 }
 
 void X11_HideWindow(SDL_VideoDevice *_this, SDL_Window *window)
