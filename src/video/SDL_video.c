@@ -195,6 +195,11 @@ static SDL_bool SDL_DisableMouseWarpOnFullscreenTransitions(SDL_VideoDevice *_th
     return !!(_this->device_caps & VIDEO_DEVICE_CAPS_DISABLE_MOUSE_WARP_ON_FULLSCREEN_TRANSITIONS);
 }
 
+static SDL_bool SDL_SendsHDRChanges(SDL_VideoDevice *_this)
+{
+    return !!(_this->device_caps & VIDEO_DEVICE_CAPS_SENDS_HDR_CHANGES);
+}
+
 /* Hint to treat all window ops as synchronous */
 static SDL_bool syncHint;
 
@@ -723,7 +728,6 @@ SDL_DisplayID SDL_AddVideoDisplay(const SDL_VideoDisplay *display, SDL_bool send
 {
     SDL_VideoDisplay **displays, *new_display;
     SDL_DisplayID id;
-    SDL_PropertiesID props;
     int i;
 
     new_display = (SDL_VideoDisplay *)SDL_malloc(sizeof(*new_display));
@@ -763,27 +767,53 @@ SDL_DisplayID SDL_AddVideoDisplay(const SDL_VideoDisplay *display, SDL_bool send
         new_display->fullscreen_modes[i].displayID = id;
     }
 
-    props = SDL_GetDisplayProperties(id);
-
-    if (display->HDR.HDR_headroom > 1.0f) {
-        SDL_SetBooleanProperty(props, SDL_PROP_DISPLAY_HDR_ENABLED_BOOLEAN, SDL_TRUE);
-    } else {
-        SDL_SetBooleanProperty(props, SDL_PROP_DISPLAY_HDR_ENABLED_BOOLEAN, SDL_FALSE);
+    SDL_copyp(&new_display->HDR, &display->HDR);
+    if (new_display->HDR.SDR_white_level < 1.0f) {
+        new_display->HDR.SDR_white_level = 1.0f;
     }
-    if (display->HDR.SDR_white_point <= 1.0f) {
-        SDL_SetFloatProperty(props, SDL_PROP_DISPLAY_SDR_WHITE_POINT_FLOAT, 1.0f);
-    } else {
-        SDL_SetFloatProperty(props, SDL_PROP_DISPLAY_SDR_WHITE_POINT_FLOAT, display->HDR.SDR_white_point);
-    }
-    if (display->HDR.HDR_headroom <= 1.0f) {
-        SDL_SetFloatProperty(props, SDL_PROP_DISPLAY_HDR_HEADROOM_FLOAT, 1.0f);
-    } else {
-        SDL_SetFloatProperty(props, SDL_PROP_DISPLAY_HDR_HEADROOM_FLOAT, display->HDR.HDR_headroom);
+    if (new_display->HDR.HDR_headroom < 1.0f) {
+        new_display->HDR.HDR_headroom = 1.0f;
     }
 
     SDL_UpdateDesktopBounds();
 
     return id;
+}
+
+void SDL_SetDisplayHDRProperties(SDL_VideoDisplay *display, const SDL_HDROutputProperties *HDR)
+{
+    SDL_bool changed = SDL_memcmp(HDR, &display->HDR, sizeof(SDL_HDROutputProperties)) != 0;
+
+    if (changed) {
+        SDL_copyp(&display->HDR, HDR);
+        if (display->HDR.SDR_white_level < 1.0f) {
+            display->HDR.SDR_white_level = 1.0f;
+        }
+        if (display->HDR.HDR_headroom < 1.0f) {
+            display->HDR.HDR_headroom = 1.0f;
+        }
+
+        SDL_SendDisplayEvent(display, SDL_EVENT_WINDOW_HDR_STATE_CHANGED, 0);
+    }
+}
+
+void SDL_SetWindowHDRProperties(SDL_Window *window, const SDL_HDROutputProperties *HDR, SDL_bool send_event)
+{
+    SDL_bool changed = SDL_memcmp(HDR, &window->HDR, sizeof(SDL_HDROutputProperties)) != 0;
+
+    if (changed) {
+        SDL_copyp(&window->HDR, HDR);
+        if (window->HDR.SDR_white_level < 1.0f) {
+            window->HDR.SDR_white_level = 1.0f;
+        }
+        if (window->HDR.HDR_headroom < 1.0f) {
+            window->HDR.HDR_headroom = 1.0f;
+        }
+
+        if (send_event) {
+            SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_HDR_STATE_CHANGED, HDR->HDR_headroom > 1.0f, 0);
+        }
+    }
 }
 
 void SDL_OnDisplayAdded(SDL_VideoDisplay *display)
@@ -799,6 +829,19 @@ void SDL_OnDisplayAdded(SDL_VideoDisplay *display)
 void SDL_OnDisplayMoved(SDL_VideoDisplay *display)
 {
     SDL_UpdateDesktopBounds();
+}
+
+void SDL_OnDisplayHDRStateChanged(SDL_VideoDisplay *display)
+{
+    if (!SDL_SendsHDRChanges(_this)) {
+        /* Update the HDR info for windows on this display. */
+        for (SDL_Window *window = _this->windows; window; window = window->next) {
+            const SDL_DisplayID id = SDL_GetDisplayForWindow(window);
+            if (id == display->id) {
+                SDL_SetWindowHDRProperties(window, &display->HDR, SDL_TRUE);
+            }
+        }
+    }
 }
 
 void SDL_DelVideoDisplay(SDL_DisplayID displayID, SDL_bool send_event)
@@ -1053,38 +1096,17 @@ float SDL_GetDisplayContentScale(SDL_DisplayID displayID)
     return display->content_scale;
 }
 
-void SDL_SetDisplayHDRProperties(SDL_VideoDisplay *display, const SDL_HDRDisplayProperties *HDR)
+int SDL_GetDisplayHDRProperties(SDL_DisplayID displayID, SDL_HDROutputProperties *props)
 {
-    SDL_PropertiesID props = SDL_GetDisplayProperties(display->id);
-    SDL_bool changed = SDL_FALSE;
+    SDL_VideoDisplay *display = SDL_GetVideoDisplay(displayID);
 
-    if (HDR->SDR_white_point != display->HDR.SDR_white_point) {
-        if (HDR->SDR_white_point <= 1.0f) {
-            SDL_SetFloatProperty(props, SDL_PROP_DISPLAY_SDR_WHITE_POINT_FLOAT, 1.0f);
-        } else {
-            SDL_SetFloatProperty(props, SDL_PROP_DISPLAY_SDR_WHITE_POINT_FLOAT, HDR->SDR_white_point);
-        }
-        changed = SDL_TRUE;
-    }
-    if (HDR->HDR_headroom != display->HDR.HDR_headroom) {
-        if (HDR->HDR_headroom > 1.0f) {
-            SDL_SetBooleanProperty(props, SDL_PROP_DISPLAY_HDR_ENABLED_BOOLEAN, SDL_TRUE);
-        } else {
-            SDL_SetBooleanProperty(props, SDL_PROP_DISPLAY_HDR_ENABLED_BOOLEAN, SDL_FALSE);
-        }
-        if (HDR->HDR_headroom <= 1.0f) {
-            SDL_SetFloatProperty(props, SDL_PROP_DISPLAY_HDR_HEADROOM_FLOAT, 1.0f);
-        } else {
-            SDL_SetFloatProperty(props, SDL_PROP_DISPLAY_HDR_HEADROOM_FLOAT, HDR->HDR_headroom);
-        }
-        changed = SDL_TRUE;
-    }
-    SDL_copyp(&display->HDR, HDR);
+    CHECK_DISPLAY_MAGIC(display, -1);
 
-    if (changed) {
-        SDL_bool enabled = SDL_GetBooleanProperty(props, SDL_PROP_DISPLAY_HDR_ENABLED_BOOLEAN, SDL_FALSE);
-        SDL_SendDisplayEvent(display, SDL_EVENT_DISPLAY_HDR_STATE_CHANGED, enabled);
+    if (props) {
+        SDL_copyp(props, &display->HDR);
     }
+
+    return 0;
 }
 
 static const SDL_DisplayMode *SDL_GetFullscreenModeMatch(const SDL_DisplayMode *mode)
@@ -1970,6 +1992,17 @@ Uint32 SDL_GetWindowPixelFormat(SDL_Window *window)
     }
 }
 
+int SDL_GetWindowHDRProperties(SDL_Window *window, SDL_HDROutputProperties *props)
+{
+    CHECK_WINDOW_MAGIC(window, -1);
+
+    if (props) {
+        SDL_copyp(props, &window->HDR);
+    }
+
+    return 0;
+}
+
 #define CREATE_FLAGS \
     (SDL_WINDOW_OPENGL | SDL_WINDOW_BORDERLESS | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_POPUP_MENU | SDL_WINDOW_UTILITY | SDL_WINDOW_TOOLTIP | SDL_WINDOW_VULKAN | SDL_WINDOW_MINIMIZED | SDL_WINDOW_METAL | SDL_WINDOW_TRANSPARENT | SDL_WINDOW_NOT_FOCUSABLE)
 
@@ -2245,8 +2278,10 @@ SDL_Window *SDL_CreateWindowWithProperties(SDL_PropertiesID props)
     window->undefined_x = undefined_x;
     window->undefined_y = undefined_y;
 
+    SDL_VideoDisplay *display = SDL_GetVideoDisplayForWindow(window);
+    SDL_SetWindowHDRProperties(window, &display->HDR, SDL_FALSE);
+
     if (flags & SDL_WINDOW_FULLSCREEN || IsFullscreenOnly(_this)) {
-        SDL_VideoDisplay *display = SDL_GetVideoDisplayForWindow(window);
         SDL_Rect bounds;
 
         SDL_GetDisplayBounds(display->id, &bounds);
@@ -3660,8 +3695,9 @@ void SDL_OnWindowHidden(SDL_Window *window)
 
 void SDL_OnWindowDisplayChanged(SDL_Window *window)
 {
+    SDL_DisplayID displayID = SDL_GetDisplayForWindowPosition(window);
+
     if (window->flags & SDL_WINDOW_FULLSCREEN) {
-        SDL_DisplayID displayID = SDL_GetDisplayForWindowPosition(window);
         const SDL_DisplayMode *new_mode = NULL;
 
         if (window->requested_fullscreen_mode.w != 0 || window->requested_fullscreen_mode.h != 0) {
@@ -3685,6 +3721,10 @@ void SDL_OnWindowDisplayChanged(SDL_Window *window)
     }
 
     SDL_CheckWindowPixelSizeChanged(window);
+
+    if (!SDL_SendsHDRChanges(_this)) {
+        SDL_SetWindowHDRProperties(window, &_this->displays[SDL_GetDisplayIndex(displayID)]->HDR, SDL_TRUE);
+    }
 }
 
 void SDL_OnWindowMoved(SDL_Window *window)

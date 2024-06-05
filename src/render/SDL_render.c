@@ -732,31 +732,23 @@ static void UpdateMainViewDimensions(SDL_Renderer *renderer)
 
 static void UpdateHDRProperties(SDL_Renderer *renderer)
 {
-    SDL_DisplayID displayID = SDL_GetDisplayForWindow(renderer->window);
-    SDL_PropertiesID display_props;
+    SDL_HDROutputProperties HDR;
     SDL_PropertiesID renderer_props;
 
-    if (!displayID) {
-        return;
-    }
-
-    display_props = SDL_GetDisplayProperties(displayID);
-    if (!display_props) {
-        return;
-    }
+    SDL_GetWindowHDRProperties(renderer->window, &HDR);
 
     renderer_props = SDL_GetRendererProperties(renderer);
     if (!renderer_props) {
         return;
     }
 
-    renderer->color_scale /= renderer->SDR_white_point;
+    renderer->color_scale /= renderer->SDR_white_level;
 
     if (renderer->output_colorspace == SDL_COLORSPACE_SRGB_LINEAR) {
-        renderer->SDR_white_point = SDL_GetFloatProperty(display_props, SDL_PROP_DISPLAY_SDR_WHITE_POINT_FLOAT, 1.0f);
-        renderer->HDR_headroom = SDL_GetFloatProperty(display_props, SDL_PROP_DISPLAY_HDR_HEADROOM_FLOAT, 1.0f);
+        renderer->SDR_white_level = HDR.SDR_white_level;
+        renderer->HDR_headroom = HDR.HDR_headroom;
     } else {
-        renderer->SDR_white_point = 1.0f;
+        renderer->SDR_white_level = 1.0f;
         renderer->HDR_headroom = 1.0f;
     }
 
@@ -765,10 +757,10 @@ static void UpdateHDRProperties(SDL_Renderer *renderer)
     } else {
         SDL_SetBooleanProperty(renderer_props, SDL_PROP_RENDERER_HDR_ENABLED_BOOLEAN, SDL_FALSE);
     }
-    SDL_SetFloatProperty(renderer_props, SDL_PROP_RENDERER_SDR_WHITE_POINT_FLOAT, renderer->SDR_white_point);
+    SDL_SetFloatProperty(renderer_props, SDL_PROP_RENDERER_SDR_WHITE_POINT_FLOAT, renderer->SDR_white_level);
     SDL_SetFloatProperty(renderer_props, SDL_PROP_RENDERER_HDR_HEADROOM_FLOAT, renderer->HDR_headroom);
 
-    renderer->color_scale *= renderer->SDR_white_point;
+    renderer->color_scale *= renderer->SDR_white_level;
 }
 
 static int UpdateLogicalPresentation(SDL_Renderer *renderer);
@@ -826,12 +818,10 @@ static int SDLCALL SDL_RendererEventWatch(void *userdata, SDL_Event *event)
                 if (!(SDL_GetWindowFlags(window) & SDL_WINDOW_HIDDEN)) {
                     renderer->hidden = SDL_FALSE;
                 }
-            } else if (event->type == SDL_EVENT_WINDOW_DISPLAY_CHANGED) {
+            } else if (event->type == SDL_EVENT_WINDOW_HDR_STATE_CHANGED) {
                 UpdateHDRProperties(renderer);
             }
         }
-    } else if (event->type == SDL_EVENT_DISPLAY_HDR_STATE_CHANGED) {
-        UpdateHDRProperties(renderer);
     }
 
     return 0;
@@ -1057,7 +1047,7 @@ SDL_Renderer *SDL_CreateRendererWithProperties(SDL_PropertiesID props)
         renderer->line_method = SDL_GetRenderLineMethod();
     }
 
-    renderer->SDR_white_point = 1.0f;
+    renderer->SDR_white_level = 1.0f;
     renderer->HDR_headroom = 1.0f;
     renderer->color_scale = 1.0f;
 
@@ -2997,7 +2987,7 @@ int SDL_SetRenderColorScale(SDL_Renderer *renderer, float scale)
 {
     CHECK_RENDERER_MAGIC(renderer, -1);
 
-    renderer->color_scale = scale * renderer->SDR_white_point;
+    renderer->color_scale = scale * renderer->SDR_white_level;
     return 0;
 }
 
@@ -3006,7 +2996,7 @@ int SDL_GetRenderColorScale(SDL_Renderer *renderer, float *scale)
     CHECK_RENDERER_MAGIC(renderer, -1);
 
     if (scale) {
-        *scale = renderer->color_scale / renderer->SDR_white_point;
+        *scale = renderer->color_scale / renderer->SDR_white_level;
     }
     return 0;
 }
@@ -4369,7 +4359,7 @@ SDL_Surface *SDL_RenderReadPixels(SDL_Renderer *renderer, const SDL_Rect *rect)
             SDL_SetFloatProperty(props, SDL_PROP_SURFACE_SDR_WHITE_POINT_FLOAT, renderer->target->SDR_white_point);
             SDL_SetFloatProperty(props, SDL_PROP_SURFACE_HDR_HEADROOM_FLOAT, renderer->target->HDR_headroom);
         } else {
-            SDL_SetFloatProperty(props, SDL_PROP_SURFACE_SDR_WHITE_POINT_FLOAT, renderer->SDR_white_point);
+            SDL_SetFloatProperty(props, SDL_PROP_SURFACE_SDR_WHITE_POINT_FLOAT, renderer->SDR_white_level);
             SDL_SetFloatProperty(props, SDL_PROP_SURFACE_HDR_HEADROOM_FLOAT, renderer->HDR_headroom);
         }
     }

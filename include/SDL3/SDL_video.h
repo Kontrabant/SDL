@@ -97,6 +97,34 @@ typedef struct SDL_DisplayMode
 } SDL_DisplayMode;
 
 /**
+ * The structure containing the color and luminance metadata for an output display or window.
+ *
+ * \since This struct is available since SDL 3.0.0
+ *
+ * \sa SDL_GetDisplayHDRProperties
+ * \sa SDL_GetWindowHDRProperties
+ */
+typedef struct SDL_HDROutputProperties
+{
+    float HDR_headroom;    /**< the additional dynamic range that can be displayed in terms of the SDR white level (greater than 1.0 if the output or window is EDR/HDR capable) */
+    float SDR_white_level; /**< the SDR white level */
+
+    SDL_bool has_color_data; /**< SDL_TRUE if the color_data member contains valid color point and luminance data */
+    struct
+    {
+        SDL_FPoint red_primary;         /**< the red primary x/y coordinates */
+        SDL_FPoint green_primary;       /**< the green primary x/y coordinates */
+        SDL_FPoint blue_primary;        /**< the blue primary x/y coordinates */
+        SDL_FPoint white_point;         /**< the white point x/y coordinates */
+        float max_luminance;            /**< the maximum luminance level in nits; content should not exceed this value to avoid clipping */
+        float min_luminance;            /**< the minimum luminance level in nits; content should not exceed this value to avoid clipping */
+        float max_full_frame_luminance; /**< the maximum full-frame luminance in nits; content should not exceed this value across the entire frame for optimal rendering */
+    } color_data;                       /**< the advanced color and luminance properties for the output; only contains valid data if has_color_data is SDL_TRUE */
+
+    Uint8 reserved[64]; /**< reserved for future use */
+} SDL_HDROutputProperties;
+
+/**
  * Display orientation values; the way a display is rotated.
  *
  * \since This enum is available since SDL 3.0.0.
@@ -398,19 +426,6 @@ extern SDL_DECLSPEC SDL_DisplayID SDLCALL SDL_GetPrimaryDisplay(void);
  *
  * The following read-only properties are provided by SDL:
  *
- * - `SDL_PROP_DISPLAY_HDR_ENABLED_BOOLEAN`: true if the display has HDR
- *   headroom above the SDR white point. This property can change dynamically
- *   when SDL_EVENT_DISPLAY_HDR_STATE_CHANGED is sent.
- * - `SDL_PROP_DISPLAY_SDR_WHITE_POINT_FLOAT`: the value of SDR white in the
- *   SDL_COLORSPACE_SRGB_LINEAR colorspace. On Windows this corresponds to the
- *   SDR white level in scRGB colorspace, and on Apple platforms this is
- *   always 1.0 for EDR content. This property can change dynamically when
- *   SDL_EVENT_DISPLAY_HDR_STATE_CHANGED is sent.
- * - `SDL_PROP_DISPLAY_HDR_HEADROOM_FLOAT`: the additional high dynamic range
- *   that can be displayed, in terms of the SDR white point. When HDR is not
- *   enabled, this will be 1.0. This property can change dynamically when
- *   SDL_EVENT_DISPLAY_HDR_STATE_CHANGED is sent.
- *
  * On KMS/DRM:
  *
  * - `SDL_PROP_DISPLAY_KMSDRM_ORIENTATION_NUMBER`: the "panel orientation"
@@ -430,9 +445,6 @@ extern SDL_DECLSPEC SDL_DisplayID SDLCALL SDL_GetPrimaryDisplay(void);
  */
 extern SDL_DECLSPEC SDL_PropertiesID SDLCALL SDL_GetDisplayProperties(SDL_DisplayID displayID);
 
-#define SDL_PROP_DISPLAY_HDR_ENABLED_BOOLEAN             "SDL.display.HDR_enabled"
-#define SDL_PROP_DISPLAY_SDR_WHITE_POINT_FLOAT           "SDL.display.SDR_white_point"
-#define SDL_PROP_DISPLAY_HDR_HEADROOM_FLOAT              "SDL.display.HDR_headroom"
 #define SDL_PROP_DISPLAY_KMSDRM_PANEL_ORIENTATION_NUMBER "SDL.display.KMSDRM.panel_orientation"
 
 /**
@@ -532,6 +544,25 @@ extern SDL_DECLSPEC SDL_DisplayOrientation SDLCALL SDL_GetCurrentDisplayOrientat
  * \sa SDL_GetDisplays
  */
 extern SDL_DECLSPEC float SDLCALL SDL_GetDisplayContentScale(SDL_DisplayID displayID);
+
+/**
+ * Get the HDR properties for a display.
+ *
+ * Client applications should use SDL_GetWindowHDRProperties to retrieve this information on
+ * a per-window basis as some platforms may not expose this information per-display, display
+ * and per-window color/luminance info can be different, or the desktop may require specific
+ * behavior when the window is moved between displays. This should only be used for informational
+ * purposes (e.g. logging system specifications for troubleshooting purposes).
+ *
+ * \param displayID the instance ID of the display to query
+ * \param props a pointer to the SDL_HDROutputProperties struct to filled in, may be NULL
+ * \returns 0 on success or -1 on failure; call SDL_GetError() for more information.
+ *
+ * \since This function is available since SDL 3.0.0.
+ *
+ * \sa SDL_GetWindowHDRProperties
+ */
+extern SDL_DECLSPEC int SDLCALL SDL_GetDisplayHDRProperties(SDL_DisplayID displayID, SDL_HDROutputProperties *props);
 
 /**
  * Get a list of fullscreen display modes available on a display.
@@ -778,6 +809,19 @@ extern SDL_DECLSPEC void *SDLCALL SDL_GetWindowICCProfile(SDL_Window *window, si
  * \since This function is available since SDL 3.0.0.
  */
 extern SDL_DECLSPEC Uint32 SDLCALL SDL_GetWindowPixelFormat(SDL_Window *window);
+
+/**
+ * Get the HDR properties associated with a window.
+ *
+ * \param window the window to query
+ * \param props a pointer to the SDL_HDROutputProperties struct to filled in, may be NULL
+ * \returns 0 on success or -1 on failure; call SDL_GetError() for more information.
+ *
+ * \since This function is available since SDL 3.0.0.
+ *
+ * \sa SDL_GetDisplayHDRProperties
+ */
+extern SDL_DECLSPEC int SDLCALL SDL_GetWindowHDRProperties(SDL_Window *window, SDL_HDROutputProperties *props);
 
 /**
  * Create a window with the specified dimensions and flags.

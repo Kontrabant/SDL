@@ -56,16 +56,16 @@ static void FreeRenderer(void)
 
 static void UpdateHDRState(void)
 {
-    SDL_PropertiesID props;
+    SDL_HDROutputProperties HDR_props;
     SDL_bool HDR_enabled;
 
-    props = SDL_GetDisplayProperties(SDL_GetDisplayForWindow(window));
-    HDR_enabled = SDL_GetBooleanProperty(props, SDL_PROP_DISPLAY_HDR_ENABLED_BOOLEAN, SDL_FALSE);
+    SDL_GetWindowHDRProperties(window, &HDR_props);
+    HDR_enabled = HDR_props.HDR_headroom > 1.0f;
 
     SDL_Log("HDR %s\n", HDR_enabled ? "enabled" : "disabled");
 
     if (HDR_enabled) {
-        props = SDL_GetRendererProperties(renderer);
+        SDL_PropertiesID props = SDL_GetRendererProperties(renderer);
         if (SDL_GetNumberProperty(props, SDL_PROP_RENDERER_OUTPUT_COLORSPACE_NUMBER, SDL_COLORSPACE_SRGB) != SDL_COLORSPACE_SRGB_LINEAR) {
             SDL_Log("Run with --colorspace linear to display HDR colors\n");
         }
@@ -525,7 +525,7 @@ static void loop(void)
             default:
                 break;
             }
-        } else if (event.type == SDL_EVENT_DISPLAY_HDR_STATE_CHANGED) {
+        } else if (event.type == SDL_EVENT_WINDOW_HDR_STATE_CHANGED) {
             UpdateHDRState();
         } else if (event.type == SDL_EVENT_QUIT) {
             done = 1;

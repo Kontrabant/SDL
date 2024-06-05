@@ -257,7 +257,7 @@ struct SDL_Renderer
     SDL_Mutex *target_mutex;
 
     SDL_Colorspace output_colorspace;
-    float SDR_white_point;
+    float SDR_white_level;
     float HDR_headroom;
 
     float color_scale;

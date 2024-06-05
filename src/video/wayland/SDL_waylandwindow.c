@@ -41,6 +41,7 @@
 #include "fractional-scale-v1-client-protocol.h"
 #include "xdg-foreign-unstable-v2-client-protocol.h"
 #include "xdg-dialog-v1-client-protocol.h"
+#include "frog-color-management-v1-client-protocol.h"
 
 #ifdef HAVE_LIBDECOR_H
 #include <libdecor.h>
@@ -1479,6 +1480,55 @@ static const struct wp_fractional_scale_v1_listener fractional_scale_listener = 
     handle_preferred_fractional_scale
 };
 
+static void frog_preferred_metadata_handler(void *data, struct frog_color_managed_surface *frog_color_managed_surface, uint32_t transfer_function,
+                                            uint32_t output_display_primary_red_x, uint32_t output_display_primary_red_y,
+                                            uint32_t output_display_primary_green_x, uint32_t output_display_primary_green_y,
+                                            uint32_t output_display_primary_blue_x, uint32_t output_display_primary_blue_y,
+                                            uint32_t output_white_point_x, uint32_t output_white_point_y,
+                                            uint32_t max_luminance, uint32_t min_luminance,
+                                            uint32_t max_full_frame_luminance)
+{
+    static const float div = (float)0xC350; /* Represents 1.0 for the color primaries. */
+
+    SDL_WindowData *wind = (SDL_WindowData *)data;
+    SDL_HDROutputProperties props;
+    SDL_zero(props);
+
+    props.has_color_data = SDL_TRUE;
+
+    props.color_data.red_primary.x = (float)output_display_primary_red_x / div;
+    props.color_data.red_primary.y = (float)output_display_primary_red_y / div;
+    props.color_data.green_primary.x = (float)output_display_primary_green_x / div;
+    props.color_data.green_primary.y = (float)output_display_primary_green_y / div;
+    props.color_data.blue_primary.x = (float)output_display_primary_blue_x / div;
+    props.color_data.blue_primary.y = (float)output_display_primary_blue_y / div;
+    props.color_data.white_point.x = (float)output_white_point_x / div;
+    props.color_data.white_point.y = (float)output_white_point_y / div;
+    props.color_data.min_luminance = (float)min_luminance / 1000.0f;
+    props.color_data.max_luminance = (float)max_luminance;
+    props.color_data.max_full_frame_luminance = (float)max_full_frame_luminance;
+
+    switch (transfer_function) {
+    case FROG_COLOR_MANAGED_SURFACE_TRANSFER_FUNCTION_ST2084_PQ:
+    case FROG_COLOR_MANAGED_SURFACE_TRANSFER_FUNCTION_SCRGB_LINEAR:
+        props.HDR_headroom = props.color_data.max_luminance / 80.0f;
+        props.SDR_white_level = 1.0f;
+        break;
+    case FROG_COLOR_MANAGED_SURFACE_TRANSFER_FUNCTION_UNDEFINED:
+    case FROG_COLOR_MANAGED_SURFACE_TRANSFER_FUNCTION_SRGB:
+    case FROG_COLOR_MANAGED_SURFACE_TRANSFER_FUNCTION_GAMMA_22:
+    default:
+        props.SDR_white_level = 1.0f;
+        props.HDR_headroom = 1.0f;
+    }
+
+    SDL_SetWindowHDRProperties(wind->sdlwindow, &props, SDL_TRUE);
+}
+
+static const struct frog_color_managed_surface_listener frog_surface_listener = {
+    frog_preferred_metadata_handler
+};
+
 static void SetKeyboardFocus(SDL_Window *window)
 {
     SDL_Window *kb_focus = SDL_GetKeyboardFocus();
@@ -2359,9 +2409,16 @@ int Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Propert
         }
     }
 
-    if (!custom_surface_role && c->wp_alpha_modifier_v1) {
-        data->wp_alpha_modifier_surface_v1 = wp_alpha_modifier_v1_get_surface(c->wp_alpha_modifier_v1, data->surface);
-        wp_alpha_modifier_surface_v1_set_multiplier(data->wp_alpha_modifier_surface_v1, SDL_MAX_UINT32);
+    if (!custom_surface_role) {
+        if (c->frog_color_management_factory_v1) {
+            data->frog_color_managed_surface = frog_color_management_factory_v1_get_color_managed_surface(c->frog_color_management_factory_v1, data->surface);
+            frog_color_managed_surface_add_listener(data->frog_color_managed_surface, &frog_surface_listener, data);
+        }
+
+        if (c->wp_alpha_modifier_v1) {
+            data->wp_alpha_modifier_surface_v1 = wp_alpha_modifier_v1_get_surface(c->wp_alpha_modifier_v1, data->surface);
+            wp_alpha_modifier_surface_v1_set_multiplier(data->wp_alpha_modifier_surface_v1, SDL_MAX_UINT32);
+        }
     }
 
     /* Must be called before EGL configuration to set the drawable backbuffer size. */
@@ -2692,6 +2749,10 @@ void Wayland_DestroyWindow(SDL_VideoDevice *_this, SDL_Window *window)
 
         if (wind->wp_alpha_modifier_surface_v1) {
             wp_alpha_modifier_surface_v1_destroy(wind->wp_alpha_modifier_surface_v1);
+        }
+
+        if (wind->frog_color_managed_surface) {
+            frog_color_managed_surface_destroy(wind->frog_color_managed_surface);
         }
 
         SDL_free(wind->outputs);

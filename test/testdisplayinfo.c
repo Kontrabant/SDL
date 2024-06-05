@@ -31,11 +31,32 @@ print_mode(const char *prefix, const SDL_DisplayMode *mode)
             SDL_GetPixelFormatName(mode->format));
 }
 
+static void print_HDR(SDL_HDROutputProperties *props)
+{
+    if (!props) {
+        return;
+    }
+
+    SDL_Log("Output Properties:");
+    if (props->has_color_data) {
+        SDL_Log("    Red primaries: %.4f, %.4f", props->color_data.red_primary.x, props->color_data.red_primary.y);
+        SDL_Log("    Green primaries: %.4f, %.4f", props->color_data.green_primary.x, props->color_data.green_primary.y);
+        SDL_Log("    Blue primaries: %.4f, %.4f", props->color_data.blue_primary.x, props->color_data.blue_primary.y);
+        SDL_Log("    White point: %.4f, %.4f", props->color_data.white_point.x, props->color_data.white_point.y);
+        SDL_Log("    Min Luminance: %.4f", props->color_data.min_luminance);
+        SDL_Log("    Max Luminance: %.4f", props->color_data.max_luminance);
+        SDL_Log("    Max Full-Frame Luminance: %.4f", props->color_data.max_full_frame_luminance);
+    }
+    SDL_Log("    SDR White Level: %.2f", props->SDR_white_level);
+    SDL_Log("    HDR Headroom: %.2f", props->HDR_headroom);
+}
+
 int main(int argc, char *argv[])
 {
     SDL_DisplayID *displays;
     const SDL_DisplayMode **modes;
     const SDL_DisplayMode *mode;
+    SDL_HDROutputProperties output_desc;
     int num_displays, i;
     SDLTest_CommonState *state;
 
@@ -93,6 +114,10 @@ int main(int argc, char *argv[])
             print_mode(prefix, modes[m]);
         }
         SDL_free((void*)modes);
+
+        if (!SDL_GetDisplayHDRProperties(dpy, &output_desc)) {
+            print_HDR(&output_desc);
+        }
 
         SDL_Log("\n");
     }

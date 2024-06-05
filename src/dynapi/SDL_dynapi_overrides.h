@@ -1043,3 +1043,5 @@
 #define SDL_wcsnstr SDL_wcsnstr_REAL
 #define SDL_wcsstr SDL_wcsstr_REAL
 #define SDL_wcstol SDL_wcstol_REAL
+#define SDL_GetWindowHDRProperties SDL_GetWindowHDRProperties_REAL
+#define SDL_GetDisplayHDRProperties SDL_GetDisplayHDRProperties_REAL
