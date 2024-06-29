@@ -215,7 +215,7 @@ static void SDL_SyncIfRequired(SDL_Window *window)
     }
 }
 
-static void SDL_SetWindowParent(SDL_Window *window, SDL_Window *parent)
+static void SDL_UpdateWindowHierarchy(SDL_Window *window, SDL_Window *parent)
 {
     /* Unlink the window from the existing parent. */
     if (window->parent) {
@@ -2313,7 +2313,7 @@ SDL_Window *SDL_CreateWindowWithProperties(SDL_PropertiesID props)
 
     /* Set the parent before creation if this is non-modal, otherwise it will be set later. */
     if (!(flags & SDL_WINDOW_MODAL)) {
-        SDL_SetWindowParent(window, parent);
+        SDL_UpdateWindowHierarchy(window, parent);
     }
 
     if (_this->CreateSDLWindow && _this->CreateSDLWindow(_this, window, props) < 0) {
@@ -3441,6 +3441,33 @@ int SDL_GetWindowOpacity(SDL_Window *window, float *out_opacity)
     return 0;
 }
 
+int SDL_SetWindowParent(SDL_Window *window, SDL_Window *parent)
+{
+    CHECK_WINDOW_MAGIC(window, -1);
+    CHECK_WINDOW_NOT_POPUP(window, -1);
+
+    if (parent) {
+        CHECK_WINDOW_MAGIC(parent, -1);
+        CHECK_WINDOW_NOT_POPUP(parent, -1);
+    }
+
+    if (!_this->SetWindowParent) {
+        return SDL_Unsupported();
+    }
+
+    if (window->flags & SDL_WINDOW_MODAL) {
+        return SDL_SetError("Modal windows cannot change parents while modal");
+    }
+
+    const int ret = _this->SetWindowParent(_this, window, parent);
+
+    if (!ret) {
+        SDL_UpdateWindowHierarchy(window, !ret ? parent : NULL);
+    }
+
+    return ret;
+}
+
 int SDL_SetWindowModalFor(SDL_Window *modal_window, SDL_Window *parent_window)
 {
     CHECK_WINDOW_MAGIC(modal_window, -1);
@@ -3469,7 +3496,7 @@ int SDL_SetWindowModalFor(SDL_Window *modal_window, SDL_Window *parent_window)
      * so don't change the hierarchy until after setting the new modal state.
      */
     if (!ret) {
-        SDL_SetWindowParent(modal_window, !ret ? parent_window : NULL);
+        SDL_UpdateWindowHierarchy(modal_window, !ret ? parent_window : NULL);
     }
 
     return ret;
@@ -3967,7 +3994,7 @@ void SDL_DestroyWindow(SDL_Window *window)
     SDL_DestroySurface(window->icon);
 
     /* Unlink the window from its siblings. */
-    SDL_SetWindowParent(window, NULL);
+    SDL_UpdateWindowHierarchy(window, NULL);
 
     /* Unlink the window from the list */
     if (window->next) {

@@ -54,22 +54,30 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if (SDL_CreateWindowAndRenderer("Parent Window", 640, 480, 0, &w1, &r1)) {
+    if (SDL_CreateWindowAndRenderer("Parent Window", 640, 480, SDL_WINDOW_HIDDEN, &w1, &r1)) {
         SDL_Log("Failed to create parent window and/or renderer: %s\n", SDL_GetError());
         exit_code = 1;
         goto sdl_quit;
     }
-
+#if 0
     SDL_CreateWindowAndRenderer("Non-Modal Window", 320, 200, 0, &w2, &r2);
     if (!w2) {
         SDL_Log("Failed to create parent window and/or renderer: %s\n", SDL_GetError());
         exit_code = 1;
         goto sdl_quit;
     }
+#endif
 
-    if (!SDL_SetWindowModalFor(w2, w1)) {
-        SDL_SetWindowTitle(w2, "Modal Window");
-    }
+    SDL_PropertiesID props = SDL_CreateProperties();
+    SDL_SetStringProperty(props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, "Child Window");
+    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, 320);
+    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, 200);
+    SDL_SetProperty(props, SDL_PROP_WINDOW_CREATE_PARENT_POINTER, w1);
+    w2 = SDL_CreateWindowWithProperties(props);
+    SDL_DestroyProperties(props);
+    r2 = SDL_CreateRenderer(w2, NULL);
+
+    SDL_ShowWindow(w1);
 
     while (1) {
         int quit = 0;
@@ -122,14 +130,14 @@ int main(int argc, char *argv[])
                         }
                     }
                 } else if (e.key.key == SDLK_p && w2) {
-                    if (SDL_GetWindowFlags(w2) & SDL_WINDOW_MODAL) {
+                    if (SDL_GetWindowParent(w2)) {
                         /* Unparent the window */
-                        if (!SDL_SetWindowModalFor(w2, NULL)) {
+                        if (!SDL_SetWindowParent(w2, NULL)) {
                             SDL_SetWindowTitle(w2, "Non-Modal Window");
                         }
                     } else {
                         /* Reparent the window */
-                        if (!SDL_SetWindowModalFor(w2, w1)) {
+                        if (!SDL_SetWindowParent(w2, w1)) {
                             SDL_SetWindowTitle(w2, "Modal Window");
                         }
                     }

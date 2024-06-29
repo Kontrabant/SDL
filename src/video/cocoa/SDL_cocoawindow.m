@@ -2000,15 +2000,16 @@ static int SetupWindowData(SDL_VideoDevice *_this, SDL_Window *window, NSWindow 
             window->flags &= ~SDL_WINDOW_MINIMIZED;
         }
 
+        if (window->parent) {
+            NSWindow *nsparent = ((__bridge SDL_CocoaWindowData *)window->parent->driverdata).nswindow;
+            [nsparent addChildWindow:nswindow ordered:NSWindowAbove];
+        }
         if (!SDL_WINDOW_IS_POPUP(window)) {
             if ([nswindow isKeyWindow]) {
                 window->flags |= SDL_WINDOW_INPUT_FOCUS;
                 Cocoa_SetKeyboardFocus(data.window);
             }
         } else {
-            NSWindow *nsparent = ((__bridge SDL_CocoaWindowData *)window->parent->driverdata).nswindow;
-            [nsparent addChildWindow:nswindow ordered:NSWindowAbove];
-
             if (window->flags & SDL_WINDOW_TOOLTIP) {
                 [nswindow setIgnoresMouseEvents:YES];
             } else if (window->flags & SDL_WINDOW_POPUP_MENU) {
@@ -2390,14 +2391,15 @@ void Cocoa_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
 
         if (![nswindow isMiniaturized]) {
             [windowData.listener pauseVisibleObservation];
-            if (SDL_WINDOW_IS_POPUP(window)) {
-                NSWindow *nsparent = ((__bridge SDL_CocoaWindowData *)window->parent->driverdata).nswindow;
-                [nsparent addChildWindow:nswindow ordered:NSWindowAbove];
-            } else {
-                if ((window->flags & SDL_WINDOW_MODAL) && window->parent) {
+            if (window->parent) {
+                if ((window->flags & SDL_WINDOW_MODAL)) {
                     Cocoa_SetWindowModalFor(_this, window, window->parent);
+                } else {
+                    NSWindow *nsparent = ((__bridge SDL_CocoaWindowData *)window->parent->driverdata).nswindow;
+                    [nsparent addChildWindow:nswindow ordered:NSWindowAbove];
                 }
-
+            }
+            if (!SDL_WINDOW_IS_POPUP(window)) {
                 if (bActivate) {
                     [nswindow makeKeyAndOrderFront:nil];
                 } else {
@@ -2407,9 +2409,9 @@ void Cocoa_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
                     }
                 }
             }
-            [nswindow setIsVisible:YES];
-            [windowData.listener resumeVisibleObservation];
         }
+        [nswindow setIsVisible:YES];
+        [windowData.listener resumeVisibleObservation];
     }
 }
 
@@ -2464,18 +2466,20 @@ void Cocoa_RaiseWindow(SDL_VideoDevice *_this, SDL_Window *window)
          */
         [windowData.listener pauseVisibleObservation];
         if (![nswindow isMiniaturized] && [nswindow isVisible]) {
-            if (SDL_WINDOW_IS_POPUP(window)) {
+            if (window->parent) {
                 NSWindow *nsparent = ((__bridge SDL_CocoaWindowData *)window->parent->driverdata).nswindow;
                 [nsparent addChildWindow:nswindow ordered:NSWindowAbove];
-                if (bActivate) {
-                    [nswindow makeKeyWindow];
-                }
-            } else {
+            }
+            if (!SDL_WINDOW_IS_POPUP(window)) {
                 if (bActivate) {
                     [NSApp activateIgnoringOtherApps:YES];
                     [nswindow makeKeyAndOrderFront:nil];
                 } else {
                     [nswindow orderFront:nil];
+                }
+            } else {
+                if (bActivate) {
+                    [nswindow makeKeyWindow];
                 }
             }
         }
@@ -2960,6 +2964,26 @@ void Cocoa_AcceptDragAndDrop(SDL_Window *window, SDL_bool accept)
             [data.nswindow unregisterDraggedTypes];
         }
     }
+}
+
+int Cocoa_SetWindowParent(SDL_VideoDevice *_this, SDL_Window *window, SDL_Window *parent)
+{
+    @autoreleasepool {
+        SDL_CocoaWindowData *child_data = (__bridge SDL_CocoaWindowData *)window->driverdata;
+
+        /* Remove an existing parent. */
+        if (child_data.nswindow.parentWindow) {
+            NSWindow *nsparent = ((__bridge SDL_CocoaWindowData *)window->parent->driverdata).nswindow;
+            [nsparent removeChildWindow:child_data.nswindow];
+        }
+
+        if (parent) {
+            SDL_CocoaWindowData *parent_data = (__bridge SDL_CocoaWindowData *)parent->driverdata;
+            [parent_data.nswindow addChildWindow:child_data.nswindow ordered:NSWindowAbove];
+        }
+    }
+
+    return 0;
 }
 
 int Cocoa_SetWindowModalFor(SDL_VideoDevice *_this, SDL_Window *modal_window, SDL_Window *parent_window)

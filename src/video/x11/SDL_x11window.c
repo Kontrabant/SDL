@@ -754,6 +754,11 @@ int X11_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_PropertiesI
     }
     windowdata = window->driverdata;
 
+    /* Set the parent if this is a non-popup window. */
+    if (!SDL_WINDOW_IS_POPUP(window) && window->parent) {
+        X11_XSetTransientForHint(display, w, window->parent->driverdata->xwindow);
+    }
+
     /* Set the flag if the borders were forced on when creating a fullscreen window for later removal. */
     windowdata->fullscreen_borders_forced_on = !!(window->pending_flags & SDL_WINDOW_FULLSCREEN) &&
                                                !!(window->flags & SDL_WINDOW_BORDERLESS);
@@ -1219,6 +1224,22 @@ int X11_SetWindowOpacity(SDL_VideoDevice *_this, SDL_Window *window, float opaci
         const long alpha = (long)((double)opacity * (double)FullyOpaque);
         X11_XChangeProperty(display, data->xwindow, _NET_WM_WINDOW_OPACITY, XA_CARDINAL, 32,
                             PropModeReplace, (unsigned char *)&alpha, 1);
+    }
+
+    return 0;
+}
+
+int X11_SetWindowParent(SDL_VideoDevice *_this, SDL_Window *window, SDL_Window *parent)
+{
+    SDL_WindowData *data = window->driverdata;
+    SDL_WindowData *parent_data = parent ? parent->driverdata : NULL;
+    SDL_VideoData *video_data = _this->driverdata;
+    Display *display = video_data->display;
+
+    if (parent_data) {
+        X11_XSetTransientForHint(display, data->xwindow, parent_data->xwindow);
+    } else {
+        X11_XDeleteProperty(display, data->xwindow, video_data->WM_TRANSIENT_FOR);
     }
 
     return 0;

@@ -205,6 +205,7 @@ static SDL_VideoDevice *WIN_CreateDevice(void)
     device->SetWindowResizable = WIN_SetWindowResizable;
     device->SetWindowAlwaysOnTop = WIN_SetWindowAlwaysOnTop;
     device->SetWindowFullscreen = WIN_SetWindowFullscreen;
+    device->SetWindowParent = WIN_SetWindowParent;
     device->SetWindowModalFor = WIN_SetWindowModalFor;
 #if !defined(SDL_PLATFORM_XBOXONE) && !defined(SDL_PLATFORM_XBOXSERIES)
     device->GetWindowICCProfile = WIN_GetWindowICCProfile;

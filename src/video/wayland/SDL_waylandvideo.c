@@ -488,6 +488,7 @@ static SDL_VideoDevice *Wayland_CreateDevice(void)
     device->SetWindowSize = Wayland_SetWindowSize;
     device->SetWindowMinimumSize = Wayland_SetWindowMinimumSize;
     device->SetWindowMaximumSize = Wayland_SetWindowMaximumSize;
+    device->SetWindowParent = Wayland_SetWindowParent;
     device->SetWindowModalFor = Wayland_SetWindowModalFor;
     device->SetWindowOpacity = Wayland_SetWindowOpacity;
     device->SetWindowTitle = Wayland_SetWindowTitle;

@@ -687,10 +687,10 @@ int WIN_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_PropertiesI
         int x, y;
         int w, h;
 
-        if (SDL_WINDOW_IS_POPUP(window)) {
-            parent = window->parent->driverdata->hwnd;
-        } else if (window->flags & SDL_WINDOW_UTILITY) {
+        if (window->flags & SDL_WINDOW_UTILITY) {
             parent = CreateWindow(SDL_Appname, TEXT(""), STYLE_BASIC, 0, 0, 32, 32, NULL, NULL, SDL_Instance, NULL);
+        } else if (window->parent) {
+            parent = window->parent->driverdata->hwnd;
         }
 
         style |= GetWindowStyle(window);
@@ -1775,6 +1775,33 @@ void WIN_UpdateDarkModeForHWND(HWND hwnd)
         }
         SDL_UnloadObject(handle);
     }
+}
+
+int WIN_SetWindowParent(SDL_VideoDevice *_this, SDL_Window *window, SDL_Window *parent)
+{
+#if !defined(SDL_PLATFORM_XBOXONE) && !defined(SDL_PLATFORM_XBOXSERIES)
+    SDL_WindowData *child_data = window->driverdata;
+    const LONG_PTR parent_hwnd = (LONG_PTR)(parent ? parent->driverdata->hwnd : NULL);
+    const LONG_PTR old_ptr = GetWindowLongPtr(child_data->hwnd, GWLP_HWNDPARENT);
+    const DWORD style = GetWindowLong(child_data->hwnd, GWL_STYLE);
+
+    if (old_ptr == parent_hwnd) {
+        return 0;
+    }
+
+    if (!(style & WS_CHILD)) {
+        /* Despite the name, this changes the *owner* of a toplevel window, not
+         * the parent of a child window.
+         *
+         * https://devblogs.microsoft.com/oldnewthing/20100315-00/?p=14613
+         */
+        SetWindowLongPtr(child_data->hwnd, GWLP_HWNDPARENT, parent_hwnd);
+    } else {
+        SetParent(child_data->hwnd, (HWND)parent_hwnd);
+    }
+#endif /*!defined(SDL_PLATFORM_XBOXONE) && !defined(SDL_PLATFORM_XBOXSERIES)*/
+
+    return 0;
 }
 
 int WIN_SetWindowModalFor(SDL_VideoDevice *_this, SDL_Window *modal_window, SDL_Window *parent_window)

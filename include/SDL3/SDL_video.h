@@ -2158,6 +2158,27 @@ extern SDL_DECLSPEC int SDLCALL SDL_SetWindowOpacity(SDL_Window *window, float o
  */
 extern SDL_DECLSPEC int SDLCALL SDL_GetWindowOpacity(SDL_Window *window, float *out_opacity);
 
+ /**
+ * Set the window as a child of a parent window.
+ *
+ * If the window is already the child of an existing window, it will be reparented
+ * to the new owner. Setting the parent window to null unparents the window
+ * window and removes child status.
+ *
+ * Attemping to set the parent of a window that is currently modal will fail.
+ *
+ * Setting a window a child to a parent that is a descendent of the child
+ * window results in undefined behavior.
+ *
+ * \param window the window that should become the child of a parent.
+ * \param parent the parent window for the child window.
+ * \returns 0 on success or a negative error code on failure; call
+ *          SDL_GetError() for more information.
+ *
+ * \since This function is available since SDL 3.0.0.
+ */
+ extern SDL_DECLSPEC int SDLCALL SDL_SetWindowParent(SDL_Window *window, SDL_Window *parent);
+
 /**
  * Set the window as a modal to a parent window.
  *
