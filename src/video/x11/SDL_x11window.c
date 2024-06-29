@@ -1224,6 +1224,22 @@ int X11_SetWindowOpacity(SDL_VideoDevice *_this, SDL_Window *window, float opaci
     return 0;
 }
 
+int X11_SetWindowParent(SDL_VideoDevice *_this, SDL_Window *window, SDL_Window *parent)
+{
+    SDL_WindowData *data = window->driverdata;
+    SDL_WindowData *parent_data = parent ? parent->driverdata : NULL;
+    SDL_VideoData *video_data = _this->driverdata;
+    Display *display = video_data->display;
+
+    if (parent_data) {
+        X11_XSetTransientForHint(display, data->xwindow, parent_data->xwindow);
+    } else {
+        X11_XDeleteProperty(display, data->xwindow, video_data->WM_TRANSIENT_FOR);
+    }
+
+    return 0;
+}
+
 int X11_SetWindowModalFor(SDL_VideoDevice *_this, SDL_Window *modal_window, SDL_Window *parent_window)
 {
     SDL_WindowData *data = modal_window->driverdata;

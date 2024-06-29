@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
         goto sdl_quit;
     }
 
-    if (!SDL_SetWindowModalFor(w2, w1)) {
+    if (!SDL_SetWindowParent(w2, w1)) {
         SDL_SetWindowTitle(w2, "Modal Window");
     }
 
@@ -122,14 +122,14 @@ int main(int argc, char *argv[])
                         }
                     }
                 } else if (e.key.key == SDLK_p && w2) {
-                    if (SDL_GetWindowFlags(w2) & SDL_WINDOW_MODAL) {
+                    if (SDL_GetWindowParent(w2)) {
                         /* Unparent the window */
-                        if (!SDL_SetWindowModalFor(w2, NULL)) {
+                        if (!SDL_SetWindowParent(w2, NULL)) {
                             SDL_SetWindowTitle(w2, "Non-Modal Window");
                         }
                     } else {
                         /* Reparent the window */
-                        if (!SDL_SetWindowModalFor(w2, w1)) {
+                        if (!SDL_SetWindowParent(w2, w1)) {
                             SDL_SetWindowTitle(w2, "Modal Window");
                         }
                     }
