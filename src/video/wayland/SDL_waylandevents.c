@@ -414,7 +414,8 @@ int Wayland_WaitEventTimeout(SDL_VideoDevice *_this, Sint64 timeoutNS)
      * If the default queue is empty, it will prepare us for our SDL_IOReady() call. */
     if (WAYLAND_wl_display_prepare_read(d->display) == 0) {
         /* Use SDL_IOR_NO_RETRY to ensure SIGINT will break us out of our wait */
-        int err = SDL_IOReady(WAYLAND_wl_display_get_fd(d->display), SDL_IOR_READ | SDL_IOR_NO_RETRY, timeoutNS);
+        int fd = WAYLAND_wl_display_get_fd(d->display);
+        int err = SDL_IOReady(&fd, 1, SDL_IOR_READ | SDL_IOR_NO_RETRY, timeoutNS);
         if (err > 0) {
             /* There are new events available to read */
             WAYLAND_wl_display_read_events(d->display);
@@ -478,7 +479,8 @@ void Wayland_PumpEvents(SDL_VideoDevice *_this)
     /* wl_display_prepare_read() will return -1 if the default queue is not empty.
      * If the default queue is empty, it will prepare us for our SDL_IOReady() call. */
     if (WAYLAND_wl_display_prepare_read(d->display) == 0) {
-        if (SDL_IOReady(WAYLAND_wl_display_get_fd(d->display), SDL_IOR_READ, 0) > 0) {
+        int fd = WAYLAND_wl_display_get_fd(d->display);
+        if (SDL_IOReady(&fd, 1, SDL_IOR_READ, 0) > 0) {
             WAYLAND_wl_display_read_events(d->display);
         } else {
             WAYLAND_wl_display_cancel_read(d->display);

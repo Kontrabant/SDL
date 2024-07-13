@@ -23,16 +23,10 @@
 
 #include "SDL_poll.h"
 
-#ifdef HAVE_POLL
 #include <poll.h>
-#else
-#include <sys/time.h>
-#include <sys/types.h>
-#include <unistd.h>
-#endif
 #include <errno.h>
 
-int SDL_IOReady(int fd, int flags, Sint64 timeoutNS)
+int SDL_IOReady(int *fd, int fd_cnt, int flags, Sint64 timeoutNS)
 {
     int result;
 
@@ -40,19 +34,33 @@ int SDL_IOReady(int fd, int flags, Sint64 timeoutNS)
 
     /* Note: We don't bother to account for elapsed time if we get EINTR */
     do {
-#ifdef HAVE_POLL
-        struct pollfd info;
+        struct pollfd *info = SDL_stack_alloc(struct pollfd, fd_cnt);
+
+        for (int i = 0; i < fd_cnt; ++i) {
+            info[i].fd = fd[i];
+            info[i].events = 0;
+            if (flags & SDL_IOR_READ) {
+                info[i].events |= POLLIN | POLLPRI;
+            }
+            if (flags & SDL_IOR_WRITE) {
+                info[i].events |= POLLOUT;
+            }
+        }
+
+#ifdef HAVE_PPOLL
+        struct timespec ts;
+
+        if (timeoutNS > 0) {
+            ts.tv_sec = timeoutNS / SDL_NS_PER_SECOND;
+            ts.tv_nsec = timeoutNS % SDL_NS_PER_SECOND;
+        } else if (timeoutNS == 0) {
+            SDL_zero(ts);
+        }
+
+        result = ppoll(info, fd_cnt, timeoutNS < 0 ? NULL : &ts, NULL);
+#else
         int timeoutMS;
 
-        info.fd = fd;
-        info.events = 0;
-        if (flags & SDL_IOR_READ) {
-            info.events |= POLLIN | POLLPRI;
-        }
-        if (flags & SDL_IOR_WRITE) {
-            info.events |= POLLOUT;
-        }
-        /* FIXME: Add support for ppoll() for nanosecond precision */
         if (timeoutNS > 0) {
             timeoutMS = (int)SDL_NS_TO_MS(timeoutNS);
         } else if (timeoutNS == 0) {
@@ -60,35 +68,10 @@ int SDL_IOReady(int fd, int flags, Sint64 timeoutNS)
         } else {
             timeoutMS = -1;
         }
-        result = poll(&info, 1, timeoutMS);
-#else
-        fd_set rfdset, *rfdp = NULL;
-        fd_set wfdset, *wfdp = NULL;
-        struct timeval tv, *tvp = NULL;
+        result = poll(info, fd_cnt, timeoutMS);
+#endif
 
-        /* If this assert triggers we'll corrupt memory here */
-        SDL_assert(fd >= 0 && fd < FD_SETSIZE);
-
-        if (flags & SDL_IOR_READ) {
-            FD_ZERO(&rfdset);
-            FD_SET(fd, &rfdset);
-            rfdp = &rfdset;
-        }
-        if (flags & SDL_IOR_WRITE) {
-            FD_ZERO(&wfdset);
-            FD_SET(fd, &wfdset);
-            wfdp = &wfdset;
-        }
-
-        if (timeoutNS >= 0) {
-            tv.tv_sec = (timeoutNS / SDL_NS_PER_SECOND);
-            tv.tv_usec = SDL_NS_TO_US(timeoutNS % SDL_NS_PER_SECOND);
-            tvp = &tv;
-        }
-
-        result = select(fd + 1, rfdp, wfdp, NULL, tvp);
-#endif /* HAVE_POLL */
-
+        SDL_stack_free(info);
     } while (result < 0 && errno == EINTR && !(flags & SDL_IOR_NO_RETRY));
 
     return result;

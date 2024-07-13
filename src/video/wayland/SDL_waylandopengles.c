@@ -148,7 +148,8 @@ int Wayland_GLES_SwapWindow(SDL_VideoDevice *_this, SDL_Window *window)
                 break;
             }
 
-            if (SDL_IOReady(WAYLAND_wl_display_get_fd(display), SDL_IOR_READ, max_wait - now) <= 0) {
+            int fd = WAYLAND_wl_display_get_fd(display);
+            if (SDL_IOReady(&fd, 1, SDL_IOR_READ, max_wait - now) <= 0) {
                 /* Error or timeout expired without any events for us. Cancel the read. */
                 WAYLAND_wl_display_cancel_read(display);
                 break;
