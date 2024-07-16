@@ -124,7 +124,8 @@ VideoBootStrap PSP_bootstrap = {
     "psp",
     "PSP Video Driver",
     PSP_Create,
-    PSP_ShowMessageBox
+    PSP_ShowMessageBox,
+    SDL_FALSE
 };
 
 /*****************************************************************************/

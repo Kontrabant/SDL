@@ -477,7 +477,8 @@ typedef struct VideoBootStrap
     const char *name;
     const char *desc;
     SDL_VideoDevice *(*create)(void);
-    int (*ShowMessageBox)(const SDL_MessageBoxData *messageboxdata, int *buttonID);  /* can be done without initializing backend! */
+    int (*ShowMessageBox)(const SDL_MessageBoxData *messageboxdata, int *buttonID); /* can be done without initializing backend! */
+    SDL_bool demand_only;                                                           /* if SDL_TRUE: request explicitly, or it won't be available. */
 } VideoBootStrap;
 
 /* Not all of these are available in a given build. Use #ifdefs, etc. */

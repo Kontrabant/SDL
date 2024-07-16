@@ -537,7 +537,8 @@ static SDL_VideoDevice *Wayland_CreateDevice(void)
 VideoBootStrap Wayland_bootstrap = {
     WAYLANDVID_DRIVER_NAME, "SDL Wayland video driver",
     Wayland_CreateDevice,
-    Wayland_ShowMessageBox
+    Wayland_ShowMessageBox,
+    SDL_FALSE
 };
 
 static void xdg_output_handle_logical_position(void *data, struct zxdg_output_v1 *xdg_output,

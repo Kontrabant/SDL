@@ -157,7 +157,8 @@ static SDL_VideoDevice *WINRT_CreateDevice(void)
 VideoBootStrap WINRT_bootstrap = {
     "winrt", "SDL WinRT video driver",
     WINRT_CreateDevice,
-    WINRT_ShowMessageBox
+    WINRT_ShowMessageBox,
+    SDL_FALSE
 };
 
 static void SDLCALL WINRT_SetDisplayOrientationsPreference(void *userdata, const char *name, const char *oldValue, const char *newValue)

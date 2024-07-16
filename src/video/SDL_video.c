@@ -585,6 +585,10 @@ int SDL_VideoInit(const char *driver_name)
         }
     } else {
         for (i = 0; bootstrap[i]; ++i) {
+            if (bootstrap[i]->demand_only) {
+                continue;
+            }
+
             video = bootstrap[i]->create();
             if (video) {
                 break;
