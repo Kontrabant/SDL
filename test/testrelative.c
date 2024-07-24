@@ -12,6 +12,7 @@
 
 /* Simple program:  Test relative mouse motion */
 
+#include <SDL3/SDL_test.h>
 #include <SDL3/SDL_test_common.h>
 #include <SDL3/SDL_main.h>
 
@@ -21,39 +22,64 @@
 
 static SDLTest_CommonState *state;
 static int i, done;
-static float mouseX, mouseY;
 static SDL_FRect rect;
 static SDL_Event event;
+static SDL_bool warp;
 
 static void DrawRects(SDL_Renderer *renderer)
 {
     SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-    rect.x = mouseX;
-    rect.y = mouseY;
     SDL_RenderFillRect(renderer, &rect);
 }
 
 static void loop(void)
 {
+    SDL_Window *window = SDL_GetMouseFocus();
+    const float old_x = rect.x;
+    const float old_y = rect.y;
+
     /* Check for events */
     while (SDL_PollEvent(&event)) {
         SDLTest_CommonEvent(state, &event, &done);
         switch (event.type) {
+        case SDL_EVENT_KEY_DOWN:
+            if (event.key.key == SDLK_C) {
+                if (SDL_CursorVisible()) {
+                    SDL_HideCursor();
+                } else {
+                    SDL_ShowCursor();
+                }
+            }
+            break;
         case SDL_EVENT_MOUSE_MOTION:
         {
-            mouseX += event.motion.xrel;
-            mouseY += event.motion.yrel;
+            rect.x += event.motion.xrel;
+            rect.y += event.motion.yrel;
         } break;
         default:
             break;
         }
     }
+
     for (i = 0; i < state->num_windows; ++i) {
         SDL_Rect viewport;
         SDL_Renderer *renderer = state->renderers[i];
         if (state->windows[i] == NULL) {
             continue;
         }
+
+        /* Only warp if the cursor actually moved. */
+        if (warp && (SDL_GetWindowFlags(state->windows[i]) & SDL_WINDOW_INPUT_FOCUS) && (old_x != rect.x || old_y != rect.y)) {
+            int w, h;
+            float cx, cy;
+
+            SDL_GetWindowSize(window, &w, &h);
+            cx = (float)w / 2.f;
+            cy = (float)h / 2.f;
+
+            SDL_WarpMouseInWindow(window, cx, cy);
+        }
+
         SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0x00, 0xFF);
         SDL_RenderClear(renderer);
 
@@ -85,7 +111,6 @@ static void loop(void)
 
 int main(int argc, char *argv[])
 {
-
     /* Enable standard application logging */
     SDL_SetLogPriority(SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_INFO);
 
@@ -96,8 +121,27 @@ int main(int argc, char *argv[])
     }
 
     /* Parse commandline */
-    if (!SDLTest_CommonDefaultArgs(state, argc, argv)) {
-        return 1;
+    for (i = 1; i < argc;) {
+        int consumed;
+
+        consumed = SDLTest_CommonArg(state, i);
+        if (consumed == 0) {
+            consumed = -1;
+            if (SDL_strcasecmp(argv[i], "--warp") == 0) {
+                warp = SDL_TRUE;
+                consumed = 1;
+            }
+        }
+
+        if (consumed < 0) {
+            static const char *options[] = {
+                "[--warp]",
+                NULL
+            };
+            SDLTest_CommonLogUsage(state, argv[0], options);
+            return 1;
+        }
+        i += consumed;
     }
 
     if (!SDLTest_CommonInit(state)) {
@@ -112,8 +156,12 @@ int main(int argc, char *argv[])
         SDL_RenderClear(renderer);
     }
 
-    if (SDL_SetRelativeMouseMode(SDL_TRUE) < 0) {
-        return 3;
+    if (!warp) {
+        if (SDL_SetRelativeMouseMode(SDL_TRUE) < 0) {
+            return 3;
+        }
+    } else {
+        SDL_HideCursor();
     }
 
     rect.x = DEFAULT_WINDOW_WIDTH / 2;
