@@ -174,7 +174,6 @@ struct SDL_WindowData
     bool scale_to_display;
     bool reparenting_required;
     bool pending_restored_size;
-    bool double_buffer;
 
     SDL_HitTestResult hit_test_result;
 

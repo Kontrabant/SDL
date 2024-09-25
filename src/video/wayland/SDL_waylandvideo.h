@@ -96,7 +96,10 @@ struct SDL_VideoData
     int relative_mouse_mode;
     bool display_externally_owned;
 
+    bool has_fifo_v1;
+    bool has_commit_timing_v1;
     bool scale_to_display_enabled;
+    bool egl_double_buffer_enabled;
 };
 
 struct SDL_DisplayData
@@ -133,5 +136,7 @@ void Wayland_RemoveWindowDataFromExternalList(SDL_WindowData *data);
 extern bool Wayland_LoadLibdecor(SDL_VideoData *data, bool ignore_xdg);
 
 extern bool Wayland_VideoReconnect(SDL_VideoDevice *_this);
+
+extern bool Wayland_HasFIFOProtocols(SDL_VideoData *data);
 
 #endif // SDL_waylandvideo_h_

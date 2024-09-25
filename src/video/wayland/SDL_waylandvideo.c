@@ -419,6 +419,11 @@ static bool Wayland_IsPreferred(struct wl_display *display)
     return preferred_data.has_fifo_v1 && preferred_data.has_commit_timing_v1;
 }
 
+bool Wayland_HasFIFOProtocols(SDL_VideoData *data)
+{
+    return data->has_fifo_v1 && data->has_commit_timing_v1;
+}
+
 static SDL_VideoDevice *Wayland_CreateDevice(bool require_preferred_protocols)
 {
     SDL_VideoDevice *device;
@@ -485,6 +490,7 @@ static SDL_VideoDevice *Wayland_CreateDevice(bool require_preferred_protocols)
     data->input = input;
     data->display_externally_owned = display_is_external;
     data->scale_to_display_enabled = SDL_GetHintBoolean(SDL_HINT_VIDEO_WAYLAND_SCALE_TO_DISPLAY, false);
+    data->egl_double_buffer_enabled = SDL_GetHintBoolean(SDL_HINT_VIDEO_DOUBLE_BUFFER, false);
     WAYLAND_wl_list_init(&data->output_list);
     WAYLAND_wl_list_init(&data->output_order);
     WAYLAND_wl_list_init(&external_window_list);
@@ -1201,6 +1207,10 @@ static void display_handle_global(void *data, struct wl_registry *registry, uint
         kde_output_order_v1_add_listener(d->kde_output_order, &kde_output_order_listener, d);
     } else if (SDL_strcmp(interface, "frog_color_management_factory_v1") == 0) {
         d->frog_color_management_factory_v1 = wl_registry_bind(d->registry, id, &frog_color_management_factory_v1_interface, 1);
+    } else if (SDL_strcmp(interface, "wp_fifo_manager_v1") == 0) {
+        d->has_fifo_v1 = true;
+    } else if (SDL_strcmp(interface, "wp_commit_timing_manager_v1") == 0) {
+        d->has_commit_timing_v1 = true;
     }
 }
 

@@ -2470,17 +2470,21 @@ bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
     // Must be called before EGL configuration to set the drawable backbuffer size.
     ConfigureWindowGeometry(window);
 
-    /* Fire a callback when the compositor wants a new frame rendered.
-     * Right now this only matters for OpenGL; we use this callback to add a
-     * wait timeout that avoids getting deadlocked by the compositor when the
-     * window isn't visible.
-     */
-    if (window->flags & SDL_WINDOW_OPENGL) {
-        data->gles_swap_frame_event_queue = WAYLAND_wl_display_create_queue(data->waylandData->display);
-        data->gles_swap_frame_surface_wrapper = WAYLAND_wl_proxy_create_wrapper(data->surface);
-        WAYLAND_wl_proxy_set_queue((struct wl_proxy *)data->gles_swap_frame_surface_wrapper, data->gles_swap_frame_event_queue);
-        data->gles_swap_frame_callback = wl_surface_frame(data->gles_swap_frame_surface_wrapper);
-        wl_callback_add_listener(data->gles_swap_frame_callback, &gles_swap_frame_listener, data);
+    if (!Wayland_HasFIFOProtocols(c) || c->egl_double_buffer_enabled) {
+        /* If the compositor lack the required protocols for guaranteeing
+         * forward-progress when using FIFO, or if double buffered mode is
+         * requested, fire a callback when the compositor wants a new frame
+         * rendered. This only matters for OpenGL; we use this callback to
+         * add a wait timeout that avoids getting deadlocked by the compositor
+         * when the window isn't visible.
+         */
+        if (window->flags & SDL_WINDOW_OPENGL) {
+            data->gles_swap_frame_event_queue = WAYLAND_wl_display_create_queue(data->waylandData->display);
+            data->gles_swap_frame_surface_wrapper = WAYLAND_wl_proxy_create_wrapper(data->surface);
+            WAYLAND_wl_proxy_set_queue((struct wl_proxy *)data->gles_swap_frame_surface_wrapper, data->gles_swap_frame_event_queue);
+            data->gles_swap_frame_callback = wl_surface_frame(data->gles_swap_frame_surface_wrapper);
+            wl_callback_add_listener(data->gles_swap_frame_callback, &gles_swap_frame_listener, data);
+        }
     }
 
     // No frame callback on external surfaces as it may already have one attached.
@@ -2535,10 +2539,6 @@ bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
         // Roleless and external surfaces are always considered to be in the shown state by the backend.
         data->shell_surface_type = WAYLAND_SURFACE_CUSTOM;
         data->surface_status = WAYLAND_SURFACE_STATUS_SHOWN;
-    }
-
-    if (SDL_GetHintBoolean(SDL_HINT_VIDEO_DOUBLE_BUFFER, false)) {
-        data->double_buffer = true;
     }
 
     SDL_PropertiesID props = SDL_GetWindowProperties(window);
