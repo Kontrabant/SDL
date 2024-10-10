@@ -169,6 +169,8 @@ not_our_signal:
 static float GetGlobalContentScale(SDL_VideoDevice *_this)
 {
     static double scale_factor = 0.0;
+    const char *xdg_desktop = SDL_getenv("XDG_CURRENT_DESKTOP");
+    const bool is_gnome = !SDL_strcasecmp(xdg_desktop ? xdg_desktop : "", "GNOME");
 
     if (scale_factor <= 0.0) {
 
@@ -181,9 +183,11 @@ static float GetGlobalContentScale(SDL_VideoDevice *_this)
             }
         }
 
-        // Next try the settings portal via D-Bus for the text scaling factor (aka 'Global Scale' on KDE)
+        /* Next try the settings portal via D-Bus for the text scaling factor.
+         * This is only relevant on GNOME (https://github.com/libsdl-org/SDL/issues/11142).
+         */
 #ifdef SDL_USE_LIBDBUS
-        if (scale_factor <= 0.0)
+        if (is_gnome && scale_factor <= 0.0)
         {
             DBusMessage *reply;
             SDL_DBusContext *dbus = SDL_DBus_GetContext();
