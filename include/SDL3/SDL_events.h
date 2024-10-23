@@ -200,6 +200,7 @@ typedef enum SDL_EventType
     SDL_EVENT_DROP_BEGIN,                /**< A new set of drops is beginning (NULL filename) */
     SDL_EVENT_DROP_COMPLETE,             /**< Current set of drops is now complete (NULL filename) */
     SDL_EVENT_DROP_POSITION,             /**< Position while moving over the window */
+    SDL_EVENT_DROP_WINDOW,               /**< A dockable window is being dragged */
 
     /* Audio hotplug events */
     SDL_EVENT_AUDIO_DEVICE_ADDED = 0x1100,  /**< A new audio device is available */
