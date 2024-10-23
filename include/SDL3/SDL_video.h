@@ -1242,6 +1242,7 @@ extern SDL_DECLSPEC SDL_Window * SDLCALL SDL_CreatePopupWindow(SDL_Window *paren
  *   and "menu" window types should be automatically constrained to be
  *   entirely within display bounds (default), false if no constraints on the
  *   position are desired.
+ * - `SDL_PROP_WINDOW_CREATE_DOCKABLE`: true if the window can be docked
  * - `SDL_PROP_WINDOW_CREATE_EXTERNAL_GRAPHICS_CONTEXT_BOOLEAN`: true if the
  *   window will be used with an externally managed graphics context.
  * - `SDL_PROP_WINDOW_CREATE_FOCUSABLE_BOOLEAN`: true if the window should
@@ -1371,6 +1372,7 @@ extern SDL_DECLSPEC SDL_Window * SDLCALL SDL_CreateWindowWithProperties(SDL_Prop
 #define SDL_PROP_WINDOW_CREATE_ALWAYS_ON_TOP_BOOLEAN               "SDL.window.create.always_on_top"
 #define SDL_PROP_WINDOW_CREATE_BORDERLESS_BOOLEAN                  "SDL.window.create.borderless"
 #define SDL_PROP_WINDOW_CREATE_CONSTRAIN_POPUP_BOOLEAN             "SDL.window.create.constrain_popup"
+#define SDL_PROP_WINDOW_CREATE_DOCKABLE_BOOLEAN                    "SDL.window.create.dockable"
 #define SDL_PROP_WINDOW_CREATE_FOCUSABLE_BOOLEAN                   "SDL.window.create.focusable"
 #define SDL_PROP_WINDOW_CREATE_EXTERNAL_GRAPHICS_CONTEXT_BOOLEAN   "SDL.window.create.external_graphics_context"
 #define SDL_PROP_WINDOW_CREATE_FLAGS_NUMBER                        "SDL.window.create.flags"

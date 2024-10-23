@@ -85,6 +85,7 @@ struct SDL_VideoData
     struct frog_color_management_factory_v1 *frog_color_management_factory_v1;
     struct wp_color_manager_v1 *wp_color_manager_v1;
     struct zwp_tablet_manager_v2 *tablet_manager;
+    struct xdg_toplevel_drag_manager_v1 *xdg_toplevel_drag_manager_v1;
 
     struct xkb_context *xkb_context;
 
