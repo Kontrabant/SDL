@@ -553,6 +553,51 @@ bool Wayland_data_offer_has_mime(SDL_WaylandDataOffer *offer,
     return found;
 }
 
+bool Wayland_data_offer_set_mime_data(SDL_WaylandDataOffer *offer,
+                                      const char *mime_type,
+                                      void *buffer,
+                                      size_t length)
+{
+    bool set = false;
+
+    if (offer) {
+        SDL_MimeDataList *m = mime_data_list_find(&offer->mimes, mime_type);
+        if (m) {
+            SDL_free(m->data);
+
+            if (buffer && length) {
+                m->data = SDL_malloc(length);
+                if (m->data) {
+                    SDL_memcpy(m->data, buffer, length);
+                    m->length = length;
+                    set = true;
+                }
+            } else {
+                set = true;
+            }
+        }
+    }
+
+    return set;
+}
+
+const void *Wayland_data_offer_get_mime_data(SDL_WaylandDataOffer *offer,
+                                             const char *mime_type,
+                                             size_t *length)
+{
+    const void *data = NULL;
+
+    if (offer) {
+        SDL_MimeDataList *m = mime_data_list_find(&offer->mimes, mime_type);
+        if (m) {
+            *length = m->length;
+            data = m->data;
+        }
+    }
+
+    return data;
+}
+
 bool Wayland_primary_selection_offer_has_mime(SDL_WaylandPrimarySelectionOffer *offer,
                                               const char *mime_type)
 {

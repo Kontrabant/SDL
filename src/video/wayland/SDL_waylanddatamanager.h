@@ -31,6 +31,7 @@
 #define TEXT_MIME "text/plain;charset=utf-8"
 #define FILE_MIME "text/uri-list"
 #define FILE_PORTAL_MIME "application/vnd.portal.filetransfer"
+#define DOCKABLE_WINDOW_MIME "application/sdl-dock-window"
 #define SDL_DATA_ORIGIN_MIME "application/x-sdl3-source-id"
 
 typedef struct SDL_WaylandDataDevice SDL_WaylandDataDevice;
@@ -53,7 +54,8 @@ typedef struct SDL_WaylandUserdata
 typedef struct
 {
     struct wl_data_source *source;
-    SDL_WaylandDataDevice *data_device;
+    SDL_WaylandDataDevice *data_dev
+    SDL_WindowData *window;
     SDL_ClipboardDataCallback callback;
     SDL_WaylandUserdata userdata;
 } SDL_WaylandDataSource;
@@ -96,7 +98,7 @@ struct SDL_WaylandDataDevice
     SDL_WaylandDataOffer *drag_offer;
     SDL_WaylandDataOffer *selection_offer;
     const char *mime_type;
-    bool has_mime_file, has_mime_text;
+    bool has_mime_file, has_mime_text, has_mime_window;
     SDL_Window *dnd_window;
 
     // Clipboard and Primary Selection
@@ -152,6 +154,14 @@ extern bool Wayland_primary_selection_offer_has_mime(SDL_WaylandPrimarySelection
                                                      const char *mime_type);
 extern bool Wayland_data_offer_add_mime(SDL_WaylandDataOffer *offer,
                                         const char *mime_type);
+                                       const char *mime_type);
+extern bool Wayland_data_offer_set_mime_data(SDL_WaylandDataOffer *offer,
+                                             const char *mime_type,
+                                             void *buffer,
+                                             size_t length);
+extern const void *Wayland_data_offer_get_mime_data(SDL_WaylandDataOffer *offer,
+                                                    const char *mime_type,
+                                                    size_t *length);
 extern bool Wayland_primary_selection_offer_add_mime(SDL_WaylandPrimarySelectionOffer *offer,
                                                      const char *mime_type);
 extern void Wayland_data_offer_destroy(SDL_WaylandDataOffer *offer);

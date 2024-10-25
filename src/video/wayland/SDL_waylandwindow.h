@@ -126,6 +126,10 @@ struct SDL_WindowData
     SDL_DisplayData **outputs;
     int num_outputs;
 
+    struct SDL_WaylandDataSource *drag_source;
+    struct xdg_toplevel_drag_v1 *toplevel_drag_v1;
+    SDL_Window *keyboard_focus;
+
     char *app_id;
     double scale_factor;
 
