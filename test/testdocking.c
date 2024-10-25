@@ -40,6 +40,8 @@ int main(int argc, char *argv[])
     int exit_code = 0;
     bool render_highlight = false;
 
+    SDL_zero(highlight);
+
     /* Initialize test framework */
     state = SDLTest_CommonCreateState(argv, 0);
     if (state == NULL) {
@@ -75,21 +77,39 @@ int main(int argc, char *argv[])
     while (1) {
         int quit = 0;
         SDL_Event e;
-        render_highlight = false;
         while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && e.window.windowID == SDL_GetWindowID(mainWindow)) {
-                quit = 1;
+            switch (e.type) {
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                if (e.window.windowID == SDL_GetWindowID(mainWindow)) {
+                    quit = 1;
+                }
                 break;
-            } else if(e.type == SDL_EVENT_DROP_WINDOW) {
-                highlight.x = e.drop.x < 320.f ? 0.f : 320.f;
-                highlight.y = e.drop.y < 240.f ? 0.f : 240.f;
-                highlight.w = 320.f;
-                highlight.h = 240.f;
 
-                SDL_Log("Drop: %f, %f", e.drop.x, e.drop.y);
-                render_highlight = true;
-            } else if (e.type == SDL_EVENT_MOUSE_MOTION) {
-                if (!dragRenderer && SDL_GetMouseState(NULL, NULL) & SDL_BUTTON_LEFT) {
+            case SDL_EVENT_DROP_BEGIN:
+                break;
+
+            case SDL_EVENT_DROP_POSITION:
+                if (e.drop.dropWindowID) {
+                    highlight.x = e.drop.x < 320.f ? 0.f : 320.f;
+                    highlight.y = e.drop.y < 240.f ? 0.f : 240.f;
+                    highlight.w = 320.f;
+                    highlight.h = 240.f;
+                    render_highlight = true;
+                }
+                break;
+
+            case SDL_EVENT_DROP_WINDOW:
+                SDL_DestroyWindow(dragWindow);
+                dragWindow = NULL;
+                dragRenderer = NULL;
+                break;
+
+            case SDL_EVENT_DROP_COMPLETE:
+                render_highlight = false;
+                break;
+
+            case SDL_EVENT_MOUSE_MOTION:
+                if (!dragWindow && SDL_GetMouseState(NULL, NULL) & SDL_BUTTON_LEFT) {
                     SDL_PropertiesID props = SDL_CreateProperties();
                     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_BORDERLESS_BOOLEAN, true);
                     SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_DOCKABLE_BOOLEAN, true);
@@ -101,8 +121,12 @@ int main(int argc, char *argv[])
                     dragRenderer = SDL_CreateRenderer(dragWindow, NULL);
                     SDL_SetWindowHitTest(dragWindow, DragHitCallback, NULL);
                 }
+                break;
+            default:
+                break;
             }
         }
+
         if (quit) {
             break;
         }
@@ -116,7 +140,7 @@ int main(int argc, char *argv[])
                 SDL_RenderFillRect(mainRenderer, &highlight);
             }
             if (!dragRenderer) {
-                DrawDockable(mainRenderer, 0.f, 0.f);
+                DrawDockable(mainRenderer, highlight.x, highlight.y);
             }
             SDL_RenderPresent(mainRenderer);
         }

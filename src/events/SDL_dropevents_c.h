@@ -24,9 +24,9 @@
 #define SDL_dropevents_c_h_
 
 extern bool SDL_SendDropFile(SDL_Window *window, const char *source, const char *file);
-extern bool SDL_SendDropPosition(SDL_Window *window, float x, float y);
+extern bool SDL_SendDropPosition(SDL_Window *window, float x, float y, SDL_Window *dragWindow);
 extern bool SDL_SendDropText(SDL_Window *window, const char *text);
-extern bool SDL_SendDropWindow(SDL_Window *window, SDL_Window *dropWindow, float x, float y);
+extern bool SDL_SendDropWindow(SDL_Window *window, SDL_Window *dropWindow);
 extern bool SDL_SendDropComplete(SDL_Window *window);
 
 #endif // SDL_dropevents_c_h_

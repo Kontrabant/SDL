@@ -1432,7 +1432,7 @@ static void X11_DispatchEvent(SDL_VideoDevice *_this, XEvent *xevent)
                 X11_XTranslateCoordinates(display, DefaultRootWindow(display), data->xwindow,
                                           root_x, root_y, &window_x, &window_y, &ChildReturn);
 
-                SDL_SendDropPosition(data->window, (float)window_x, (float)window_y);
+                SDL_SendDropPosition(data->window, (float)window_x, (float)window_y, NULL);
             }
 
             // reply with status

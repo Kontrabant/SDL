@@ -1696,7 +1696,7 @@ static void SDL_HandleDockableWindow(SDL_Window *window)
             SDL_Log("Global mouse: %f, %f", x, y);
 
             if (x >= w->x && y >= w->y && x <= w->x + w->w && y <= w->y + w->h) {
-                SDL_SendDropWindow(w, window, x - w->x, y - w->y);
+                SDL_SendDropPosition(w, x - w->x, y - w->y, window);
             }
         }
     }
@@ -3890,7 +3890,7 @@ void SDL_OnWindowDisplayChanged(SDL_Window *window)
 
 void SDL_OnWindowMoved(SDL_Window *window)
 {
-    SDL_HandleDockableWindow(window);
+    //SDL_HandleDockableWindow(window);
     SDL_CheckWindowDisplayChanged(window);
 }
 

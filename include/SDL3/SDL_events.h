@@ -200,7 +200,7 @@ typedef enum SDL_EventType
     SDL_EVENT_DROP_BEGIN,                /**< A new set of drops is beginning (NULL filename) */
     SDL_EVENT_DROP_COMPLETE,             /**< Current set of drops is now complete (NULL filename) */
     SDL_EVENT_DROP_POSITION,             /**< Position while moving over the window */
-    SDL_EVENT_DROP_WINDOW,               /**< A dockable window is being dragged */
+    SDL_EVENT_DROP_WINDOW,               /**< A dockable window is being dropped */
 
     /* Audio hotplug events */
     SDL_EVENT_AUDIO_DEVICE_ADDED = 0x1100,  /**< A new audio device is available */
@@ -860,7 +860,7 @@ typedef struct SDL_PenAxisEvent
  */
 typedef struct SDL_DropEvent
 {
-    SDL_EventType type; /**< SDL_EVENT_DROP_BEGIN or SDL_EVENT_DROP_FILE or SDL_EVENT_DROP_TEXT or SDL_EVENT_DROP_COMPLETE or SDL_EVENT_DROP_POSITION */
+    SDL_EventType type; /**< SDL_EVENT_DROP_BEGIN or SDL_EVENT_DROP_FILE or SDL_EVENT_DROP_TEXT or SDL_EVENT_DROP_COMPLETE or SDL_EVENT_DROP_POSITION or SDL_EVENT_DROP_WINDOW */
     Uint32 reserved;
     Uint64 timestamp;   /**< In nanoseconds, populated using SDL_GetTicksNS() */
     SDL_WindowID windowID;    /**< The window that was dropped on, if any */
@@ -868,6 +868,7 @@ typedef struct SDL_DropEvent
     float y;            /**< Y coordinate, relative to window (not on begin) */
     const char *source; /**< The source app that sent this drop event, or NULL if that isn't available */
     const char *data;   /**< The text for SDL_EVENT_DROP_TEXT and the file name for SDL_EVENT_DROP_FILE, NULL for other events */
+    SDL_WindowID dropWindowID; /**< The ID of the window being dropped, 0 for other events */
 } SDL_DropEvent;
 
 /**
