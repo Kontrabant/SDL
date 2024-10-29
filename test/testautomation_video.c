@@ -820,7 +820,16 @@ static int SDLCALL video_getSetWindowPosition(void *arg)
         goto null_tests;
     }
 
-    if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "x11") == 0) {
+    if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "wayland") == 0) {
+        /* Positioning on Wayland is supported via ext-zones, and the protocol
+         * requires that windows are positioned within zone bounds.
+         */
+        maxxVariation = 2;
+        maxyVariation = 2;
+
+        SDL_GetDisplayUsableBounds(SDL_GetPrimaryDisplay(), &display_bounds);
+    }
+    else if (SDL_strcmp(SDL_GetCurrentVideoDriver(), "x11") == 0) {
         /* The X11 server allows arbitrary window placement, but compositing
          * window managers such as GNOME and KDE force windows to be within
          * desktop bounds.

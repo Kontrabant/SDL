@@ -47,6 +47,7 @@
 #include "frog-color-management-v1-client-protocol.h"
 #include "xdg-toplevel-icon-v1-client-protocol.h"
 #include "color-management-v1-client-protocol.h"
+#include "ext-zones-v1-client-protocol.h"
 
 #ifdef HAVE_LIBDECOR_H
 #include <libdecor.h>
@@ -80,8 +81,8 @@ static int PixelToPoint(SDL_Window *window, int pixel)
  * should be assumed to be in some way that attempts to blend into the surrounding area
  * (e.g. solid black)."
  *
- * - KDE, as of 5.27, still doesn't do this
- * - GNOME prior to 43 didn't do this (older versions are still found in many LTS distros)
+ * - KDE, as of 6.2, still doesn't do this.
+ * - GNOME prior to 43 didn't do this (older versions are still found in many LTS distros).
  *
  * Default to 'stretch' for now, until things have moved forward enough that the default
  * can be changed to 'aspect'.
@@ -473,6 +474,69 @@ static bool ConfigureWindowGeometry(SDL_Window *window)
     return true;
 }
 
+SDL_DisplayData *Wayland_GetDisplayForWindowZone(SDL_WindowData *wind)
+{
+    SDL_VideoData *vid = wind->waylandData;
+
+    if (!vid->ext_zone_manager_v1) {
+        return NULL;
+    }
+
+    SDL_DisplayData *dst_display = NULL;
+    SDL_DisplayData *overlapped_display = NULL;
+    SDL_DisplayData *closest_display = NULL;
+    const int x = wind->sdlwindow->windowed.x - wind->borders.left;
+    const int y = wind->sdlwindow->windowed.y - wind->borders.top;
+    const SDL_Rect window_rect = { x, y,
+                                   wind->current.logical_width + wind->borders.left + wind->borders.right,
+                                   wind->current.logical_height + wind->borders.top + wind->borders.bottom };
+    int closest_distance = SDL_MAX_SINT32;
+    int overlapped_area = 0;
+
+    /* Find the best zone for window placement:
+     *  - If all or part of the window overlaps one or more zones, the zone most overlapped by the window is used.
+     *  - If the window is completely out of bounds, the closest zone is used.
+     */
+    for (int i = 0; i < vid->output_count; i++) {
+        SDL_DisplayData *disp = vid->output_list[i];
+
+        /* Find the zone with the most window overlap.
+         * A dimension of 0 means the zone is infinite in that direction.
+         */
+        const SDL_Rect display_rect = { disp->x, disp->y,
+                                        disp->zone_width > 0 ? disp->zone_width : SDL_MAX_SINT32,
+                                        disp->zone_height > 0 ? disp->zone_height : SDL_MAX_SINT32 };
+        SDL_Rect overlap;
+        if (SDL_GetRectUnion(&window_rect, &display_rect, &overlap)) {
+            const int area = overlap.w * overlap.h;
+            if (overlapped_area < area) {
+                overlapped_area = area;
+                overlapped_display = disp;
+            }
+        }
+
+        // Find the closest zone as a fallback if the window is completely out of bounds.
+        const int dx = disp->x - x;
+        const int dy = disp->y - y;
+        const int distance = SDL_abs((dx * dx) + (dy * dy));
+
+        if (distance < closest_distance) {
+            closest_distance = distance;
+            closest_display = disp;
+        }
+    }
+
+    if (!dst_display) {
+        if (overlapped_display) {
+            dst_display = overlapped_display;
+        } else {
+            dst_display = closest_display;
+        }
+    }
+
+    return dst_display;
+}
+
 static void CommitLibdecorFrame(SDL_Window *window)
 {
 #ifdef HAVE_LIBDECOR_H
@@ -520,13 +584,30 @@ static struct wl_callback_listener maximized_restored_deadline_listener = {
     maximized_restored_deadline_handler
 };
 
+static void zone_deadline_handler(void *data, struct wl_callback *callback, uint32_t callback_data)
+{
+    // Get the window from the ID as it may have been destroyed
+    SDL_WindowID windowID = (SDL_WindowID)((uintptr_t)data);
+    SDL_Window *window = SDL_GetWindowFromID(windowID);
+
+    if (window && window->internal) {
+        window->internal->zone_deadline_count--;
+    }
+
+    wl_callback_destroy(callback);
+}
+
+static struct wl_callback_listener zone_deadline_listener = {
+    zone_deadline_handler
+};
+
 static void FlushPendingEvents(SDL_Window *window)
 {
     // Serialize and restore the pending flags, as they may be overwritten while flushing.
     const bool last_position_pending = window->last_position_pending;
     const bool last_size_pending = window->last_size_pending;
 
-    while (window->internal->fullscreen_deadline_count || window->internal->maximized_restored_deadline_count) {
+    while (window->internal->fullscreen_deadline_count || window->internal->maximized_restored_deadline_count || window->internal->zone_deadline_count) {
         WAYLAND_wl_display_roundtrip(window->internal->waylandData->display);
     }
 
@@ -578,8 +659,14 @@ static void Wayland_move_window(SDL_Window *window)
                 if (wind->last_displayID != displays[i]) {
                     wind->last_displayID = displays[i];
                     if (wind->shell_surface_type != WAYLAND_SHELL_SURFACE_TYPE_XDG_POPUP) {
-                        SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_MOVED, display->x, display->y);
+                        if (!wind->ext_zone_item_v1) {
+                            SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_MOVED, display->x, display->y);
+                        }
                         SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_DISPLAY_CHANGED, wind->last_displayID, 0);
+                    }
+
+                    if (display->ext_zone_v1 && wind->ext_zone_item_v1 && !wind->current_ext_zone_v1) {
+                        Wayland_AddWindowToZone(wind, display);
                     }
                 }
                 break;
@@ -1571,6 +1658,10 @@ void Wayland_RemoveOutputFromWindow(SDL_WindowData *window, SDL_DisplayData *dis
         }
     }
 
+    if (window->current_ext_zone_v1 == display_data->ext_zone_v1) {
+        window->current_ext_zone_v1 = NULL;
+    }
+
     if (window->num_outputs == 0) {
         SDL_free(window->outputs);
         window->outputs = NULL;
@@ -1831,6 +1922,52 @@ static struct zxdg_exported_v2_listener exported_v2_listener = {
     exported_handle_handler
 };
 
+static void ext_zone_item_v1_frame_extents_handler(void *data, struct ext_zone_item_v1 *ext_zone_item_v1,
+                                                   int32_t top, int32_t bottom, int32_t left, int32_t right)
+{
+    SDL_WindowData *wind = (SDL_WindowData *)data;
+    const bool adjust_offset = wind->borders.top != top || wind->borders.left != left;
+
+    wind->borders.top = top;
+    wind->borders.bottom = bottom;
+    wind->borders.left = left;
+    wind->borders.right = right;
+
+    if (adjust_offset && wind->has_initial_position && wind->shell_surface_status == WAYLAND_SHELL_SURFACE_STATUS_WAITING_FOR_FRAME) {
+        SDL_DisplayData *disp = (SDL_DisplayData *)ext_zone_v1_get_user_data(wind->current_ext_zone_v1);
+        Wayland_SetWindowPositionInZone(wind, disp, wind->requested.x, wind->requested.y);
+    }
+}
+
+static void ext_zone_item_v1_position_handler(void *data,
+                                              struct ext_zone_item_v1 *item,
+                                              int32_t x,
+                                              int32_t y)
+{
+    if (!item) {
+        return;
+    }
+
+    SDL_WindowData *wind = (SDL_WindowData *)data;
+    SDL_DisplayData *disp = (SDL_DisplayData *)ext_zone_v1_get_user_data(wind->current_ext_zone_v1);
+
+    const int w_x = disp->x + x + wind->borders.left;
+    const int w_y = disp->y + y + wind->borders.top;
+
+    SDL_SendWindowEvent(wind->sdlwindow, SDL_EVENT_WINDOW_MOVED, w_x, w_y);
+}
+
+void ext_zone_item_v1_position_failed_handler(void *data, struct ext_zone_item_v1 *item)
+{
+    // NOP
+}
+
+static struct ext_zone_item_v1_listener zone_item_listener = {
+    ext_zone_item_v1_frame_extents_handler,
+    ext_zone_item_v1_position_handler,
+    ext_zone_item_v1_position_failed_handler
+};
+
 void Wayland_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
 {
     SDL_VideoData *c = _this->internal;
@@ -2002,6 +2139,26 @@ void Wayland_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
                                                       data->xdg_toplevel_icon_v1);
             }
 
+            if (c->ext_zone_manager_v1) {
+                data->ext_zone_item_v1 = ext_zone_manager_v1_get_zone_item(c->ext_zone_manager_v1, data->shell_surface.xdg.toplevel.xdg_toplevel);
+                ext_zone_item_v1_set_user_data(data->ext_zone_item_v1, data);
+                ext_zone_item_v1_add_listener(data->ext_zone_item_v1, &zone_item_listener, data);
+
+                /* If we have initial window coordinates, set the zone from them, otherwise,
+                 * the window will be added to a zone when it is mapped by the compositor.
+                 */
+                if (!window->undefined_x && !window->undefined_y) {
+                    data->set_zone_position_on_enter = true;
+                    data->has_initial_position = true;
+
+                    data->requested.x = window->pending.x = window->x;
+                    data->requested.y = window->pending.y = window->y;
+
+                    SDL_DisplayData *disp = Wayland_GetDisplayForWindowZone(data);
+                    Wayland_AddWindowToZone(data, disp);
+                }
+            }
+
             SDL_SetPointerProperty(props, SDL_PROP_WINDOW_WAYLAND_XDG_TOPLEVEL_POINTER, data->shell_surface.xdg.toplevel.xdg_toplevel);
         }
     }
@@ -2155,6 +2312,12 @@ void Wayland_HideWindow(SDL_VideoDevice *_this, SDL_Window *window)
     }
 
     wind->shell_surface_status = WAYLAND_SHELL_SURFACE_STATUS_HIDDEN;
+
+    if (wind->ext_zone_item_v1) {
+        ext_zone_item_v1_destroy(wind->ext_zone_item_v1);
+        wind->ext_zone_item_v1 = NULL;
+        wind->current_ext_zone_v1 = NULL;
+    }
 
     if (wind->server_decoration) {
         zxdg_toplevel_decoration_v1_destroy(wind->server_decoration);
@@ -2822,8 +2985,35 @@ void Wayland_SetWindowMaximumSize(SDL_VideoDevice *_this, SDL_Window *window)
     SetMinMaxDimensions(window);
 }
 
+void Wayland_AddWindowToZone(SDL_WindowData *wind, SDL_DisplayData *zone_display)
+{
+    ext_zone_v1_add_item(zone_display->ext_zone_v1, wind->ext_zone_item_v1);
+
+    ++wind->zone_deadline_count;
+    struct wl_callback *cb = wl_display_sync(zone_display->videodata->display);
+    wl_callback_add_listener(cb, &zone_deadline_listener, (void *)((uintptr_t)wind->sdlwindow->id));
+}
+
+void Wayland_SetWindowPositionInZone(SDL_WindowData *wind, SDL_DisplayData *disp, int x, int y)
+{
+    SDL_Window *window = wind->sdlwindow;
+
+    // Part of the window must be within zone bounds (a size of 0 means that a zone is infinite in that direction).
+    x = x - wind->borders.left - disp->x;
+    y = y - wind->borders.top - disp->y;
+    x = SDL_clamp(x, -(window->w + wind->borders.left - 1), disp->zone_width ? disp->zone_width - wind->borders.left - 1 : x);
+    y = SDL_clamp(y, -(window->h + wind->borders.top - 1), disp->zone_height ? disp->zone_height - wind->borders.top - 1 : y);
+
+    ext_zone_item_v1_set_position(wind->ext_zone_item_v1, x, y);
+
+    ++wind->zone_deadline_count;
+    struct wl_callback *cb = wl_display_sync(disp->videodata->display);
+    wl_callback_add_listener(cb, &zone_deadline_listener, (void *)((uintptr_t)window->id));
+}
+
 bool Wayland_SetWindowPosition(SDL_VideoDevice *_this, SDL_Window *window)
 {
+    SDL_VideoData *vid = _this->internal;
     SDL_WindowData *wind = window->internal;
 
     // Only popup windows can be positioned relative to the parent.
@@ -2836,9 +3026,8 @@ bool Wayland_SetWindowPosition(SDL_VideoDevice *_this, SDL_Window *window)
         RepositionPopup(window, false);
         return true;
     } else if (wind->shell_surface_type == WAYLAND_SHELL_SURFACE_TYPE_LIBDECOR || wind->shell_surface_type == WAYLAND_SHELL_SURFACE_TYPE_XDG_TOPLEVEL) {
-        /* Catch up on any pending state before attempting to change the fullscreen window
-         * display via a set fullscreen call to make sure the window doesn't have a pending
-         * leave fullscreen event that it might override.
+        /* Catch up on any pending state before attempting to change the position
+         * doesn't have pending state that doing so might override.
          */
         FlushPendingEvents(window);
 
@@ -2850,9 +3039,34 @@ bool Wayland_SetWindowPosition(SDL_VideoDevice *_this, SDL_Window *window)
 
                 return true;
             }
+        } else if (vid->ext_zone_manager_v1) {
+            if (wind->floating) {
+                SDL_DisplayData *dst_display = Wayland_GetDisplayForWindowZone(wind);
+                if (dst_display) {
+                    struct ext_zone_v1 *dst_zone = dst_display->ext_zone_v1;
+
+                    if (wind->current_ext_zone_v1 != dst_zone) {
+                        wind->entering_new_zone = true;
+                        wind->set_zone_position_on_enter = true;
+                        wind->requested.x = window->pending.x;
+                        wind->requested.y = window->pending.y;
+
+                        Wayland_AddWindowToZone(wind, dst_display);
+                    } else {
+                        Wayland_SetWindowPositionInZone(wind, dst_display, window->pending.x, window->pending.y);
+                    }
+
+                    return true;
+                }
+
+                return SDL_SetError("cannot position window: no zone available");
+            }
+
+            // Can't move the window.
+            return true;
         }
     }
-    return SDL_SetError("wayland cannot position non-popup windows");
+    return SDL_SetError("cannot position non-popup windows; compositor lacks support for the ext-zone-manager-v1 protocol");
 }
 
 void Wayland_SetWindowSize(SDL_VideoDevice *_this, SDL_Window *window)
@@ -2909,6 +3123,22 @@ float Wayland_GetWindowContentScale(SDL_VideoDevice *_this, SDL_Window *window)
     }
 
     return 1.0f;
+}
+
+bool Wayland_GetWindowBorderSize(SDL_VideoDevice *_this, SDL_Window *window, int *top, int *left, int *bottom, int *right)
+{
+    SDL_WindowData *wind = window->internal;
+
+    if (wind->ext_zone_item_v1) {
+        *top = wind->borders.top;
+        *bottom = wind->borders.bottom;
+        *left = wind->borders.left;
+        *right = wind->borders.right;
+
+        return true;
+    }
+
+    return SDL_SetError("window border sizes require the ext_zones_v1 protocol");
 }
 
 SDL_DisplayID Wayland_GetDisplayForWindow(SDL_VideoDevice *_this, SDL_Window *window)
@@ -3064,9 +3294,14 @@ bool Wayland_SyncWindow(SDL_VideoDevice *_this, SDL_Window *window)
 {
     SDL_WindowData *wind = window->internal;
 
+    // Zone positioning requires a commit to take effect.
+    if (wind->zone_deadline_count) {
+        wl_surface_commit(wind->surface);
+    }
+
     do {
         WAYLAND_wl_display_roundtrip(_this->internal->display);
-    } while (wind->fullscreen_deadline_count || wind->maximized_restored_deadline_count);
+    } while (wind->fullscreen_deadline_count || wind->maximized_restored_deadline_count || wind->zone_deadline_count);
 
     return true;
 }
@@ -3090,6 +3325,22 @@ bool Wayland_SetWindowFocusable(SDL_VideoDevice *_this, SDL_Window *window, bool
     }
 
     return SDL_SetError("wayland: focus can only be toggled on popup menu windows");
+}
+
+void Wayland_SetWindowAlwaysOnTop(SDL_VideoDevice *_this, SDL_Window *window, bool on_top)
+{
+    static Sint32 layer = 1;
+    SDL_WindowData *wind = window->internal;
+
+    if (wind->ext_zone_item_v1) {
+        const Sint32 item_layer = on_top ? layer : 0;
+        if (layer < SDL_MAX_SINT32) {
+            ++layer;
+        }
+        ext_zone_item_v1_set_layer(wind->ext_zone_item_v1, item_layer);
+    } else {
+        SDL_SetError("wayland: setting always on top requires that the ext_zones_v1 protocol is supported and enabled");
+    }
 }
 
 void Wayland_ShowWindowSystemMenu(SDL_Window *window, int x, int y)
