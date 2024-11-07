@@ -1242,7 +1242,8 @@ extern SDL_DECLSPEC SDL_Window * SDLCALL SDL_CreatePopupWindow(SDL_Window *paren
  *   and "menu" window types should be automatically constrained to be
  *   entirely within display bounds (default), false if no constraints on the
  *   position are desired.
- * - `SDL_PROP_WINDOW_CREATE_DOCKABLE`: true if the window can be docked
+ * - `SDL_PROP_WINDOW_CREATE_DOCKABLE`: true if the window can be docked; a dockable
+ *   window will generate drop events when dragged over another window
  * - `SDL_PROP_WINDOW_CREATE_EXTERNAL_GRAPHICS_CONTEXT_BOOLEAN`: true if the
  *   window will be used with an externally managed graphics context.
  * - `SDL_PROP_WINDOW_CREATE_FOCUSABLE_BOOLEAN`: true if the window should

@@ -99,6 +99,7 @@ struct SDL_Window
     SDL_Surface *surface;
     bool surface_valid;
 
+    bool dockable;
     bool is_hiding;
     bool restore_on_show; // Child was hidden recursively by the parent, restore when shown.
     bool last_position_pending; // This should NOT be cleared by the backend, as it is used for fullscreen positioning.
