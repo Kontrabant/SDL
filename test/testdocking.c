@@ -11,6 +11,7 @@
 */
 /* Sample program:  Create and test dockable windows */
 
+#define SDL_MAIN_USE_CALLBACKS
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL_test.h>
@@ -30,18 +31,16 @@ static SDL_HitTestResult DragHitCallback(SDL_Window *win, const SDL_Point *area,
     return SDL_HITTEST_DRAGGABLE;
 }
 
-int main(int argc, char *argv[])
+static SDL_Window *mainWindow = NULL, *dragWindow = NULL;
+static SDL_Renderer *mainRenderer = NULL, *dragRenderer = NULL;
+static SDLTest_CommonState *state = NULL;
+static SDL_FRect highlight;
+static int i;
+static int exit_code = 0;
+static bool render_highlight = false;
+
+SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv)
 {
-    SDL_Window *mainWindow = NULL, *dragWindow = NULL;
-    SDL_Renderer *mainRenderer = NULL, *dragRenderer = NULL;
-    SDLTest_CommonState *state = NULL;
-    SDL_FRect highlight;
-    int i;
-    int exit_code = 0;
-    bool render_highlight = false;
-
-    SDL_zero(highlight);
-
     /* Initialize test framework */
     state = SDLTest_CommonCreateState(argv, 0);
     if (state == NULL) {
@@ -65,92 +64,102 @@ int main(int argc, char *argv[])
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_Log("SDL_Init failed (%s)", SDL_GetError());
-        return 1;
+        return SDL_APP_FAILURE;
     }
 
     if (!SDL_CreateWindowAndRenderer("Main Window", 640, 480, 0, &mainWindow, &mainRenderer)) {
         SDL_Log("Failed to create main window and/or renderer: %s\n", SDL_GetError());
         exit_code = 1;
-        goto sdl_quit;
     }
 
-    while (1) {
-        int quit = 0;
-        SDL_Event e;
-        while (SDL_PollEvent(&e)) {
-            switch (e.type) {
-            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-                if (e.window.windowID == SDL_GetWindowID(mainWindow)) {
-                    quit = 1;
-                }
-                break;
+    return SDL_APP_CONTINUE;
+}
 
-            case SDL_EVENT_DROP_BEGIN:
-                break;
-
-            case SDL_EVENT_DROP_POSITION:
-                if (e.drop.dropWindowID) {
-                    highlight.x = e.drop.x < 320.f ? 0.f : 320.f;
-                    highlight.y = e.drop.y < 240.f ? 0.f : 240.f;
-                    highlight.w = 320.f;
-                    highlight.h = 240.f;
-                    render_highlight = true;
-                }
-                break;
-
-            case SDL_EVENT_DROP_WINDOW:
-                SDL_DestroyWindow(dragWindow);
-                dragWindow = NULL;
-                dragRenderer = NULL;
-                break;
-
-            case SDL_EVENT_DROP_COMPLETE:
-                render_highlight = false;
-                break;
-
-            case SDL_EVENT_MOUSE_MOTION:
-                if (!dragWindow && SDL_GetMouseState(NULL, NULL) & SDL_BUTTON_LEFT) {
-                    SDL_PropertiesID props = SDL_CreateProperties();
-                    SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_BORDERLESS_BOOLEAN, true);
-                    SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_DOCKABLE_BOOLEAN, true);
-                    SDL_SetPointerProperty(props, SDL_PROP_WINDOW_CREATE_PARENT_POINTER, mainWindow);
-                    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, 320);
-                    SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, 240);
-                    dragWindow = SDL_CreateWindowWithProperties(props);
-                    SDL_DestroyProperties(props);
-                    dragRenderer = SDL_CreateRenderer(dragWindow, NULL);
-                    SDL_SetWindowHitTest(dragWindow, DragHitCallback, NULL);
-                }
-                break;
-            default:
-                break;
-            }
+SDL_AppResult SDL_AppIterate(void *appstate)
+{
+    /* Main window is gray */
+    if (mainRenderer) {
+        SDL_SetRenderDrawColor(mainRenderer, 128, 128, 128, SDL_ALPHA_OPAQUE);
+        SDL_RenderClear(mainRenderer);
+        if (render_highlight) {
+            SDL_SetRenderDrawColor(mainRenderer, 255, 255, 0, 128);
+            SDL_RenderFillRect(mainRenderer, &highlight);
         }
-
-        if (quit) {
-            break;
+        if (!dragRenderer) {
+            DrawDockable(mainRenderer, highlight.x, highlight.y);
         }
-
-        /* Main window is gray */
-        if (mainRenderer) {
-            SDL_SetRenderDrawColor(mainRenderer, 128, 128, 128, SDL_ALPHA_OPAQUE);
-            SDL_RenderClear(mainRenderer);
-            if (render_highlight) {
-                SDL_SetRenderDrawColor(mainRenderer, 255, 255, 0, 128);
-                SDL_RenderFillRect(mainRenderer, &highlight);
-            }
-            if (!dragRenderer) {
-                DrawDockable(mainRenderer, highlight.x, highlight.y);
-            }
-            SDL_RenderPresent(mainRenderer);
-        }
-        if (dragRenderer) {
-            DrawDockable(dragRenderer, 0.f, 0.f);
-            SDL_RenderPresent(dragRenderer);
-        }
+        SDL_RenderPresent(mainRenderer);
+    }
+    if (dragRenderer) {
+        DrawDockable(dragRenderer, 0.f, 0.f);
+        SDL_RenderPresent(dragRenderer);
     }
 
-sdl_quit:
+    return SDL_APP_CONTINUE;
+}
+
+SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
+{
+    switch (event->type) {
+    case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+        if (event->window.windowID == SDL_GetWindowID(mainWindow)) {
+            return SDL_APP_SUCCESS;
+        }
+        break;
+
+    case SDL_EVENT_DROP_BEGIN:
+        break;
+
+    case SDL_EVENT_DROP_POSITION:
+        if (event->drop.dropWindowID) {
+            highlight.x = event->drop.x < 320.f ? 0.f : 320.f;
+            highlight.y = event->drop.y < 240.f ? 0.f : 240.f;
+            highlight.w = 320.f;
+            highlight.h = 240.f;
+            render_highlight = true;
+        }
+        break;
+
+    case SDL_EVENT_DROP_WINDOW:
+        SDL_DestroyWindow(dragWindow);
+        dragWindow = NULL;
+        dragRenderer = NULL;
+        break;
+
+    case SDL_EVENT_DROP_COMPLETE:
+        render_highlight = false;
+        break;
+
+    case SDL_EVENT_MOUSE_MOTION:
+    {
+        float lx, ly;
+        if (!dragWindow && SDL_GetMouseState(&lx, &ly) & SDL_BUTTON_LEFT) {
+            int wx, wy;
+            SDL_GetWindowPosition(mainWindow, &wx, &wy);
+            SDL_PropertiesID props = SDL_CreateProperties();
+            SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_BORDERLESS_BOOLEAN, true);
+            SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_DOCKABLE_BOOLEAN, true);
+            SDL_SetPointerProperty(props, SDL_PROP_WINDOW_CREATE_PARENT_POINTER, mainWindow);
+            SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, 320);
+            SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, 240);
+            SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, wx);
+            SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, wy);
+            dragWindow = SDL_CreateWindowWithProperties(props);
+            SDL_DestroyProperties(props);
+            dragRenderer = SDL_CreateRenderer(dragWindow, NULL);
+            SDL_SetWindowHitTest(dragWindow, DragHitCallback, NULL);
+        }
+    }
+        break;
+    default:
+        break;
+    }
+
+    return SDL_APP_CONTINUE;
+}
+
+void SDL_AppQuit(void *appstate, SDL_AppResult result)
+{
     if (mainWindow) {
         /* The child window and renderer will be cleaned up automatically. */
         SDL_DestroyWindow(mainWindow);
@@ -158,5 +167,4 @@ sdl_quit:
 
     SDL_Quit();
     SDLTest_CommonDestroyState(state);
-    return exit_code;
 }

@@ -487,6 +487,8 @@ struct SDL_VideoData
 
 #endif // !SDL_DISABLE_WINDOWS_IME
 
+    SDL_Window *implicit_drag;
+
     BYTE pre_hook_key_state[256];
     UINT _SDL_WAKEUP;
 };

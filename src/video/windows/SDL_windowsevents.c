@@ -1036,6 +1036,52 @@ static bool SkipAltGrLeftControl(WPARAM wParam, LPARAM lParam)
     return false;
 }
 
+typedef struct FindTopmostWindowData
+{
+    SDL_VideoData *video_data;
+    const SDL_Window *dragging;
+    SDL_Window *topmost;
+    POINT cursor;
+} FindTopmostWindowData;
+
+static BOOL FindTopmostSDLWindowProc(HWND hwnd, LPARAM lParam)
+{
+    FindTopmostWindowData *data = (FindTopmostWindowData *)lParam;
+    SDL_WindowData *win_data = WIN_GetWindowDataFromHWND(hwnd);
+    if (win_data && win_data->window != data->dragging) {
+        RECT r;
+        SDL_zero(r);
+        if (GetWindowRect(hwnd, &r)) {
+            if (PtInRect(&r, data->cursor)) {
+                data->topmost = win_data->window;
+            }
+        }
+    }
+    return TRUE;
+}
+
+static void SendWindowDropData(SDL_WindowData *data)
+{
+    FindTopmostWindowData topmost_data;
+    SDL_zero(topmost_data);
+    topmost_data.dragging = data->window;
+    data->dragging = true;
+    if (GetCursorPos(&topmost_data.cursor)) {
+        EnumWindows(FindTopmostSDLWindowProc, (LPARAM)&topmost_data);
+        if (topmost_data.topmost) {
+            RECT r;
+            SDL_zero(r);
+            GetWindowRect(topmost_data.topmost->internal->hwnd, &r);
+            SDL_SendDropPosition(topmost_data.topmost, topmost_data.cursor.x - r.left, topmost_data.cursor.y - r.top, data->window);
+        } else {
+            if (data->dock_target) {
+                SDL_SendDropComplete(data->dock_target);
+            }
+        }
+        data->dock_target = topmost_data.topmost;
+    }
+}
+
 LRESULT CALLBACK WIN_WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     SDL_WindowData *data;
@@ -1149,12 +1195,27 @@ LRESULT CALLBACK WIN_WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
                 SDL_SendMouseMotion(WIN_GetEventTimestamp(), data->window, SDL_GLOBAL_MOUSE_ID, false, (float)GET_X_LPARAM(lParam), (float)GET_Y_LPARAM(lParam));
             }
         }
+
+        if (data->videodata->implicit_drag) {
+            SDL_WindowData *drag = data->videodata->implicit_drag->internal;
+            POINT pt;
+            SDL_zero(pt);
+            GetCursorPos(&pt);
+            SetWindowPos(drag->hwnd, 0, pt.x + drag->drag_offset.x, pt.y + drag->drag_offset.y, 0, 0,
+                         SWP_NOSIZE | SWP_NOREDRAW | SWP_NOZORDER | SWP_NOCOPYBITS);
+            SendWindowDropData(data->videodata->implicit_drag->internal);
+        }
     } break;
 
     case WM_LBUTTONUP:
     case WM_RBUTTONUP:
     case WM_MBUTTONUP:
     case WM_XBUTTONUP:
+        if (data->videodata->implicit_drag) {
+            SDL_SendDropWindow(data->dock_target, data->videodata->implicit_drag);
+            data->videodata->implicit_drag = NULL;
+        }
+        SDL_FALLTHROUGH;
     case WM_LBUTTONDOWN:
     case WM_LBUTTONDBLCLK:
     case WM_RBUTTONDOWN:
@@ -1440,6 +1501,15 @@ LRESULT CALLBACK WIN_WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         break;
 #endif // WM_GETMINMAXINFO
 
+    case WM_MOVING:
+    {
+        if (data->window->dockable) {
+            SendWindowDropData(data);
+        }
+        returnCode = 0;
+    }
+        break;
+
     case WM_WINDOWPOSCHANGING:
     {
         if (data->expected_resize) {
@@ -1568,6 +1638,12 @@ LRESULT CALLBACK WIN_WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     } break;
 
     case WM_EXITSIZEMOVE:
+    {
+        if (data->dock_target) {
+            SDL_SendDropWindow(data->dock_target, data->window);
+            data->dock_target = NULL;
+        }
+    } SDL_FALLTHROUGH;
     case WM_EXITMENULOOP:
     {
         KillTimer(hwnd, (UINT_PTR)SDL_IterateMainCallbacks);

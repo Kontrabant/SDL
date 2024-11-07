@@ -1687,21 +1687,6 @@ SDL_DisplayID SDL_GetDisplayForWindow(SDL_Window *window)
     return displayID;
 }
 
-static void SDL_HandleDockableWindow(SDL_Window *window)
-{
-    for (SDL_Window *w = _this->windows; w; w = w->next) {
-        if (w != window) {
-            float x, y;
-            SDL_GetGlobalMouseState(&x, &y);
-            SDL_Log("Global mouse: %f, %f", x, y);
-
-            if (x >= w->x && y >= w->y && x <= w->x + w->w && y <= w->y + w->h) {
-                SDL_SendDropPosition(w, x - w->x, y - w->y, window);
-            }
-        }
-    }
-}
-
 static void SDL_CheckWindowDisplayChanged(SDL_Window *window)
 {
     if (SDL_SendsDisplayChanges(_this)) {
@@ -2430,6 +2415,7 @@ SDL_Window *SDL_CreateWindowWithProperties(SDL_PropertiesID props)
     window->is_destroying = false;
     window->last_displayID = SDL_GetDisplayForWindow(window);
     window->external_graphics_context = external_graphics_context;
+    window->dockable = SDL_GetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_DOCKABLE_BOOLEAN, false);
 
     if (_this->windows) {
         _this->windows->prev = window;

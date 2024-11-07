@@ -88,6 +88,10 @@ struct SDL_WindowData
     COLORREF dwma_border_color;
     bool mouse_tracked;
     bool destroy_parent_with_window;
+    bool send_drag_events;
+    bool dragging;
+    POINT drag_offset;
+    SDL_Window *dock_target;
     SDL_DisplayID last_displayID;
     WCHAR *ICMFileName;
     SDL_Window *keyboard_focus;

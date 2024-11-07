@@ -1037,7 +1037,8 @@ extern SDL_DECLSPEC SDL_Window * SDLCALL SDL_CreatePopupWindow(SDL_Window *paren
  *   be always on top
  * - `SDL_PROP_WINDOW_CREATE_BORDERLESS_BOOLEAN`: true if the window has no
  *   window decoration
- * - `SDL_PROP_WINDOW_CREATE_DOCKABLE`: true if the window can be docked
+ * - `SDL_PROP_WINDOW_CREATE_DOCKABLE`: true if the window can be docked; a dockable
+ *   window will generate drop events when dragged over another window
  * - `SDL_PROP_WINDOW_CREATE_EXTERNAL_GRAPHICS_CONTEXT_BOOLEAN`: true if the
  *   window will be used with an externally managed graphics context.
  * - `SDL_PROP_WINDOW_CREATE_FOCUSABLE_BOOLEAN`: true if the window should
