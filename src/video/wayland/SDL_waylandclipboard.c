@@ -40,7 +40,7 @@ bool Wayland_SetClipboardData(SDL_VideoDevice *_this)
 
         if (_this->clipboard_callback && _this->clipboard_mime_types) {
             SDL_WaylandDataSource *source = Wayland_data_source_create(_this);
-            Wayland_data_source_set_callback(source, _this->clipboard_callback, _this->clipboard_userdata, _this->clipboard_sequence);
+            Wayland_data_source_set_callback(source, _this->clipboard_callback, NULL, _this->clipboard_userdata, _this->clipboard_sequence);
 
             result = Wayland_data_device_set_selection(data_device, source, (const char **)_this->clipboard_mime_types, _this->num_clipboard_mime_types);
             if (!result) {

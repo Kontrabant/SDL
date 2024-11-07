@@ -180,6 +180,8 @@ extern void Wayland_input_quit_tablet_support(struct SDL_WaylandInput *input);
 extern void Wayland_RegisterTimestampListeners(struct SDL_WaylandInput *input);
 extern void Wayland_CreateCursorShapeDevice(struct SDL_WaylandInput *input);
 
+extern bool BeginWindowDrag(SDL_WindowData *window_data, uint32_t serial);
+
 /* The implicit grab serial needs to be updated on:
  * - Keyboard key down/up
  * - Mouse button down

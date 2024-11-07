@@ -218,4 +218,6 @@ extern bool Wayland_SyncWindow(SDL_VideoDevice *_this, SDL_Window *window);
 
 extern void Wayland_RemoveOutputFromWindow(SDL_WindowData *window, SDL_DisplayData *display_data);
 
+extern struct xdg_toplevel *GetToplevelForWindow(SDL_WindowData *wind);
+
 #endif // SDL_waylandwindow_h_

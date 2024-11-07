@@ -250,14 +250,16 @@ ssize_t Wayland_primary_selection_source_send(SDL_WaylandPrimarySelectionSource 
 }
 
 void Wayland_data_source_set_callback(SDL_WaylandDataSource *source,
-                                      SDL_ClipboardDataCallback callback,
+                                      SDL_ClipboardDataCallback data_callback,
+                                      Wayland_UserdataCleanupCallback cleanup_callback,
                                       void *userdata,
                                       Uint32 sequence)
 {
     if (source) {
-        source->callback = callback;
+        source->callback = data_callback;
         source->userdata.sequence = sequence;
         source->userdata.data = userdata;
+        source->cleanup_callback = cleanup_callback;
     }
 }
 
@@ -329,6 +331,8 @@ void Wayland_data_source_destroy(SDL_WaylandDataSource *source)
         wl_data_source_destroy(source->source);
         if (source->userdata.sequence) {
             SDL_CancelClipboardData(source->userdata.sequence);
+        } else if (source->cleanup_callback) {
+            source->cleanup_callback(&source->userdata);
         } else {
             SDL_free(source->userdata.data);
         }

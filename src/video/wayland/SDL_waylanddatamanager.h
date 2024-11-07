@@ -46,6 +46,8 @@ typedef struct SDL_WaylandUserdata
     void *data;
 } SDL_WaylandUserdata;
 
+typedef void (*Wayland_UserdataCleanupCallback)(SDL_WaylandUserdata *userdata);
+
 typedef struct
 {
     struct wl_data_source *source;
@@ -53,6 +55,7 @@ typedef struct
     SDL_WindowData *window;
     SDL_ClipboardDataCallback callback;
     SDL_WaylandUserdata userdata;
+    Wayland_UserdataCleanupCallback cleanup_callback;
 } SDL_WaylandDataSource;
 
 typedef struct
@@ -113,9 +116,10 @@ extern ssize_t Wayland_data_source_send(SDL_WaylandDataSource *source,
 extern ssize_t Wayland_primary_selection_source_send(SDL_WaylandPrimarySelectionSource *source,
                                                      const char *mime_type, int fd);
 extern void Wayland_data_source_set_callback(SDL_WaylandDataSource *source,
-                                            SDL_ClipboardDataCallback callback,
-                                            void *userdata,
-                                            Uint32 sequence);
+                                             SDL_ClipboardDataCallback data_callback,
+                                             Wayland_UserdataCleanupCallback cleanup_callback,
+                                             void *userdata,
+                                             Uint32 sequence);
 extern void Wayland_primary_selection_source_set_callback(SDL_WaylandPrimarySelectionSource *source,
                                                           SDL_ClipboardDataCallback callback,
                                                           void *userdata);

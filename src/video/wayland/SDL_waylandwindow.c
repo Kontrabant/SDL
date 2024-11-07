@@ -1565,7 +1565,7 @@ bool Wayland_SetWindowHitTest(SDL_Window *window, bool enabled)
     return true; // just succeed, the real work is done elsewhere.
 }
 
-static struct xdg_toplevel *GetToplevelForWindow(SDL_WindowData *wind)
+struct xdg_toplevel *GetToplevelForWindow(SDL_WindowData *wind)
 {
     if (wind) {
         /* Libdecor crashes on attempts to unset the parent by passing null, which is allowed by the
@@ -1831,6 +1831,10 @@ void Wayland_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
                 xdg_toplevel_icon_manager_v1_set_icon(_this->internal->xdg_toplevel_icon_manager_v1,
                                                       data->shell_surface.xdg.roleobj.toplevel,
                                                       data->xdg_toplevel_icon_v1);
+            }
+
+            if (window->dockable) {
+                BeginWindowDrag(data, c->input->last_implicit_grab_serial);
             }
 
             SDL_SetPointerProperty(props, SDL_PROP_WINDOW_WAYLAND_XDG_TOPLEVEL_POINTER, data->shell_surface.xdg.roleobj.toplevel);

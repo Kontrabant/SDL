@@ -612,7 +612,7 @@ static void pointer_handle_leave(void *data, struct wl_pointer *pointer,
     }
 }
 
-static const void *DragWindowPointer(void *userdata, const char *mime_type, size_t *size)
+static const void *DragWindowCallback(void *userdata, const char *mime_type, size_t *size)
 {
     SDL_WindowData *window_data = userdata;
 
@@ -624,19 +624,32 @@ static const void *DragWindowPointer(void *userdata, const char *mime_type, size
     return NULL;
 }
 
-static bool BeginWindowDrag(SDL_WindowData *window_data, uint32_t serial)
+static void DragCleanupCallback(SDL_WaylandUserdata *userdata)
+{
+    SDL_WindowData *window_data = userdata->data;
+
+    if (window_data->toplevel_drag_v1) {
+        xdg_toplevel_drag_v1_destroy(window_data->toplevel_drag_v1);
+    }
+}
+
+bool BeginWindowDrag(SDL_WindowData *window_data, uint32_t serial)
 {
     SDL_VideoData *vid = window_data->waylandData;
     struct SDL_WaylandInput *input = vid->input;
+    struct xdg_toplevel *toplevel = GetToplevelForWindow(window_data);
+    struct wl_surface *origin = input->pointer_focus ? input->pointer_focus->surface : NULL;
 
-    if (vid->xdg_toplevel_drag_manager_v1) {
-        // FIXME: This is probably leaking.
+    if (vid->xdg_toplevel_drag_manager_v1 && toplevel) {
+        const int offset_x = (wl_fixed_to_int(input->sx_w) + input->pointer_focus->sdlwindow->x) - window_data->sdlwindow->x;
+        const int offset_y = (wl_fixed_to_int(input->sy_w) + input->pointer_focus->sdlwindow->y) - window_data->sdlwindow->y;
+
         SDL_WaylandDataSource *drag_source = Wayland_data_source_create(SDL_GetVideoDevice());
-        Wayland_data_source_set_callback(drag_source, DragWindowPointer, window_data, 0);
+        Wayland_data_source_set_callback(drag_source, DragWindowCallback, DragCleanupCallback, window_data, 0);
         wl_data_source_offer(drag_source->source, DOCKABLE_WINDOW_MIME);
         window_data->toplevel_drag_v1 = xdg_toplevel_drag_manager_v1_get_xdg_toplevel_drag(vid->xdg_toplevel_drag_manager_v1, drag_source->source);
-        xdg_toplevel_drag_v1_attach(window_data->toplevel_drag_v1, window_data->shell_surface.xdg.roleobj.toplevel, 10, 10);
-        wl_data_device_start_drag(input->data_device->data_device, drag_source->source, window_data->surface, NULL, serial);
+        xdg_toplevel_drag_v1_attach(window_data->toplevel_drag_v1, toplevel, offset_x, offset_y);
+        wl_data_device_start_drag(input->data_device->data_device, drag_source->source, origin, NULL, serial);
 
         return true;
     }
