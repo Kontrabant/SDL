@@ -132,8 +132,7 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
 
     case SDL_EVENT_MOUSE_MOTION:
     {
-        float lx, ly;
-        if (!dragWindow && SDL_GetMouseState(&lx, &ly) & SDL_BUTTON_LEFT) {
+        if (!dragWindow && SDL_GetMouseState(NULL, NULL) & SDL_BUTTON_LEFT) {
             int wx, wy;
             SDL_GetWindowPosition(mainWindow, &wx, &wy);
             SDL_PropertiesID props = SDL_CreateProperties();
@@ -142,8 +141,8 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
             SDL_SetPointerProperty(props, SDL_PROP_WINDOW_CREATE_PARENT_POINTER, mainWindow);
             SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, 320);
             SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, 240);
-            SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, wx);
-            SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, wy);
+            SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, wx + (int)highlight.x);
+            SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_Y_NUMBER, wy + (int)highlight.y);
             dragWindow = SDL_CreateWindowWithProperties(props);
             SDL_DestroyProperties(props);
             dragRenderer = SDL_CreateRenderer(dragWindow, NULL);
