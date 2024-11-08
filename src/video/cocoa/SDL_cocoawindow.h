@@ -144,6 +144,9 @@ typedef enum
 @property(nonatomic) SDL3Cocoa_WindowListener *listener;
 @property(nonatomic) NSModalSession modal_session;
 @property(nonatomic) SDL_CocoaVideoData *videodata;
+@property(nonatomic) SDL_Window *drop_target;
+@property(nonatomic) SDL_Window *implicit_drag;
+@property(nonatomic) NSPoint drag_offset;
 @property(nonatomic) bool send_floating_size;
 @property(nonatomic) bool send_floating_position;
 @property(nonatomic) bool border_toggled;
