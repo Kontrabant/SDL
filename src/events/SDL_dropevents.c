@@ -111,6 +111,7 @@ bool SDL_SendDropFile(SDL_Window *window, const char *source, const char *file)
 
 bool SDL_SendDropPosition(SDL_Window *window, float x, float y, SDL_Window *dragWindow)
 {
+    SDL_Log("Drop Pos: %f,%f", x, y);
     return SDL_SendDrop(window, SDL_EVENT_DROP_POSITION, NULL, NULL, dragWindow, x, y);
 }
 

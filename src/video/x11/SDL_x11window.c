@@ -1623,6 +1623,13 @@ void X11_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
         SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_RESIZED, data->last_xconfigure.width, data->last_xconfigure.height);
         SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_MOVED, x, y);
     }
+
+    if (window->dockable) {
+        SDL_Mouse *m = SDL_GetMouse();
+        data->videodata->implicit_drag = window;
+        data->drop_offset_x = window->x - m->x;
+        data->drop_offset_y = window->y - m->y;
+    }
 }
 
 void X11_HideWindow(SDL_VideoDevice *_this, SDL_Window *window)
