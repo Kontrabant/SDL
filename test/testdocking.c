@@ -72,6 +72,8 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv)
         exit_code = 1;
     }
 
+    highlight.x = 320;
+
     return SDL_APP_CONTINUE;
 }
 
@@ -112,6 +114,7 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
 
     case SDL_EVENT_DROP_POSITION:
         if (event->drop.dropWindowID) {
+            SDL_Log("Drop: %f,%f", event->drop.x, event->drop.y);
             highlight.x = event->drop.x < 320.f ? 0.f : 320.f;
             highlight.y = event->drop.y < 240.f ? 0.f : 240.f;
             highlight.w = 320.f;
@@ -138,7 +141,7 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
             SDL_PropertiesID props = SDL_CreateProperties();
             SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_BORDERLESS_BOOLEAN, true);
             SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_DOCKABLE_BOOLEAN, true);
-            SDL_SetPointerProperty(props, SDL_PROP_WINDOW_CREATE_PARENT_POINTER, mainWindow);
+            //SDL_SetPointerProperty(props, SDL_PROP_WINDOW_CREATE_PARENT_POINTER, mainWindow);
             SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, 320);
             SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, 240);
             SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X_NUMBER, wx + (int)highlight.x);

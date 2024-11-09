@@ -1459,6 +1459,13 @@ void X11_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
         SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_MOVED, x, y);
     }
 
+    if (window->dockable) {
+        SDL_Mouse *m = SDL_GetMouse();
+        data->videodata->implicit_drag = window;
+        data->drop_offset_x = window->x - m->x;
+        data->drop_offset_y = window->y - m->y;
+    }
+
     data->disable_size_position_events = false;
 }
 

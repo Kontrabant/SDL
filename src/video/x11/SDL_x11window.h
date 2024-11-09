@@ -85,6 +85,9 @@ struct SDL_WindowData
 #endif // SDL_VIDEO_DRIVER_X11_XFIXES
     SDL_Rect expected;
     SDL_DisplayMode requested_fullscreen_mode;
+    SDL_Window *drop_target;
+    int drop_offset_x;
+    int drop_offset_y;
 
     enum
     {

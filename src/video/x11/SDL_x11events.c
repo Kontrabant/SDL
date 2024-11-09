@@ -520,6 +520,33 @@ bool X11_TriggerHitTestAction(SDL_VideoDevice *_this, SDL_WindowData *data, cons
     return false;
 }
 
+void X11_HandleImplicitDrag(SDL_VideoDevice *_this, SDL_Point *point)
+{
+    if (_this->internal->implicit_drag) {
+        SDL_VideoData *videodata = _this->internal;
+        SDL_Window *window = videodata->implicit_drag;
+        Display *display = videodata->display;
+        XEvent evt;
+
+        // !!! FIXME: we need to regrab this if necessary when the drag is done.
+        X11_XUngrabPointer(display, 0L);
+        X11_XFlush(display);
+
+        evt.xclient.type = ClientMessage;
+        evt.xclient.window = window->internal->xwindow;
+        evt.xclient.message_type = videodata->atoms._NET_WM_MOVERESIZE;
+        evt.xclient.format = 32;
+        evt.xclient.data.l[0] = point->x;
+        evt.xclient.data.l[1] = point->y;
+        evt.xclient.data.l[2] = _NET_WM_MOVERESIZE_MOVE;
+        evt.xclient.data.l[3] = Button1;
+        evt.xclient.data.l[4] = 0;
+        X11_XSendEvent(display, DefaultRootWindow(display), False, SubstructureRedirectMask | SubstructureNotifyMask, &evt);
+
+        X11_XSync(display, 0);
+    }
+}
+
 static void X11_UpdateUserTime(SDL_WindowData *data, const unsigned long latest)
 {
     if (latest && (latest != data->user_time)) {
@@ -786,6 +813,35 @@ SDL_WindowData *X11_FindWindow(SDL_VideoDevice *_this, Window window)
     return NULL;
 }
 
+static void X11_WalkWindowTree(SDL_VideoDevice *_this, int x, int y, Display *dpy, Window root, Window ignore, SDL_Window **ret)
+{
+    unsigned int NumChildren;
+    Window Root, Parent;
+    Window *Children;
+    X11_XQueryTree(dpy, root, &Root, &Parent, &Children, &NumChildren);
+
+    for (unsigned int j = 0; j < NumChildren; ++j) {
+        if (Children[j] != ignore) {
+            SDL_WindowData *target = X11_FindWindow(_this, Children[j]);
+            if (target) {
+                SDL_Log("Found window: %s", SDL_GetWindowTitle(target->window));
+                if (x >= target->window->x && x < target->window->x + target->window->w && y >= target->window->y && y < target->window->y + target->window->h) {
+                    *ret = target->window;
+                }
+            }
+        }
+        X11_WalkWindowTree(_this, x, y, dpy, Children[j], ignore, ret);
+    }
+}
+
+static SDL_WindowData *X11_FindTopmostForPoint(SDL_VideoDevice *_this, int x, int y, SDL_WindowData *ignore)
+{
+    SDL_Window *ret = NULL;
+    X11_WalkWindowTree(_this, x, y, _this->internal->display, DefaultRootWindow(_this->internal->display), ignore->xwindow, &ret);
+
+    return ret ? ret->internal : NULL;
+}
+
 void X11_HandleKeyEvent(SDL_VideoDevice *_this, SDL_WindowData *windowdata, SDL_KeyboardID keyboardID, XEvent *xevent)
 {
     SDL_VideoData *videodata = (SDL_VideoData *)_this->internal;
@@ -946,6 +1002,16 @@ void X11_HandleButtonRelease(SDL_VideoDevice *_this, SDL_WindowData *windowdata,
         }
         SDL_SendMouseButton(0, window, mouseID, button, false);
     }
+
+    if (windowdata->drop_target) {
+        SDL_SendDropWindow(windowdata->drop_target, windowdata->window);
+        SDL_SendDropComplete(windowdata->drop_target);
+    } else if (_this->internal->implicit_drag && _this->internal->implicit_drag->internal->drop_target) {
+        SDL_SendDropWindow(_this->internal->implicit_drag->internal->drop_target, _this->internal->implicit_drag);
+        SDL_SendDropComplete(_this->internal->implicit_drag->internal->drop_target);
+    }
+    windowdata->drop_target = NULL;
+    _this->internal->implicit_drag = NULL;
 }
 
 void X11_GetBorderValues(SDL_WindowData *data)
@@ -1364,6 +1430,22 @@ static void X11_DispatchEvent(SDL_VideoDevice *_this, XEvent *xevent)
                     // Don't update hidden child windows, their relative position doesn't change
                     if (!(w->flags & SDL_WINDOW_HIDDEN)) {
                         X11_UpdateWindowPosition(w, true);
+                    }
+                }
+
+                /* Send drop events for moving, dockable windows.
+                 *
+                 * XWayland doesn't update global mouse coordinates while dragging a window, so the window position and local pointer
+                 * position need to be used to calculate the drop location.
+                 */
+                if (data->window->dockable) {
+                    SDL_WindowData *topmost = X11_FindTopmostForPoint(_this, (int)data->window->x, (int)data->window->y, data);
+                    if (topmost) {
+                        SDL_SendDropPosition(topmost->window, data->window->x - topmost->window->x, data->window->y - topmost->window->y, data->window);
+                        data->drop_target = topmost->window;
+                    } else if (data->drop_target) {
+                        SDL_SendDropComplete(data->drop_target);
+                        data->drop_target = NULL;
                     }
                 }
             }

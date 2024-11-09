@@ -473,6 +473,8 @@ void X11_HandleXinput2Event(SDL_VideoDevice *_this, XGenericEventCookie *cookie)
                 if (window) {
                     X11_ProcessHitTest(_this, window->internal, (float)xev->event_x, (float)xev->event_y, false);
                     SDL_SendMouseMotion(0, window, (SDL_MouseID)xev->sourceid, false, (float)xev->event_x, (float)xev->event_y);
+                    SDL_Point p = { (int)xev->event_x + window->x, (int)xev->event_y + window->y };
+                    X11_HandleImplicitDrag(_this, &p);
                 }
             }
         }
