@@ -133,7 +133,7 @@ struct SDL_VideoData
     Uint64 last_mode_change_deadline;
 
     bool global_mouse_changed;
-    SDL_Point global_mouse_position;
+    SDL_FPoint global_mouse_position;
     Uint32 global_mouse_buttons;
 
     SDL_XInput2DeviceInfo *mouse_device_info;

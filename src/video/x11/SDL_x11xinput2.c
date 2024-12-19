@@ -262,7 +262,19 @@ static SDL_XInput2DeviceInfo *xinput2_get_device_info(SDL_VideoData *videodata, 
             devinfo->minval[axis] = v->min;
             devinfo->maxval[axis] = v->max;
             if (++axis >= 2) {
-                break;
+                continue;
+            }
+        }
+        const XIButtonClassInfo *b = (const XIButtonClassInfo *)xidevinfo->classes[i];
+        if (b->type == XIButtonClass) {
+            for (int j = 0; j < b->num_buttons; j++) {
+                if (b->labels[j]) {
+                    char * name = X11_XGetAtomName(videodata->display, b->labels[j]);
+                    SDL_Log("Button \"%s\"", name);
+                    X11_XFree(name);
+                } else {
+                    SDL_Log("Button \"Unknown\"");
+                }
             }
         }
     }
@@ -823,6 +835,60 @@ void X11_Xinput2UpdateDevices(SDL_VideoDevice *_this, bool initial_check)
     X11_XIFreeDeviceInfo(info);
 
 #endif // SDL_VIDEO_DRIVER_X11_XINPUT2
+}
+
+void X11_Xinput2GetGlobalMouseState()
+{
+#ifdef SDL_VIDEO_DRIVER_X11_XINPUT2
+    SDL_VideoData *videodata = SDL_GetVideoDevice()->internal;
+
+    if (videodata->global_mouse_changed) {
+        SDL_DisplayID *displays = SDL_GetDisplays(NULL);
+        if (displays) {
+            for (int i = 0; displays[i]; ++i) {
+                SDL_DisplayData *data = SDL_GetDisplayDriverData(displays[i]);
+                if (data) {
+                    Window root, child;
+                    double rootx, rooty, winx, winy;
+                    XIButtonState button_state;
+                    XIModifierState modifiers;
+                    XIGroupState group;
+                    if (X11_XIQueryPointer(videodata->display, videodata->xinput_master_pointer_device, RootWindow(videodata->display, data->screen),
+                                           &root, &child, &rootx, &rooty, &winx, &winy,
+                                           &button_state, &modifiers, &group)) {
+                        XWindowAttributes root_attrs;
+                        SDL_MouseButtonFlags buttons = 0;
+
+                        xinput2_get_device_info(videodata, videodata->xinput_master_pointer_device);
+
+                        if (button_state.mask_len) {
+                            Uint64 m;
+                            SDL_memcpy(&m, button_state.mask, SDL_min(sizeof(button_state.mask), sizeof(Uint64)));
+                            SDL_Log("Mask: %lx", m);
+                            buttons |= button_state.mask[0] & SDL_BUTTON_LMASK;
+                            buttons |= button_state.mask[0] & SDL_BUTTON_MMASK;
+                            buttons |= button_state.mask[0] & SDL_BUTTON_RMASK;
+                            buttons |= button_state.mask[0] & SDL_BUTTON_X1MASK;
+                            buttons |= button_state.mask[0] & SDL_BUTTON_X2MASK;
+                        }
+
+                        /* SDL_DisplayData->x,y point to screen origin, and adding them to mouse coordinates relative to root window doesn't do the right thing
+                         * (observed on dual monitor setup with primary display being the rightmost one - mouse was offset to the right).
+                         *
+                         * Adding root position to root-relative coordinates seems to be a better way to get absolute position. */
+                        X11_XGetWindowAttributes(videodata->display, root, &root_attrs);
+                        videodata->global_mouse_position.x = (float)(root_attrs.x + rootx);
+                        videodata->global_mouse_position.y = (float)(root_attrs.y + rooty);
+                        videodata->global_mouse_buttons = buttons;
+                        videodata->global_mouse_changed = false;
+                        break;
+                    }
+                }
+            }
+            SDL_free(displays);
+        }
+    }
+#endif //SDL_VIDEO_DRIVER_X11_XINPUT2
 }
 
 #endif // SDL_VIDEO_DRIVER_X11

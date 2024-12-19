@@ -438,7 +438,9 @@ static SDL_MouseButtonFlags X11_GetGlobalMouseState(float *x, float *y)
 
     // !!! FIXME: should we XSync() here first?
 
-    if (!X11_Xinput2IsInitialized()) {
+    if (X11_Xinput2IsInitialized()) {
+        X11_Xinput2GetGlobalMouseState();
+    } else {
         videodata->global_mouse_changed = true;
     }
 
@@ -480,8 +482,8 @@ static SDL_MouseButtonFlags X11_GetGlobalMouseState(float *x, float *y)
 
     SDL_assert(!videodata->global_mouse_changed); // The pointer wasn't on any X11 screen?!
 
-    *x = (float)videodata->global_mouse_position.x;
-    *y = (float)videodata->global_mouse_position.y;
+    *x = videodata->global_mouse_position.x;
+    *y = videodata->global_mouse_position.y;
     return videodata->global_mouse_buttons;
 }
 
