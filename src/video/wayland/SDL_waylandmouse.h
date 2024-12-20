@@ -27,6 +27,7 @@
 extern void Wayland_InitMouse(void);
 extern void Wayland_FiniMouse(SDL_VideoData *data);
 extern void Wayland_SetHitTestCursor(SDL_HitTestResult rc);
+extern void Wayland_ApplySystemScale(void *internal, Uint64 timestamp, SDL_Window *window, SDL_MouseID mouseID, float *x, float *y);
 #if 0  // TODO RECONNECT: See waylandvideo.c for more information!
 extern void Wayland_RecreateCursors(void);
 #endif // 0

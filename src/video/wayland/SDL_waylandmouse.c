@@ -903,6 +903,11 @@ static SDL_MouseButtonFlags SDLCALL Wayland_GetGlobalMouseState(float *x, float 
     return result;
 }
 
+void Wayland_ApplySystemScale(void *internal, Uint64 timestamp, SDL_Window *window, SDL_MouseID mouseID, float *x, float *y)
+{
+    // Wayland sends both unaccelerated and accelerated relative motion data, so this is just a flag/passthrough function.
+}
+
 #if 0  // TODO RECONNECT: See waylandvideo.c for more information!
 static void Wayland_RecreateCursor(SDL_Cursor *cursor, SDL_VideoData *vdata)
 {
@@ -973,6 +978,7 @@ void Wayland_InitMouse(void)
     mouse->WarpMouseGlobal = Wayland_WarpMouseGlobal;
     mouse->SetRelativeMouseMode = Wayland_SetRelativeMouseMode;
     mouse->GetGlobalMouseState = Wayland_GetGlobalMouseState;
+    mouse->ApplySystemScale = Wayland_ApplySystemScale;
 
     SDL_HitTestResult r = SDL_HITTEST_NORMAL;
     while (r <= SDL_HITTEST_RESIZE_LEFT) {
