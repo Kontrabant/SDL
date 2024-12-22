@@ -1484,6 +1484,21 @@ static void keyboard_handle_keymap(void *data, struct wl_keyboard *keyboard,
     }
 }
 
+Uint32 Wayland_GetXkbKeysymFromKeycode(SDL_VideoDevice *_this, Uint32 keycode)
+{
+    SDL_VideoData *viddata = _this->internal;
+    struct SDL_WaylandInput *input = viddata->input;
+
+    if (input->xkb.state) {
+        const xkb_keysym_t *syms;
+        if (WAYLAND_xkb_state_key_get_syms(input->xkb.state, keycode + 8, &syms) > 0) {
+            return syms[0];
+        }
+    }
+
+    return XKB_KEY_NoSymbol;
+}
+
 /*
  * Virtual keyboards can have arbitrary layouts, arbitrary scancodes/keycodes, etc...
  * Key presses from these devices must be looked up by their keysym value.

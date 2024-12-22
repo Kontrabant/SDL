@@ -906,6 +906,17 @@ void SDL_SetModState(SDL_Keymod modstate)
     keyboard->modstate = modstate;
 }
 
+Uint32 SDL_GetXkbKeysymForKeyCode(Uint32 keycode)
+{
+    SDL_VideoDevice *dev = SDL_GetVideoDevice();
+
+    if (dev && dev->GetXkbKeysymForKeycode) {
+        return dev->GetXkbKeysymForKeycode(dev, keycode);
+    }
+
+    return 0; // XKB_KEY_NoSymbol
+}
+
 // Note that SDL_ToggleModState() is not a public API. SDL_SetModState() is.
 void SDL_ToggleModState(SDL_Keymod modstate, bool toggle)
 {

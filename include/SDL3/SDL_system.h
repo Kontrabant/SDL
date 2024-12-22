@@ -167,6 +167,26 @@ typedef bool (SDLCALL *SDL_X11EventHook)(void *userdata, XEvent *xevent);
  */
 extern SDL_DECLSPEC void SDLCALL SDL_SetX11EventHook(SDL_X11EventHook callback, void *userdata);
 
+/**
+ * Get the Xkb keysym for a key code using the current keyboard modifiers and mapping.
+ *
+ * The Xkb keysym for a specific key event can be obtained by passing the `raw`
+ * member of the `SDL_KeyboardEvent` struct as the `keycode` parameter.
+ *
+ * This function is usable with the following video drivers:
+ * - X11
+ * - wayland
+ *
+ * When other video drivers are in use, this function always returns 0.
+ *
+ * \param keycode the key code for which to query the keysym from the current key map.
+ * \returns the xkb_keysym_t value for the specified key code, or 0 (XKB_KEY_NoSymbol)
+ *          if the key code is invalid, or a corresponding keysym can't be found.
+ *
+ * \since This function is available since SDL 3.1.8.
+ */
+extern SDL_DECLSPEC Uint32 SDLCALL SDL_GetXkbKeysymForKeyCode(Uint32 keycode);
+
 /* Platform specific functions for Linux*/
 #ifdef SDL_PLATFORM_LINUX
 

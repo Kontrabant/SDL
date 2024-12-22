@@ -256,6 +256,8 @@ static SDL_VideoDevice *X11_CreateDevice(void)
         device->system_theme = SDL_SystemTheme_Get();
 #endif
 
+    device->GetXkbKeysymForKeycode = X11_GetXkbKeysymForKeycode;
+
     device->device_caps = VIDEO_DEVICE_CAPS_HAS_POPUP_WINDOW_SUPPORT |
                           VIDEO_DEVICE_CAPS_SENDS_FULLSCREEN_DIMENSIONS;
 

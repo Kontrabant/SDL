@@ -390,6 +390,12 @@ void X11_UpdateKeymap(SDL_VideoDevice *_this, bool send_event)
     SDL_SetKeymap(keymap, send_event);
 }
 
+Uint32 X11_GetXkbKeysymForKeycode(SDL_VideoDevice *_this, Uint32 keycode)
+{
+    SDL_VideoData *viddata = _this->internal;
+    return X11_XKeycodeToKeysym(viddata->display, keycode, 0);
+}
+
 void X11_QuitKeyboard(SDL_VideoDevice *_this)
 {
     SDL_VideoData *data = _this->internal;

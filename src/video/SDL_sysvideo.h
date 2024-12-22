@@ -385,6 +385,9 @@ struct SDL_VideoDevice
     // Display the system-level window menu
     void (*ShowWindowSystemMenu)(SDL_Window *window, int x, int y);
 
+    // Function for X11 and Wayland to get Xkb keysyms for raw keycodes
+    Uint32 (*GetXkbKeysymForKeycode)(SDL_VideoDevice *_this, Uint32 keycode);
+
     /* * * */
     // Data common to all drivers
     SDL_ThreadID thread;

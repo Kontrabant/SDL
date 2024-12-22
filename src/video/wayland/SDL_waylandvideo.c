@@ -660,6 +660,8 @@ static SDL_VideoDevice *Wayland_CreateDevice(bool require_preferred_protocols)
     device->Vulkan_GetPresentationSupport = Wayland_Vulkan_GetPresentationSupport;
 #endif
 
+    device->GetXkbKeysymForKeycode = Wayland_GetXkbKeysymFromKeycode;
+
     device->free = Wayland_DeleteDevice;
 
     device->device_caps = VIDEO_DEVICE_CAPS_MODE_SWITCHING_EMULATED |

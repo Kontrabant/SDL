@@ -181,6 +181,8 @@ extern void Wayland_input_quit_tablet_support(struct SDL_WaylandInput *input);
 extern void Wayland_RegisterTimestampListeners(struct SDL_WaylandInput *input);
 extern void Wayland_CreateCursorShapeDevice(struct SDL_WaylandInput *input);
 
+extern Uint32 Wayland_GetXkbKeysymFromKeycode(SDL_VideoDevice *_this, Uint32 keycode);
+
 /* The implicit grab serial needs to be updated on:
  * - Keyboard key down/up
  * - Mouse button down
