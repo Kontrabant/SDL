@@ -31,6 +31,9 @@
 // The default keyboard input device, for platforms that don't have multiple keyboards
 #define SDL_DEFAULT_KEYBOARD_ID    1
 
+// Non-public "Mod3" modifier bit for Xkb backends
+#define SDL_KMOD_XKB_MOD3 0x0004u
+
 // Initialize the keyboard subsystem
 extern bool SDL_InitKeyboard(void);
 
