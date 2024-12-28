@@ -340,7 +340,15 @@ void X11_UpdateKeymap(SDL_VideoDevice *_this, bool send_event)
         { SDL_KMOD_MODE, Mod5Mask },
         { SDL_KMOD_MODE | SDL_KMOD_SHIFT, Mod5Mask | ShiftMask },
         { SDL_KMOD_MODE | SDL_KMOD_CAPS, Mod5Mask | LockMask },
-        { SDL_KMOD_MODE | SDL_KMOD_SHIFT | SDL_KMOD_CAPS, Mod5Mask | ShiftMask | LockMask }
+        { SDL_KMOD_MODE | SDL_KMOD_SHIFT | SDL_KMOD_CAPS, Mod5Mask | ShiftMask | LockMask },
+        { SDL_KMOD_XKB_MOD3, Mod3Mask },
+        { SDL_KMOD_XKB_MOD3 | SDL_KMOD_SHIFT, Mod3Mask | ShiftMask },
+        { SDL_KMOD_XKB_MOD3 | SDL_KMOD_CAPS, Mod3Mask | LockMask },
+        { SDL_KMOD_XKB_MOD3 | SDL_KMOD_SHIFT | SDL_KMOD_CAPS, Mod3Mask | ShiftMask | LockMask },
+        { SDL_KMOD_XKB_MOD3 | SDL_KMOD_MODE, Mod5Mask | Mod3Mask },
+        { SDL_KMOD_XKB_MOD3 | SDL_KMOD_MODE | SDL_KMOD_SHIFT, Mod3Mask | Mod5Mask | ShiftMask },
+        { SDL_KMOD_XKB_MOD3 | SDL_KMOD_MODE | SDL_KMOD_CAPS, Mod3Mask | Mod5Mask | LockMask },
+        { SDL_KMOD_XKB_MOD3 | SDL_KMOD_MODE | SDL_KMOD_SHIFT | SDL_KMOD_CAPS, Mod3Mask | Mod5Mask | ShiftMask | LockMask }
     };
 
     SDL_VideoData *data = _this->internal;
@@ -371,17 +379,38 @@ void X11_UpdateKeymap(SDL_VideoDevice *_this, bool send_event)
                 continue;
             }
 
-            KeySym keysym = X11_KeyCodeToSym(_this, i, data->xkb_group, keymod_masks[m].xkb_mask);
+            const KeySym keysym = X11_KeyCodeToSym(_this, i, data->xkb_group, keymod_masks[m].xkb_mask);
+            bool key_is_unknown = false;
 
-            // Note: The default SDL scancode table sets this to right alt instead of AltGr/Mode, so handle it separately.
-            if (keysym != XK_ISO_Level3_Shift) {
-                keycode = SDL_KeySymToUcs4(keysym);
-            } else {
+            switch (keysym) {
+            // The default SDL scancode table sets this to right alt instead of AltGr/Mode, so handle it separately.
+            case XK_ISO_Level3_Shift:
                 keycode = SDLK_MODE;
+                break;
+
+            /* The default SDL scancode table sets Meta L/R to the GUI keys, and Hyper R to app menu, which is
+             * correct as far as physical key placement goes, but these keys are functionally distinct from the
+             * default keycodes SDL returns for the scancodes, so they are set to unknown.
+             *
+             * SDL has no scancode mapping for Hyper L or Level 5 Shift, and they are usually mapped to something
+             * else, like Caps Lock, so just pass through the unknown keycode.
+             */
+            case XK_Meta_L:
+            case XK_Meta_R:
+            case XK_Hyper_L:
+            case XK_Hyper_R:
+            case XK_ISO_Level5_Shift:
+                keycode = SDLK_UNKNOWN;
+                key_is_unknown = true;
+                break;
+
+            default:
+                keycode = SDL_KeySymToUcs4(keysym);
+                break;
             }
 
-            if (!keycode) {
-                SDL_Scancode keyScancode = SDL_GetScancodeFromKeySym(keysym, (KeyCode)i);
+            if (!keycode && !key_is_unknown) {
+                const SDL_Scancode keyScancode = SDL_GetScancodeFromKeySym(keysym, (KeyCode)i);
                 keycode = SDL_GetKeymapKeycode(NULL, keyScancode, keymod_masks[m].sdl_mask);
             }
             SDL_SetKeymapEntry(keymap, scancode, keymod_masks[m].sdl_mask, keycode);

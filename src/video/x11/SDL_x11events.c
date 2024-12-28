@@ -312,6 +312,7 @@ void X11_ReconcileKeyboardState(SDL_VideoDevice *_this)
     // Sync up the keyboard modifier state
     if (X11_XQueryPointer(display, DefaultRootWindow(display), &junk_window, &junk_window, &x, &y, &x, &y, &mask)) {
         SDL_ToggleModState(SDL_KMOD_CAPS, (mask & LockMask) ? true : false);
+        SDL_ToggleModState(SDL_KMOD_XKB_MOD3, (mask & Mod3Mask) ? true : false);
         SDL_ToggleModState(SDL_KMOD_NUM, (mask & X11_GetNumLockModifierMask(_this)) ? true : false);
         SDL_ToggleModState(SDL_KMOD_SCROLL, (mask & X11_GetScrollLockModifierMask(_this)) ? true : false);
     }
@@ -828,6 +829,9 @@ void X11_HandleKeyEvent(SDL_VideoDevice *_this, SDL_WindowData *windowdata, SDL_
 #endif // DEBUG SCANCODES
 
     text[0] = '\0';
+
+    // Mod3 isn't toggled by any specific SDL keycode, so do it explicitly.
+    SDL_ToggleModState(SDL_KMOD_XKB_MOD3, !!(xevent->xkey.state & Mod3Mask));
 
     if (SDL_TextInputActive(windowdata->window)) {
 #if defined(HAVE_IBUS_IBUS_H) || defined(HAVE_FCITX)
