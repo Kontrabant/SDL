@@ -889,18 +889,20 @@ static bool Wayland_SetRelativeMouseMode(bool enabled)
 static SDL_MouseButtonFlags SDLCALL Wayland_GetGlobalMouseState(float *x, float *y)
 {
     SDL_Window *focus = SDL_GetMouseFocus();
-    SDL_MouseButtonFlags result = 0;
+    SDL_MouseButtonFlags buttons = 0;
 
     if (focus) {
+        SDL_VideoDevice *viddev = SDL_GetVideoDevice();
         int off_x, off_y;
 
-        result = SDL_GetMouseState(x, y);
+        SDL_GetMouseState(x, y);
+        buttons = viddev->internal->input->buttons_pressed;
         SDL_RelativeToGlobalForWindow(focus, focus->x, focus->y, &off_x, &off_y);
         *x += off_x;
         *y += off_y;
     }
 
-    return result;
+    return buttons;
 }
 
 #if 0  // TODO RECONNECT: See waylandvideo.c for more information!

@@ -596,6 +596,7 @@ static void pointer_handle_leave(void *data, struct wl_pointer *pointer,
         if (wind) {
             // Clear the capture flag and raise all buttons
             wind->sdlwindow->flags &= ~SDL_WINDOW_MOUSE_CAPTURE;
+            input->buttons_pressed = 0;
 
             SDL_SendMouseButton(Wayland_GetPointerTimestamp(input, 0), wind->sdlwindow, input->pointer_id, SDL_BUTTON_LEFT, false);
             SDL_SendMouseButton(Wayland_GetPointerTimestamp(input, 0), wind->sdlwindow, input->pointer_id, SDL_BUTTON_RIGHT, false);
@@ -728,6 +729,17 @@ static void pointer_handle_button_common(struct SDL_WaylandInput *input, uint32_
         SDL_VideoData *viddata = window->waylandData;
         bool ignore_click = false;
 
+        if (state) {
+            Wayland_UpdateImplicitGrabSerial(input, serial);
+        }
+
+        // Update our mask of currently-pressed buttons.
+        if (state) {
+            input->buttons_pressed |= SDL_BUTTON_MASK(sdl_button);
+        } else {
+            input->buttons_pressed &= ~(SDL_BUTTON_MASK(sdl_button));
+        }
+
         if (sdl_button == SDL_BUTTON_LEFT &&
             ProcessHitTest(input->pointer_focus, input->seat, input->sx_w, input->sy_w, serial)) {
             return; // don't pass this event on to app.
@@ -747,24 +759,15 @@ static void pointer_handle_button_common(struct SDL_WaylandInput *input, uint32_
          * the mouse outside the window if you drag outside of it, until you let go
          * of all buttons (even if you add or remove presses outside the window, as
          * long as any button is still down, the capture remains).
+         *
+         * The mouse is not captured in relative mode.
          */
-        if (state) { // update our mask of currently-pressed buttons
-            input->buttons_pressed |= SDL_BUTTON_MASK(sdl_button);
-        } else {
-            input->buttons_pressed &= ~(SDL_BUTTON_MASK(sdl_button));
-        }
-
-        // Don't modify the capture flag in relative mode.
         if (!viddata->relative_mouse_mode) {
             if (input->buttons_pressed != 0) {
                 window->sdlwindow->flags |= SDL_WINDOW_MOUSE_CAPTURE;
             } else {
                 window->sdlwindow->flags &= ~SDL_WINDOW_MOUSE_CAPTURE;
             }
-        }
-
-        if (state) {
-            Wayland_UpdateImplicitGrabSerial(input, serial);
         }
 
         if (!ignore_click) {
