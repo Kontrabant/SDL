@@ -617,9 +617,9 @@ static void pointer_handle_leave(void *data, struct wl_pointer *pointer,
 }
 
 static bool ProcessHitTest(SDL_WindowData *window_data,
-			       struct wl_seat *seat,
-			       wl_fixed_t sx_w, wl_fixed_t sy_w,
-			       uint32_t serial)
+                           struct wl_seat *seat,
+                           wl_fixed_t sx_w, wl_fixed_t sy_w,
+                           uint32_t serial)
 {
     SDL_Window *window = window_data->sdlwindow;
 
@@ -640,6 +640,9 @@ static bool ProcessHitTest(SDL_WindowData *window_data,
         };
 #endif
 
+        const SDL_Point point = { (int)SDL_floor(wl_fixed_to_double(sx_w) * window_data->pointer_scale.x),
+                                  (int)SDL_floor(wl_fixed_to_double(sy_w) * window_data->pointer_scale.y) };
+        window_data->hit_test_result = window->hit_test(window, &point, window->hit_test_data);
         switch (window_data->hit_test_result) {
         case SDL_HITTEST_DRAGGABLE:
 #ifdef HAVE_LIBDECOR_H
@@ -740,8 +743,7 @@ static void pointer_handle_button_common(struct SDL_WaylandInput *input, uint32_
             input->buttons_pressed &= ~(SDL_BUTTON_MASK(sdl_button));
         }
 
-        if (sdl_button == SDL_BUTTON_LEFT &&
-            ProcessHitTest(input->pointer_focus, input->seat, input->sx_w, input->sy_w, serial)) {
+        if (ProcessHitTest(input->pointer_focus, input->seat, input->sx_w, input->sy_w, serial)) {
             return; // don't pass this event on to app.
         }
 
