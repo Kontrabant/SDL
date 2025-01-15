@@ -553,7 +553,7 @@ bool X11_ProcessHitTest(SDL_VideoDevice *_this, SDL_WindowData *data, const floa
     return true;
 }
 
-bool X11_TriggerHitTestAction(SDL_VideoDevice *_this, SDL_WindowData *data, const float x, const float y)
+bool X11_TriggerHitTestAction(SDL_VideoDevice *_this, SDL_WindowData *data, int button, const float x, const float y)
 {
     SDL_Window *window = data->window;
 
@@ -565,6 +565,11 @@ bool X11_TriggerHitTestAction(SDL_VideoDevice *_this, SDL_WindowData *data, cons
             _NET_WM_MOVERESIZE_SIZE_BOTTOMRIGHT, _NET_WM_MOVERESIZE_SIZE_BOTTOM,
             _NET_WM_MOVERESIZE_SIZE_BOTTOMLEFT, _NET_WM_MOVERESIZE_SIZE_LEFT
         };
+
+        // Return true if over a hit test zone and any button is pressed, to eat the input.
+        if (button != Button1 && data->hit_test_result != SDL_HITTEST_NORMAL) {
+            return false;
+        }
 
         switch (data->hit_test_result) {
         case SDL_HITTEST_DRAGGABLE:
@@ -985,11 +990,9 @@ void X11_HandleButtonPress(SDL_VideoDevice *_this, SDL_WindowData *windowdata, S
                => subtract (8-SDL_BUTTON_X1) to get value SDL expects */
             button -= (8 - SDL_BUTTON_X1);
         }
-        if (button == Button1) {
-            if (X11_TriggerHitTestAction(_this, windowdata, x, y)) {
-                SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_HIT_TEST, 0, 0);
-                return; // don't pass this event on to app.
-            }
+        if (X11_TriggerHitTestAction(_this, windowdata, button, x, y)) {
+            SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_HIT_TEST, 0, 0);
+            return; // don't pass this event on to app.
         }
         if (windowdata->last_focus_event_time) {
             const int X11_FOCUS_CLICK_TIMEOUT = 10;
