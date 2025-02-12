@@ -898,6 +898,11 @@ static NSCursor *Cocoa_GetDesiredCursor(void)
            isMiniaturizing || inFullscreenTransition;
 }
 
+- (BOOL)inLiveResize
+{
+    return liveResizeTimer != nil;
+}
+
 - (void)close
 {
     NSNotificationCenter *center;
@@ -3248,11 +3253,17 @@ bool Cocoa_SyncWindow(SDL_VideoDevice *_this, SDL_Window *window)
     bool result = true;
 
     @autoreleasepool {
+        SDL_CocoaWindowData *data = (__bridge SDL_CocoaWindowData *)window->internal;
+
+        // If in a live resize, just bail out.
+        if ([data.listener inLiveResize]) {
+            return true;
+        }
+
         /* The timeout needs to be high enough that animated fullscreen
          * spaces transitions won't cause it to time out.
          */
         Uint64 timeout = SDL_GetTicksNS() + SDL_MS_TO_NS(2000);
-        SDL_CocoaWindowData *data = (__bridge SDL_CocoaWindowData *)window->internal;
         while (true) {
             SDL_PumpEvents();
 
