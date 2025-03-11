@@ -56,7 +56,6 @@ struct SDL_VideoData
     struct wl_shm *shm;
     SDL_WaylandCursorTheme *cursor_themes;
     int num_cursor_themes;
-    struct wl_pointer *pointer;
     struct
     {
         struct xdg_wm_base *xdg;

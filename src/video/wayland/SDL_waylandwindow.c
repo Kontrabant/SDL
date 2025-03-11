@@ -2242,8 +2242,8 @@ static void Wayland_activate_window(SDL_VideoData *data, SDL_WindowData *target_
             // This specifies the surface from which the activation request is originating, not the activation target surface.
             xdg_activation_token_v1_set_surface(target_wind->activation_token, requesting_surface);
         }
-        if (set_serial && input && input->seat) {
-            xdg_activation_token_v1_set_serial(target_wind->activation_token, input->last_implicit_grab_serial, input->seat);
+        if (set_serial && input && input->wl_seat) {
+            xdg_activation_token_v1_set_serial(target_wind->activation_token, input->last_implicit_grab_serial, input->wl_seat);
         }
         xdg_activation_token_v1_commit(target_wind->activation_token);
     }
@@ -2986,13 +2986,13 @@ void Wayland_ShowWindowSystemMenu(SDL_Window *window, int x, int y)
 #ifdef HAVE_LIBDECOR_H
     if (wind->shell_surface_type == WAYLAND_SHELL_SURFACE_TYPE_LIBDECOR) {
         if (wind->shell_surface.libdecor.frame) {
-            libdecor_frame_show_window_menu(wind->shell_surface.libdecor.frame, wind->waylandData->input->seat, wind->waylandData->input->last_implicit_grab_serial, x, y);
+            libdecor_frame_show_window_menu(wind->shell_surface.libdecor.frame, wind->waylandData->input->wl_seat, wind->waylandData->input->last_implicit_grab_serial, x, y);
         }
     } else
 #endif
     if (wind->shell_surface_type == WAYLAND_SHELL_SURFACE_TYPE_XDG_TOPLEVEL) {
         if (wind->shell_surface.xdg.toplevel.xdg_toplevel) {
-            xdg_toplevel_show_window_menu(wind->shell_surface.xdg.toplevel.xdg_toplevel, wind->waylandData->input->seat, wind->waylandData->input->last_implicit_grab_serial, x, y);
+            xdg_toplevel_show_window_menu(wind->shell_surface.xdg.toplevel.xdg_toplevel, wind->waylandData->input->wl_seat, wind->waylandData->input->last_implicit_grab_serial, x, y);
         }
     }
 }

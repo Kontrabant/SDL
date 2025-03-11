@@ -560,9 +560,9 @@ static SDL_VideoDevice *Wayland_CreateDevice(bool require_preferred_protocols)
     }
 
     input->display = data;
-    input->sx_w = wl_fixed_from_int(0);
-    input->sy_w = wl_fixed_from_int(0);
-    input->xkb.current_group = XKB_GROUP_INVALID;
+    input->pointer.sx_w = wl_fixed_from_int(0);
+    input->pointer.sy_w = wl_fixed_from_int(0);
+    input->keyboard.xkb.current_group = XKB_GROUP_INVALID;
 
     data->initializing = true;
     data->display = display;
@@ -1264,7 +1264,7 @@ static void display_handle_global(void *data, struct wl_registry *registry, uint
     } else if (SDL_strcmp(interface, "wl_output") == 0) {
         Wayland_add_display(d, id, SDL_min(version, SDL_WL_OUTPUT_VERSION));
     } else if (SDL_strcmp(interface, "wl_seat") == 0) {
-        d->input->seat = wl_registry_bind(d->registry, id, &wl_seat_interface, SDL_min(SDL_WL_SEAT_VERSION, version));
+        d->input->wl_seat = wl_registry_bind(d->registry, id, &wl_seat_interface, SDL_min(SDL_WL_SEAT_VERSION, version));
         Wayland_input_initialize_seat(d);
     } else if (SDL_strcmp(interface, "xdg_wm_base") == 0) {
         d->shell.xdg = wl_registry_bind(d->registry, id, &xdg_wm_base_interface, SDL_min(version, 6));

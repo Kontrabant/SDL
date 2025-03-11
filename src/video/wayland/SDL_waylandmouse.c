@@ -601,8 +601,8 @@ static void Wayland_FreeCursorData(SDL_CursorData *d)
     SDL_VideoDevice *vd = SDL_GetVideoDevice();
     struct SDL_WaylandInput *input = vd->internal->input;
 
-    if (input->current_cursor == d) {
-        input->current_cursor = NULL;
+    if (input->pointer.current_cursor == d) {
+        input->pointer.current_cursor = NULL;
     }
 
     // Buffers for system cursors must not be destroyed.
@@ -719,7 +719,7 @@ static void Wayland_SetSystemCursorShape(struct SDL_WaylandInput *input, SDL_Sys
         shape = WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT;
     }
 
-    wp_cursor_shape_device_v1_set_shape(input->cursor_shape, input->pointer_enter_serial, shape);
+    wp_cursor_shape_device_v1_set_shape(input->pointer.cursor_shape, input->pointer.enter_serial, shape);
 }
 
 static bool Wayland_ShowCursor(SDL_Cursor *cursor)
@@ -727,7 +727,6 @@ static bool Wayland_ShowCursor(SDL_Cursor *cursor)
     SDL_VideoDevice *vd = SDL_GetVideoDevice();
     SDL_VideoData *d = vd->internal;
     struct SDL_WaylandInput *input = d->input;
-    struct wl_pointer *pointer = d->pointer;
     struct wl_buffer *buffer = NULL;
     int scale = 1;
     int dst_width = 0;
@@ -735,15 +734,15 @@ static bool Wayland_ShowCursor(SDL_Cursor *cursor)
     int hot_x;
     int hot_y;
 
-    if (!pointer) {
+    if (!input->pointer.wl_pointer) {
         return false;
     }
 
     // Stop the frame callback for old animated cursors.
-    if (input->current_cursor && input->current_cursor->is_system_cursor &&
-        input->current_cursor->cursor_data.system.frame_callback) {
-        wl_callback_destroy(input->current_cursor->cursor_data.system.frame_callback);
-        input->current_cursor->cursor_data.system.frame_callback = NULL;
+    if (input->pointer.current_cursor && input->pointer.current_cursor->is_system_cursor &&
+        input->pointer.current_cursor->cursor_data.system.frame_callback) {
+        wl_callback_destroy(input->pointer.current_cursor->cursor_data.system.frame_callback);
+        input->pointer.current_cursor->cursor_data.system.frame_callback = NULL;
     }
 
     if (cursor) {
@@ -751,9 +750,9 @@ static bool Wayland_ShowCursor(SDL_Cursor *cursor)
 
         if (data->is_system_cursor) {
             // If the cursor shape protocol is supported, the compositor will draw nicely scaled cursors for us, so nothing more to do.
-            if (input->cursor_shape) {
+            if (input->pointer.cursor_shape) {
                 Wayland_SetSystemCursorShape(input, data->cursor_data.system.id);
-                input->current_cursor = data;
+                input->pointer.current_cursor = data;
                 return true;
             }
 
@@ -796,7 +795,7 @@ static bool Wayland_ShowCursor(SDL_Cursor *cursor)
             wl_surface_set_buffer_scale(data->surface, scale);
         }
 
-        wl_pointer_set_cursor(pointer, input->pointer_enter_serial, data->surface, hot_x, hot_y);
+        wl_pointer_set_cursor(input->pointer.wl_pointer, input->pointer.enter_serial, data->surface, hot_x, hot_y);
 
         if (wl_surface_get_version(data->surface) >= WL_SURFACE_DAMAGE_BUFFER_SINCE_VERSION) {
             wl_surface_damage_buffer(data->surface, 0, 0, SDL_MAX_SINT32, SDL_MAX_SINT32);
@@ -805,10 +804,10 @@ static bool Wayland_ShowCursor(SDL_Cursor *cursor)
         }
 
         wl_surface_commit(data->surface);
-        input->current_cursor = data;
+        input->pointer.current_cursor = data;
     } else {
-        input->current_cursor = NULL;
-        wl_pointer_set_cursor(pointer, input->pointer_enter_serial, NULL, 0, 0);
+        input->pointer.current_cursor = NULL;
+        wl_pointer_set_cursor(input->pointer.wl_pointer, input->pointer.enter_serial, NULL, 0, 0);
     }
 
     return true;
@@ -858,7 +857,7 @@ static bool Wayland_WarpMouseGlobal(float x, float y)
     SDL_VideoDevice *vd = SDL_GetVideoDevice();
     SDL_VideoData *d = vd->internal;
     struct SDL_WaylandInput *input = d->input;
-    SDL_WindowData *wind = input->pointer_focus;
+    SDL_WindowData *wind = input->pointer.focus;
 
     // If the client wants the coordinates warped to within the focused window, just convert the coordinates to relative.
     if (wind) {
@@ -902,7 +901,7 @@ static SDL_MouseButtonFlags SDLCALL Wayland_GetGlobalMouseState(float *x, float 
         SDL_VideoData *viddata = SDL_GetVideoDevice()->internal;
         int off_x, off_y;
 
-        result = viddata->input->buttons_pressed;
+        result = viddata->input->pointer.buttons_pressed;
         SDL_RelativeToGlobalForWindow(focus, focus->x, focus->y, &off_x, &off_y);
         *x += off_x;
         *y += off_y;

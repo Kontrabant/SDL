@@ -136,9 +136,9 @@ bool Wayland_StartTextInput(SDL_VideoDevice *_this, SDL_Window *window, SDL_Prop
         }
     }
 
-    if (input && input->xkb.compose_state) {
+    if (input && input->keyboard.xkb.compose_state) {
         // Reset compose state so composite and dead keys don't carry over
-        WAYLAND_xkb_compose_state_reset(input->xkb.compose_state);
+        WAYLAND_xkb_compose_state_reset(input->keyboard.xkb.compose_state);
     }
 
     return Wayland_UpdateTextInputArea(_this, window);
@@ -161,9 +161,9 @@ bool Wayland_StopTextInput(SDL_VideoDevice *_this, SDL_Window *window)
     }
 #endif
 
-    if (input && input->xkb.compose_state) {
+    if (input && input->keyboard.xkb.compose_state) {
         // Reset compose state so composite and dead keys don't carry over
-        WAYLAND_xkb_compose_state_reset(input->xkb.compose_state);
+        WAYLAND_xkb_compose_state_reset(input->keyboard.xkb.compose_state);
     }
     return true;
 }
@@ -201,7 +201,7 @@ bool Wayland_HasScreenKeyboardSupport(SDL_VideoDevice *_this)
      * input protocol, make sure we don't have any physical keyboards either.
      */
     SDL_VideoData *internal = _this->internal;
-    bool haskeyboard = (internal->input != NULL) && (internal->input->keyboard != NULL);
+    bool haskeyboard = (internal->input != NULL) && (internal->input->keyboard.wl_keyboard != NULL);
     bool hastextmanager = (internal->text_input_manager != NULL);
     return !haskeyboard && hastextmanager;
 }
