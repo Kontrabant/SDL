@@ -66,6 +66,7 @@
 #include <xkbcommon/xkbcommon-compose.h>
 #include <xkbcommon/xkbcommon.h>
 #include "cursor-shape-v1-client-protocol.h"
+#include "viewporter-client-protocol.h"
 
 // Weston uses a ratio of 10 units per scroll tick
 #define WAYLAND_WHEEL_AXIS_UNIT 10
@@ -1969,6 +1970,101 @@ void Wayland_input_init_relative_pointer(SDL_VideoData *d)
     }
 }
 
+static void Wayland_DestroySeatPointer(struct SDL_WaylandInput *input)
+{
+    if (input->pointer.relative_pointer) {
+        zwp_relative_pointer_v1_destroy(input->pointer.relative_pointer);
+    }
+
+    if (input->pointer.timestamps) {
+        zwp_input_timestamps_v1_destroy(input->pointer.timestamps);
+    }
+
+    if (input->pointer.cursor_state.frame_callback) {
+        wl_callback_destroy(input->pointer.cursor_state.frame_callback);
+    }
+
+    if (input->pointer.cursor_state.surface) {
+        wl_surface_destroy(input->pointer.cursor_state.surface);
+    }
+
+    if (input->pointer.cursor_state.viewport) {
+        wp_viewport_destroy(input->pointer.cursor_state.viewport);
+    }
+
+    if (input->pointer.cursor_shape) {
+        wp_cursor_shape_device_v1_destroy(input->pointer.cursor_shape);
+    }
+
+    if (input->pointer.wl_pointer) {
+        if (wl_pointer_get_version(input->pointer.wl_pointer) >= WL_POINTER_RELEASE_SINCE_VERSION) {
+            wl_pointer_release(input->pointer.wl_pointer);
+        } else {
+            wl_pointer_destroy(input->pointer.wl_pointer);
+        }
+    }
+
+    SDL_zero(input->pointer);
+}
+
+static void Wayland_DestroySeatKeyboard(struct SDL_WaylandInput *input)
+{
+    if (input->keyboard.timestamps) {
+        zwp_input_timestamps_v1_destroy(input->pointer.timestamps);
+    }
+
+    if (input->keyboard.wl_keyboard) {
+        if (wl_keyboard_get_version(input->keyboard.wl_keyboard) >= WL_KEYBOARD_RELEASE_SINCE_VERSION) {
+            wl_keyboard_release(input->keyboard.wl_keyboard);
+        } else {
+            wl_keyboard_destroy(input->keyboard.wl_keyboard);
+        }
+    }
+
+    if (input->keyboard.xkb.compose_state) {
+        WAYLAND_xkb_compose_state_unref(input->keyboard.xkb.compose_state);
+    }
+
+    if (input->keyboard.xkb.compose_table) {
+        WAYLAND_xkb_compose_table_unref(input->keyboard.xkb.compose_table);
+    }
+
+    if (input->keyboard.xkb.state) {
+        WAYLAND_xkb_state_unref(input->keyboard.xkb.state);
+    }
+
+    if (input->keyboard.xkb.keymap) {
+        WAYLAND_xkb_keymap_unref(input->keyboard.xkb.keymap);
+    }
+
+    SDL_zero(input->keyboard);
+}
+
+static void Wayland_DestroySeatTouch(struct SDL_WaylandInput *input)
+{
+    struct SDL_WaylandTouchPoint *tp, *tmp;
+
+    if (input->touch.timestamps) {
+        zwp_input_timestamps_v1_destroy(input->touch.timestamps);
+    }
+
+    if (input->touch.wl_touch) {
+        if (wl_touch_get_version(input->touch.wl_touch) >= WL_TOUCH_RELEASE_SINCE_VERSION) {
+            wl_touch_release(input->touch.wl_touch);
+        } else {
+            wl_touch_destroy(input->touch.wl_touch);
+        }
+    }
+
+    wl_list_for_each_safe (tp, tmp, &input->touch.points, link) {
+        WAYLAND_wl_list_remove(&tp->link);
+        SDL_free(tp);
+    }
+
+    SDL_zero(input->touch);
+    WAYLAND_wl_list_init(&input->touch.points);
+}
+
 static void seat_handle_capabilities(void *data, struct wl_seat *seat,
                                      enum wl_seat_capability caps)
 {
@@ -1988,23 +2084,8 @@ static void seat_handle_capabilities(void *data, struct wl_seat *seat,
         input->pointer.sdl_id = SDL_GetNextObjectID();
         SDL_AddMouse(input->pointer.sdl_id, WAYLAND_DEFAULT_POINTER_NAME, !input->display->initializing);
     } else if (!(caps & WL_SEAT_CAPABILITY_POINTER) && input->pointer.wl_pointer) {
-        if (input->pointer.relative_pointer) {
-            zwp_relative_pointer_v1_destroy(input->pointer.relative_pointer);
-            input->pointer.relative_pointer = NULL;
-        }
-        if (input->pointer.cursor_shape) {
-            wp_cursor_shape_device_v1_destroy(input->pointer.cursor_shape);
-            input->pointer.cursor_shape = NULL;
-        }
-        if (wl_pointer_get_version(input->pointer.wl_pointer) >= WL_POINTER_RELEASE_SINCE_VERSION) {
-            wl_pointer_release(input->pointer.wl_pointer);
-        } else {
-            wl_pointer_destroy(input->pointer.wl_pointer);
-        }
-        input->pointer.wl_pointer = NULL;
-
         SDL_RemoveMouse(input->pointer.sdl_id, true);
-        input->pointer.sdl_id = 0;
+        Wayland_DestroySeatPointer(input);
     }
 
     if ((caps & WL_SEAT_CAPABILITY_TOUCH) && !input->touch.wl_touch) {
@@ -2015,12 +2096,7 @@ static void seat_handle_capabilities(void *data, struct wl_seat *seat,
                               input);
     } else if (!(caps & WL_SEAT_CAPABILITY_TOUCH) && input->touch.wl_touch) {
         SDL_DelTouch((SDL_TouchID)(uintptr_t)input->touch.wl_touch);
-        if (wl_touch_get_version(input->touch.wl_touch) >= WL_TOUCH_RELEASE_SINCE_VERSION) {
-            wl_touch_release(input->touch.wl_touch);
-        } else {
-            wl_touch_destroy(input->touch.wl_touch);
-        }
-        input->touch.wl_touch = NULL;
+        Wayland_DestroySeatTouch(input);
     }
 
     if ((caps & WL_SEAT_CAPABILITY_KEYBOARD) && !input->keyboard.wl_keyboard) {
@@ -2032,15 +2108,8 @@ static void seat_handle_capabilities(void *data, struct wl_seat *seat,
         input->keyboard.sdl_id = SDL_GetNextObjectID();
         SDL_AddKeyboard(input->keyboard.sdl_id, WAYLAND_DEFAULT_KEYBOARD_NAME, !input->display->initializing);
     } else if (!(caps & WL_SEAT_CAPABILITY_KEYBOARD) && input->keyboard.wl_keyboard) {
-        if (wl_keyboard_get_version(input->keyboard.wl_keyboard) >= WL_KEYBOARD_RELEASE_SINCE_VERSION) {
-            wl_keyboard_release(input->keyboard.wl_keyboard);
-        } else {
-            wl_keyboard_destroy(input->keyboard.wl_keyboard);
-        }
-        input->keyboard.wl_keyboard = NULL;
-
         SDL_RemoveKeyboard(input->keyboard.sdl_id, true);
-        input->keyboard.sdl_id = 0;
+        Wayland_DestroySeatKeyboard(input);
     }
 
     Wayland_RegisterTimestampListeners(input);
@@ -3121,16 +3190,6 @@ void Wayland_display_destroy_input(SDL_VideoData *d)
 {
     struct SDL_WaylandInput *input = d->input;
 
-    if (input->keyboard.timestamps) {
-        zwp_input_timestamps_v1_destroy(input->keyboard.timestamps);
-    }
-    if (input->pointer.timestamps) {
-        zwp_input_timestamps_v1_destroy(input->pointer.timestamps);
-    }
-    if (input->touch.timestamps) {
-        zwp_input_timestamps_v1_destroy(input->touch.timestamps);
-    }
-
     if (input->data_device) {
         Wayland_data_device_clear_selection(input->data_device);
         if (input->data_device->selection_offer) {
@@ -3167,45 +3226,9 @@ void Wayland_display_destroy_input(SDL_VideoData *d)
         SDL_free(input->text_input);
     }
 
-    if (input->keyboard.wl_keyboard) {
-        if (wl_keyboard_get_version(input->keyboard.wl_keyboard) >= WL_KEYBOARD_RELEASE_SINCE_VERSION) {
-            wl_keyboard_release(input->keyboard.wl_keyboard);
-        } else {
-            wl_keyboard_destroy(input->keyboard.wl_keyboard);
-        }
-    }
-
-    if (input->pointer.relative_pointer) {
-        zwp_relative_pointer_v1_destroy(input->pointer.relative_pointer);
-    }
-
-    if (input->pointer.cursor_shape) {
-        wp_cursor_shape_device_v1_destroy(input->pointer.cursor_shape);
-    }
-
-    if (input->pointer.wl_pointer) {
-        if (wl_pointer_get_version(input->pointer.wl_pointer) >= WL_POINTER_RELEASE_SINCE_VERSION) {
-            wl_pointer_release(input->pointer.wl_pointer);
-        } else {
-            wl_pointer_destroy(input->pointer.wl_pointer);
-        }
-    }
-
-    if (input->touch.wl_touch) {
-        struct SDL_WaylandTouchPoint *tp, *tmp;
-
-        SDL_DelTouch(1);
-        if (wl_touch_get_version(input->touch.wl_touch) >= WL_TOUCH_RELEASE_SINCE_VERSION) {
-            wl_touch_release(input->touch.wl_touch);
-        } else {
-            wl_touch_destroy(input->touch.wl_touch);
-        }
-
-        wl_list_for_each_safe (tp, tmp, &input->touch.points, link) {
-            WAYLAND_wl_list_remove(&tp->link);
-            SDL_free(tp);
-        }
-    }
+    Wayland_DestroySeatKeyboard(input);
+    Wayland_DestroySeatPointer(input);
+    Wayland_DestroySeatTouch(input);
 
     if (input->tablet.wl_tablet_seat) {
         Wayland_input_quit_tablet_support(input);
@@ -3217,22 +3240,6 @@ void Wayland_display_destroy_input(SDL_VideoData *d)
         } else {
             wl_seat_destroy(input->wl_seat);
         }
-    }
-
-    if (input->keyboard.xkb.compose_state) {
-        WAYLAND_xkb_compose_state_unref(input->keyboard.xkb.compose_state);
-    }
-
-    if (input->keyboard.xkb.compose_table) {
-        WAYLAND_xkb_compose_table_unref(input->keyboard.xkb.compose_table);
-    }
-
-    if (input->keyboard.xkb.state) {
-        WAYLAND_xkb_state_unref(input->keyboard.xkb.state);
-    }
-
-    if (input->keyboard.xkb.keymap) {
-        WAYLAND_xkb_keymap_unref(input->keyboard.xkb.keymap);
     }
 
     SDL_free(input);
