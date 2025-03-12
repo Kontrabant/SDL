@@ -141,6 +141,19 @@ struct SDL_WaylandInput
             Uint64 timestamp_ns;
             SDL_MouseWheelDirection direction;
         } current_axis_info;
+
+        // Cursor state
+        struct
+        {
+            struct wl_surface *surface;
+            struct wp_viewport *viewport;
+
+            // Animation state for legacy animated cursors
+            struct wl_callback *frame_callback;
+            Uint64 last_frame_callback_time_ns;
+            Uint64 current_frame_time_ns;
+            int current_frame;
+        } cursor_state;
     } pointer;
 
     struct
