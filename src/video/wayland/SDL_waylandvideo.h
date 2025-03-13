@@ -32,7 +32,7 @@
 #include "../../core/linux/SDL_ime.h"
 
 struct xkb_context;
-struct SDL_WaylandInput;
+struct SDL_WaylandSeat;
 
 typedef struct
 {
@@ -86,7 +86,7 @@ struct SDL_VideoData
     struct zwp_tablet_manager_v2 *tablet_manager;
 
     struct xkb_context *xkb_context;
-    struct SDL_WaylandInput *input;
+    struct SDL_WaylandSeat *seat;
     SDL_DisplayData **output_list;
     int output_count;
     int output_max;

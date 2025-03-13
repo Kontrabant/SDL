@@ -30,7 +30,7 @@
 #include "SDL_waylandvideo.h"
 #include "SDL_waylandshmbuffer.h"
 
-struct SDL_WaylandInput;
+struct SDL_WaylandSeat;
 
 struct SDL_WindowData
 {
@@ -99,7 +99,7 @@ struct SDL_WindowData
     } wm_caps;
 
     struct wl_egl_window *egl_window;
-    struct SDL_WaylandInput *keyboard_device;
+    struct SDL_WaylandSeat *keyboard_device;
 #ifdef SDL_VIDEO_OPENGL_EGL
     EGLSurface egl_surface;
 #endif

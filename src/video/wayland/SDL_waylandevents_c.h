@@ -55,7 +55,7 @@ typedef struct
     char text[8];
 } SDL_WaylandKeyboardRepeat;
 
-struct SDL_WaylandInput
+struct SDL_WaylandSeat
 {
     SDL_VideoData *display;
     struct wl_seat *wl_seat;
@@ -171,7 +171,7 @@ struct SDL_WaylandInput
 };
 
 
-extern Uint64 Wayland_GetTouchTimestamp(struct SDL_WaylandInput *input, Uint32 wl_timestamp_ms);
+extern Uint64 Wayland_GetTouchTimestamp(struct SDL_WaylandSeat *seat, Uint32 wl_timestamp_ms);
 
 extern void Wayland_PumpEvents(SDL_VideoDevice *_this);
 extern void Wayland_SendWakeupEvent(SDL_VideoDevice *_this, SDL_Window *window);
@@ -182,27 +182,27 @@ extern void Wayland_create_primary_selection_device(SDL_VideoData *d);
 
 extern void Wayland_create_text_input_manager(SDL_VideoData *d, uint32_t id);
 
-extern void Wayland_input_initialize_seat(SDL_VideoData *d);
-extern void Wayland_display_destroy_input(SDL_VideoData *d);
+extern void Wayland_DisplayCreateSeat(SDL_VideoData *d);
+extern void Wayland_DisplayDestroySeat(SDL_VideoData *d);
 
 extern void Wayland_input_init_relative_pointer(SDL_VideoData *d);
-extern bool Wayland_input_enable_relative_pointer(struct SDL_WaylandInput *input);
-extern bool Wayland_input_disable_relative_pointer(struct SDL_WaylandInput *input);
+extern bool Wayland_DisplayEnableRelativePointer(struct SDL_WaylandSeat *seat);
+extern bool Wayland_DisplayDisableRelativePointer(struct SDL_WaylandSeat *seat);
 
-extern bool Wayland_input_lock_pointer(struct SDL_WaylandInput *input, SDL_Window *window);
-extern bool Wayland_input_unlock_pointer(struct SDL_WaylandInput *input, SDL_Window *window);
+extern bool Wayland_input_lock_pointer(struct SDL_WaylandSeat *seat, SDL_Window *window);
+extern bool Wayland_input_unlock_pointer(struct SDL_WaylandSeat *seat, SDL_Window *window);
 
-extern bool Wayland_input_confine_pointer(struct SDL_WaylandInput *input, SDL_Window *window);
-extern bool Wayland_input_unconfine_pointer(struct SDL_WaylandInput *input, SDL_Window *window);
+extern bool Wayland_input_confine_pointer(struct SDL_WaylandSeat *seat, SDL_Window *window);
+extern bool Wayland_input_unconfine_pointer(struct SDL_WaylandSeat *seat, SDL_Window *window);
 
-extern bool Wayland_input_grab_keyboard(SDL_Window *window, struct SDL_WaylandInput *input);
+extern bool Wayland_input_grab_keyboard(SDL_Window *window, struct SDL_WaylandSeat *seat);
 extern bool Wayland_input_ungrab_keyboard(SDL_Window *window);
 
-extern void Wayland_input_init_tablet_support(struct SDL_WaylandInput *input, struct zwp_tablet_manager_v2 *tablet_manager);
-extern void Wayland_input_quit_tablet_support(struct SDL_WaylandInput *input);
+extern void Wayland_input_init_tablet_support(struct SDL_WaylandSeat *seat, struct zwp_tablet_manager_v2 *tablet_manager);
+extern void Wayland_input_quit_tablet_support(struct SDL_WaylandSeat *seat);
 
-extern void Wayland_RegisterTimestampListeners(struct SDL_WaylandInput *input);
-extern void Wayland_CreateCursorShapeDevice(struct SDL_WaylandInput *input);
+extern void Wayland_RegisterTimestampListeners(struct SDL_WaylandSeat *seat);
+extern void Wayland_CreateCursorShapeDevice(struct SDL_WaylandSeat *seat);
 
 /* The implicit grab serial needs to be updated on:
  * - Keyboard key down/up
@@ -211,6 +211,6 @@ extern void Wayland_CreateCursorShapeDevice(struct SDL_WaylandInput *input);
  * - Tablet tool down
  * - Tablet tool button down/up
  */
-extern void Wayland_UpdateImplicitGrabSerial(struct SDL_WaylandInput *input, Uint32 serial);
+extern void Wayland_UpdateImplicitGrabSerial(struct SDL_WaylandSeat *seat, Uint32 serial);
 
 #endif // SDL_waylandevents_h_
