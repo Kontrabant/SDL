@@ -187,14 +187,14 @@ extern void Wayland_DisplayCreatePrimarySelectionDevice(SDL_VideoData *d);
 
 extern void Wayland_DisplayCreateTextInputManager(SDL_VideoData *d, uint32_t id);
 
-extern void Wayland_DisplayCreateSeat(SDL_VideoData *display);
+extern void Wayland_DisplayCreateSeat(SDL_VideoData *display, struct wl_seat *wl_seat);
 extern void Wayland_DisplayDestroySeat(SDL_VideoData *display);
 
 extern bool Wayland_SeatUpdateGrabs(SDL_VideoData *display);
 
 extern void Wayland_DisplayInitRelativePointerManager(SDL_VideoData *d);
 
-extern void Wayland_SeatInitTabletSupport(struct SDL_WaylandSeat *seat, struct zwp_tablet_manager_v2 *tablet_manager);
+extern void Wayland_SeatInitTabletSupport(struct SDL_WaylandSeat *seat);
 extern void Wayland_SeatQuitTabletSupport(struct SDL_WaylandSeat *seat);
 
 extern void Wayland_RegisterTimestampListeners(struct SDL_WaylandSeat *seat);

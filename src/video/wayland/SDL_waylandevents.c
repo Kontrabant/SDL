@@ -2698,7 +2698,7 @@ void Wayland_DisplayCreateDataDevice(SDL_VideoData *d)
 {
     SDL_WaylandDataDevice *data_device = NULL;
 
-    if (!d->seat->wl_seat) {
+    if (!d->seat) {
         // No seat yet, will be initialized later.
         return;
     }
@@ -2726,7 +2726,7 @@ void Wayland_DisplayCreatePrimarySelectionDevice(SDL_VideoData *d)
 {
     SDL_WaylandPrimarySelectionDevice *primary_selection_device = NULL;
 
-    if (!d->seat->wl_seat) {
+    if (!d->seat) {
         // No seat yet, will be initialized later.
         return;
     }
@@ -2755,7 +2755,7 @@ static void Wayland_SeatCreateTextInput(struct SDL_WaylandSeat *seat)
 {
     SDL_WaylandTextInput *text_input = NULL;
 
-    if (!seat || !seat->wl_seat) {
+    if (!seat) {
         // No seat yet, will be initialized later.
         return;
     }
@@ -3100,13 +3100,13 @@ static const struct zwp_tablet_seat_v2_listener tablet_seat_listener = {
     tablet_seat_handle_pad_added
 };
 
-void Wayland_SeatInitTabletSupport(struct SDL_WaylandSeat *seat, struct zwp_tablet_manager_v2 *tablet_manager)
+void Wayland_SeatInitTabletSupport(struct SDL_WaylandSeat *seat)
 {
-    if (!tablet_manager || !seat->wl_seat) {
+    if (!seat) {
         return;
     }
 
-    seat->tablet.wl_tablet_seat = zwp_tablet_manager_v2_get_tablet_seat(tablet_manager, seat->wl_seat);
+    seat->tablet.wl_tablet_seat = zwp_tablet_manager_v2_get_tablet_seat(seat->display->tablet_manager, seat->wl_seat);
     zwp_tablet_seat_v2_add_listener(seat->tablet.wl_tablet_seat, &tablet_seat_listener, seat);
 }
 
@@ -3127,11 +3127,19 @@ void Wayland_SeatQuitTabletSupport(struct SDL_WaylandSeat *seat)
     }
 }
 
-void Wayland_DisplayCreateSeat(SDL_VideoData *display)
+void Wayland_DisplayCreateSeat(SDL_VideoData *display, struct wl_seat *wl_seat)
 {
-    struct SDL_WaylandSeat *seat = display->seat;
+    struct SDL_WaylandSeat *seat = calloc(1, sizeof(struct SDL_WaylandSeat));
+    if (!seat) {
+        return;
+    }
 
     WAYLAND_wl_list_init(&seat->touch.points);
+    seat->wl_seat = wl_seat;
+    seat->display = display;
+    seat->pointer.sx_w = wl_fixed_from_int(0);
+    seat->pointer.sy_w = wl_fixed_from_int(0);
+    seat->keyboard.xkb.current_group = XKB_GROUP_INVALID;
 
     if (display->data_device_manager) {
         Wayland_DisplayCreateDataDevice(display);
@@ -3147,7 +3155,7 @@ void Wayland_DisplayCreateSeat(SDL_VideoData *display)
     wl_seat_set_user_data(seat->wl_seat, seat);
 
     if (display->tablet_manager) {
-        Wayland_SeatInitTabletSupport(display->seat, display->tablet_manager);
+        Wayland_SeatInitTabletSupport(display->seat);
     }
 
     WAYLAND_wl_display_flush(display->display);
@@ -3156,6 +3164,10 @@ void Wayland_DisplayCreateSeat(SDL_VideoData *display)
 void Wayland_DisplayDestroySeat(SDL_VideoData *display)
 {
     struct SDL_WaylandSeat *seat = display->seat;
+
+    if (!seat) {
+        return;
+    }
 
     if (seat->data_device) {
         Wayland_data_device_clear_selection(seat->data_device);
@@ -3201,12 +3213,10 @@ void Wayland_DisplayDestroySeat(SDL_VideoData *display)
         Wayland_SeatQuitTabletSupport(seat);
     }
 
-    if (seat->wl_seat) {
-        if (wl_seat_get_version(seat->wl_seat) >= WL_SEAT_RELEASE_SINCE_VERSION) {
-            wl_seat_release(seat->wl_seat);
-        } else {
-            wl_seat_destroy(seat->wl_seat);
-        }
+    if (wl_seat_get_version(seat->wl_seat) >= WL_SEAT_RELEASE_SINCE_VERSION) {
+        wl_seat_release(seat->wl_seat);
+    } else {
+        wl_seat_destroy(seat->wl_seat);
     }
 
     SDL_free(seat);

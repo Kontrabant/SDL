@@ -583,7 +583,7 @@ static void Wayland_FreeCursorData(SDL_CursorData *d)
     struct SDL_WaylandSeat *seat = vd->internal->seat;
 
     // Stop any frame callbacks and detach buffers associated with the cursor being destroyed.
-    if (seat->pointer.current_cursor == d) {
+    if (seat && seat->pointer.current_cursor == d) {
         if (seat->pointer.cursor_state.frame_callback) {
             wl_callback_destroy(seat->pointer.cursor_state.frame_callback);
             seat->pointer.cursor_state.frame_callback = NULL;
@@ -711,7 +711,7 @@ static bool Wayland_ShowCursor(SDL_Cursor *cursor)
     int hot_x;
     int hot_y;
 
-    if (!seat->pointer.wl_pointer) {
+    if (!seat || !seat->pointer.wl_pointer) {
         return false;
     }
 

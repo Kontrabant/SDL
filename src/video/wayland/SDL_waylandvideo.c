@@ -502,7 +502,6 @@ static SDL_VideoDevice *Wayland_CreateDevice(bool require_preferred_protocols)
 {
     SDL_VideoDevice *device;
     SDL_VideoData *data;
-    struct SDL_WaylandSeat *seat;
     struct wl_display *display = SDL_GetPointerProperty(SDL_GetGlobalProperties(),
                                                  SDL_PROP_GLOBAL_VIDEO_WAYLAND_WL_DISPLAY_POINTER, NULL);
     bool display_is_external = !!display;
@@ -549,24 +548,8 @@ static SDL_VideoDevice *Wayland_CreateDevice(bool require_preferred_protocols)
         return NULL;
     }
 
-    seat = SDL_calloc(1, sizeof(*seat));
-    if (!seat) {
-        SDL_free(data);
-        if (!display_is_external) {
-            WAYLAND_wl_display_disconnect(display);
-        }
-        SDL_WAYLAND_UnloadSymbols();
-        return NULL;
-    }
-
-    seat->display = data;
-    seat->pointer.sx_w = wl_fixed_from_int(0);
-    seat->pointer.sy_w = wl_fixed_from_int(0);
-    seat->keyboard.xkb.current_group = XKB_GROUP_INVALID;
-
     data->initializing = true;
     data->display = display;
-    data->seat = seat;
     data->display_externally_owned = display_is_external;
     data->scale_to_display_enabled = SDL_GetHintBoolean(SDL_HINT_VIDEO_WAYLAND_SCALE_TO_DISPLAY, false);
     WAYLAND_wl_list_init(&external_window_list);
@@ -574,7 +557,6 @@ static SDL_VideoDevice *Wayland_CreateDevice(bool require_preferred_protocols)
     // Initialize all variables that we clean on shutdown
     device = SDL_calloc(1, sizeof(SDL_VideoDevice));
     if (!device) {
-        SDL_free(seat);
         SDL_free(data);
         if (!display_is_external) {
             WAYLAND_wl_display_disconnect(display);
@@ -1264,8 +1246,8 @@ static void display_handle_global(void *data, struct wl_registry *registry, uint
     } else if (SDL_strcmp(interface, "wl_output") == 0) {
         Wayland_add_display(d, id, SDL_min(version, SDL_WL_OUTPUT_VERSION));
     } else if (SDL_strcmp(interface, "wl_seat") == 0) {
-        d->seat->wl_seat = wl_registry_bind(d->registry, id, &wl_seat_interface, SDL_min(SDL_WL_SEAT_VERSION, version));
-        Wayland_DisplayCreateSeat(d);
+        struct wl_seat *seat = wl_registry_bind(d->registry, id, &wl_seat_interface, SDL_min(SDL_WL_SEAT_VERSION, version));
+        Wayland_DisplayCreateSeat(d, seat);
     } else if (SDL_strcmp(interface, "xdg_wm_base") == 0) {
         d->shell.xdg = wl_registry_bind(d->registry, id, &xdg_wm_base_interface, SDL_min(version, 6));
         xdg_wm_base_add_listener(d->shell.xdg, &shell_listener_xdg, NULL);
@@ -1294,7 +1276,7 @@ static void display_handle_global(void *data, struct wl_registry *registry, uint
         d->decoration_manager = wl_registry_bind(d->registry, id, &zxdg_decoration_manager_v1_interface, 1);
     } else if (SDL_strcmp(interface, "zwp_tablet_manager_v2") == 0) {
         d->tablet_manager = wl_registry_bind(d->registry, id, &zwp_tablet_manager_v2_interface, 1);
-        Wayland_SeatInitTabletSupport(d->seat, d->tablet_manager);
+        Wayland_SeatInitTabletSupport(d->seat);
     } else if (SDL_strcmp(interface, "zxdg_output_manager_v1") == 0) {
         version = SDL_min(version, 3); // Versions 1 through 3 are supported.
         d->xdg_output_manager = wl_registry_bind(d->registry, id, &zxdg_output_manager_v1_interface, version);
