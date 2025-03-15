@@ -2488,35 +2488,33 @@ bool Wayland_SetWindowMouseRect(SDL_VideoDevice *_this, SDL_Window *window)
      * Just know that this call lets you confine with a rect, SetWindowGrab
      * lets you confine without a rect.
      */
+    return Wayland_SeatUpdateGrabs(data);
+#if 0
     if (SDL_RectEmpty(&window->mouse_rect) && !(window->flags & SDL_WINDOW_MOUSE_GRABBED)) {
-        return Wayland_input_unconfine_pointer(data->seat, window);
+        return Wayland_UnconfinePointerForWindow(data, window);
     } else {
-        return Wayland_input_confine_pointer(data->seat, window);
+        return Wayland_ConfinePointerForWindow(data, window);
     }
+#endif
 }
 
 bool Wayland_SetWindowMouseGrab(SDL_VideoDevice *_this, SDL_Window *window, bool grabbed)
 {
     SDL_VideoData *data = _this->internal;
-
-    if (grabbed) {
-        return Wayland_input_confine_pointer(data->seat, window);
-    } else if (SDL_RectEmpty(&window->mouse_rect)) {
-        return Wayland_input_unconfine_pointer(data->seat, window);
+    if (!data->pointer_constraints) {
+        return SDL_SetError("Failed to grab mouse: compositor lacks support for the required zwp_pointer_constraints_v1 protocol");
     }
-
+    Wayland_SeatUpdateGrabs(data);
     return true;
 }
 
 bool Wayland_SetWindowKeyboardGrab(SDL_VideoDevice *_this, SDL_Window *window, bool grabbed)
 {
     SDL_VideoData *data = _this->internal;
-
-    if (grabbed) {
-        return Wayland_input_grab_keyboard(window, data->seat);
-    } else {
-        return Wayland_input_ungrab_keyboard(window);
+    if (!data->key_inhibitor_manager) {
+        return SDL_SetError("Failed to grab keyboard: compositor lacks support for the required zwp_keyboard_shortcuts_inhibit_manager_v1 protocol");
     }
+    return Wayland_SeatUpdateGrabs(data);
 }
 
 bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_PropertiesID create_props)
@@ -2671,10 +2669,6 @@ bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
         }
     }
 #endif
-
-    if (c->relative_mouse_mode) {
-        Wayland_DisplayEnableRelativePointer(c->seat);
-    }
 
     // We may need to create an idle inhibitor for this new window
     Wayland_SuspendScreenSaver(_this);

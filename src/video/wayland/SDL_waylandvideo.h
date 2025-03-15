@@ -91,7 +91,7 @@ struct SDL_VideoData
     int output_count;
     int output_max;
 
-    int relative_mouse_mode;
+    bool relative_mouse_mode;
     bool display_externally_owned;
 
     bool scale_to_display_enabled;

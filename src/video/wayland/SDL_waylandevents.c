@@ -566,6 +566,7 @@ static void pointer_handle_enter(void *data, struct wl_pointer *pointer,
         seat->pointer.focus = window;
         seat->pointer.enter_serial = serial;
         SDL_SetMouseFocus(window->sdlwindow);
+        Wayland_SeatUpdateGrabs(seat->display);
         /* In the case of e.g. a pointer confine warp, we may receive an enter
          * event with no following motion event, but with the new coordinates
          * as part of the enter event.
@@ -1013,11 +1014,13 @@ static void relative_pointer_handle_relative_motion(void *data,
     SDL_VideoData *d = seat->display;
     SDL_WindowData *window = seat->pointer.focus;
     SDL_Mouse *mouse = SDL_GetMouse();
+    SDL_Window *keyboard_focus = SDL_GetKeyboardFocus();
 
     // Relative pointer event times are in microsecond granularity.
     const Uint64 timestamp = Wayland_GetEventTimestamp(SDL_US_TO_NS(((Uint64)time_hi << 32) | (Uint64)time_lo));
 
-    if (seat->pointer.focus && d->relative_mouse_mode) {
+    // Relative motion follows keyboard focus.
+    if (keyboard_focus && keyboard_focus->internal == seat->pointer.focus && d->relative_mouse_mode) {
         double dx;
         double dy;
         if (mouse->InputTransform || !mouse->enable_relative_system_scale) {
@@ -1050,58 +1053,6 @@ static const struct zwp_locked_pointer_v1_listener locked_pointer_listener = {
     locked_pointer_locked,
     locked_pointer_unlocked,
 };
-
-bool Wayland_input_lock_pointer(struct SDL_WaylandSeat *seat, SDL_Window *window)
-{
-    SDL_WindowData *w = window->internal;
-    SDL_VideoData *d = seat->display;
-
-    if (!d->pointer_constraints || !seat->pointer.wl_pointer) {
-        return false;
-    }
-
-    if (!w->locked_pointer) {
-        if (w->confined_pointer) {
-            // If the pointer is already confined to the surface, the lock will fail with a protocol error.
-            Wayland_input_unconfine_pointer(seat, window);
-        }
-
-        w->locked_pointer = zwp_pointer_constraints_v1_lock_pointer(d->pointer_constraints,
-                                                                    w->surface,
-                                                                    seat->pointer.wl_pointer,
-                                                                    NULL,
-                                                                    ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT);
-        zwp_locked_pointer_v1_add_listener(w->locked_pointer,
-                                           &locked_pointer_listener,
-                                           window);
-    }
-
-    return true;
-}
-
-bool Wayland_input_unlock_pointer(struct SDL_WaylandSeat *seat, SDL_Window *window)
-{
-    SDL_WindowData *w = window->internal;
-
-    if (w->locked_pointer) {
-        zwp_locked_pointer_v1_destroy(w->locked_pointer);
-        w->locked_pointer = NULL;
-    }
-
-    // Restore existing pointer confinement.
-    Wayland_input_confine_pointer(seat, window);
-
-    return true;
-}
-
-static void pointer_confine_destroy(SDL_Window *window)
-{
-    SDL_WindowData *w = window->internal;
-    if (w->confined_pointer) {
-        zwp_confined_pointer_v1_destroy(w->confined_pointer);
-        w->confined_pointer = NULL;
-    }
-}
 
 static void confined_pointer_confined(void *data,
                                       struct zwp_confined_pointer_v1 *confined_pointer)
@@ -1259,16 +1210,16 @@ static const struct wl_touch_listener touch_listener = {
     NULL, // orientation
 };
 
-typedef struct Wayland_Keymap
+typedef struct Wayland_KeymapBuilderState
 {
     SDL_Keymap *keymap;
     struct xkb_state *state;
     SDL_Keymod modstate;
-} Wayland_Keymap;
+} Wayland_KeymapBuilderState;
 
 static void Wayland_keymap_iter(struct xkb_keymap *keymap, xkb_keycode_t key, void *data)
 {
-    Wayland_Keymap *sdlKeymap = (Wayland_Keymap *)data;
+    Wayland_KeymapBuilderState *sdlKeymap = (Wayland_KeymapBuilderState *)data;
     const xkb_keysym_t *syms;
     const SDL_Scancode scancode = SDL_GetScancodeFromTable(SDL_SCANCODE_TABLE_XFREE86_2, (key - 8));
     if (scancode == SDL_SCANCODE_UNKNOWN) {
@@ -1328,10 +1279,10 @@ static void Wayland_UpdateKeymap(struct SDL_WaylandSeat *seat)
     };
 
     if (!seat->keyboard.is_virtual) {
-        Wayland_Keymap keymap;
+        Wayland_KeymapBuilderState keymap;
 
-        keymap.keymap = SDL_CreateKeymap();
-        if (!keymap.keymap) {
+        keymap.keymap = seat->keyboard.sdl_keymap = SDL_CreateKeymap();
+        if (!seat->keyboard.sdl_keymap) {
             return;
         }
 
@@ -1715,10 +1666,10 @@ static void keyboard_handle_enter(void *data, struct wl_keyboard *keyboard,
     }
 
     seat->keyboard.focus = window;
-    window->keyboard_device = seat;
 
     // Restore the keyboard focus to the child popup that was holding it
     SDL_SetKeyboardFocus(window->keyboard_focus ? window->keyboard_focus : window->sdlwindow);
+    Wayland_SeatUpdateGrabs(seat->display);
 
 #ifdef SDL_USE_IME
     if (!seat->text_input) {
@@ -1769,15 +1720,14 @@ static void keyboard_handle_leave(void *data, struct wl_keyboard *keyboard,
         return;
     }
 
-    wind->keyboard_device = NULL;
     window = wind->sdlwindow;
 
     // Stop key repeat before clearing keyboard focus
     keyboard_repeat_clear(&seat->keyboard.repeat);
 
     // This will release any keys still pressed
-    SDL_SetKeyboardFocus(NULL);
     seat->keyboard.focus = NULL;
+    SDL_SetKeyboardFocus(NULL);
 
     // Clear the pressed modifiers.
     seat->keyboard.pressed_modifiers = SDL_KMOD_NONE;
@@ -1798,11 +1748,10 @@ static void keyboard_handle_leave(void *data, struct wl_keyboard *keyboard,
 
 static bool keyboard_input_get_text(char text[8], const struct SDL_WaylandSeat *seat, uint32_t key, bool down, bool *handled_by_ime)
 {
-    SDL_WindowData *window = seat->keyboard.focus;
     const xkb_keysym_t *syms;
     xkb_keysym_t sym;
 
-    if (!window || window->keyboard_device != seat || !seat->keyboard.xkb.state) {
+    if (!seat->keyboard.focus || !seat->keyboard.xkb.state) {
         return false;
     }
 
@@ -1954,11 +1903,9 @@ static const struct wl_keyboard_listener keyboard_listener = {
     keyboard_handle_repeat_info, // Version 4
 };
 
-void Wayland_input_init_relative_pointer(SDL_VideoData *d)
+static void Wayland_SeatInitRelativePointer(struct SDL_WaylandSeat *seat)
 {
-    struct SDL_WaylandSeat *seat = d->seat;
-
-    if (!d->relative_pointer_manager) {
+    if (!seat || !seat->display->relative_pointer_manager) {
         return;
     }
 
@@ -1970,8 +1917,21 @@ void Wayland_input_init_relative_pointer(SDL_VideoData *d)
     }
 }
 
-static void Wayland_DestroySeatPointer(struct SDL_WaylandSeat *seat)
+void Wayland_DisplayInitRelativePointerManager(SDL_VideoData *display)
 {
+    Wayland_SeatInitRelativePointer(display->seat);
+}
+
+static void Wayland_SeatDestroyPointer(struct SDL_WaylandSeat *seat)
+{
+    if (seat->pointer.confined_pointer) {
+        zwp_confined_pointer_v1_destroy(seat->pointer.confined_pointer);
+    }
+
+    if (seat->pointer.locked_pointer) {
+        zwp_locked_pointer_v1_destroy(seat->pointer.locked_pointer);
+    }
+
     if (seat->pointer.relative_pointer) {
         zwp_relative_pointer_v1_destroy(seat->pointer.relative_pointer);
     }
@@ -2007,8 +1967,16 @@ static void Wayland_DestroySeatPointer(struct SDL_WaylandSeat *seat)
     SDL_zero(seat->pointer);
 }
 
-static void Wayland_DestroySeatKeyboard(struct SDL_WaylandSeat *seat)
+static void Wayland_SeatDestroyKeyboard(struct SDL_WaylandSeat *seat)
 {
+    if (seat->keyboard.sdl_keymap) {
+        SDL_SetKeymap(NULL, false);
+    }
+
+    if (seat->keyboard.key_inhibitor) {
+        zwp_keyboard_shortcuts_inhibitor_v1_destroy(seat->keyboard.key_inhibitor);
+    }
+
     if (seat->keyboard.timestamps) {
         zwp_input_timestamps_v1_destroy(seat->pointer.timestamps);
     }
@@ -2040,7 +2008,7 @@ static void Wayland_DestroySeatKeyboard(struct SDL_WaylandSeat *seat)
     SDL_zero(seat->keyboard);
 }
 
-static void Wayland_DestroySeatTouch(struct SDL_WaylandSeat *seat)
+static void Wayland_SeatDestroyTouch(struct SDL_WaylandSeat *seat)
 {
     struct SDL_WaylandTouchPoint *tp, *tmp;
 
@@ -2078,13 +2046,13 @@ static void seat_handle_capabilities(void *data, struct wl_seat *wl_seat, enum w
         wl_pointer_set_user_data(seat->pointer.wl_pointer, seat);
         wl_pointer_add_listener(seat->pointer.wl_pointer, &pointer_listener, seat);
 
-        Wayland_input_init_relative_pointer(seat->display);
+        Wayland_SeatInitRelativePointer(seat);
 
         seat->pointer.sdl_id = SDL_GetNextObjectID();
         SDL_AddMouse(seat->pointer.sdl_id, WAYLAND_DEFAULT_POINTER_NAME, !seat->display->initializing);
     } else if (!(capabilities & WL_SEAT_CAPABILITY_POINTER) && seat->pointer.wl_pointer) {
         SDL_RemoveMouse(seat->pointer.sdl_id, true);
-        Wayland_DestroySeatPointer(seat);
+        Wayland_SeatDestroyPointer(seat);
     }
 
     if ((capabilities & WL_SEAT_CAPABILITY_TOUCH) && !seat->touch.wl_touch) {
@@ -2095,7 +2063,7 @@ static void seat_handle_capabilities(void *data, struct wl_seat *wl_seat, enum w
                               seat);
     } else if (!(capabilities & WL_SEAT_CAPABILITY_TOUCH) && seat->touch.wl_touch) {
         SDL_DelTouch((SDL_TouchID)(uintptr_t)seat->touch.wl_touch);
-        Wayland_DestroySeatTouch(seat);
+        Wayland_SeatDestroyTouch(seat);
     }
 
     if ((capabilities & WL_SEAT_CAPABILITY_KEYBOARD) && !seat->keyboard.wl_keyboard) {
@@ -2108,7 +2076,7 @@ static void seat_handle_capabilities(void *data, struct wl_seat *wl_seat, enum w
         SDL_AddKeyboard(seat->keyboard.sdl_id, WAYLAND_DEFAULT_KEYBOARD_NAME, !seat->display->initializing);
     } else if (!(capabilities & WL_SEAT_CAPABILITY_KEYBOARD) && seat->keyboard.wl_keyboard) {
         SDL_RemoveKeyboard(seat->keyboard.sdl_id, true);
-        Wayland_DestroySeatKeyboard(seat);
+        Wayland_SeatDestroyKeyboard(seat);
     }
 
     Wayland_RegisterTimestampListeners(seat);
@@ -2726,7 +2694,7 @@ static const struct zwp_text_input_v3_listener text_input_listener = {
     text_input_done
 };
 
-void Wayland_create_data_device(SDL_VideoData *d)
+void Wayland_DisplayCreateDataDevice(SDL_VideoData *d)
 {
     SDL_WaylandDataDevice *data_device = NULL;
 
@@ -2754,7 +2722,7 @@ void Wayland_create_data_device(SDL_VideoData *d)
     }
 }
 
-void Wayland_create_primary_selection_device(SDL_VideoData *d)
+void Wayland_DisplayCreatePrimarySelectionDevice(SDL_VideoData *d)
 {
     SDL_WaylandPrimarySelectionDevice *primary_selection_device = NULL;
 
@@ -2783,11 +2751,11 @@ void Wayland_create_primary_selection_device(SDL_VideoData *d)
     }
 }
 
-static void Wayland_create_text_input(SDL_VideoData *d)
+static void Wayland_SeatCreateTextInput(struct SDL_WaylandSeat *seat)
 {
     SDL_WaylandTextInput *text_input = NULL;
 
-    if (!d->seat->wl_seat) {
+    if (!seat || !seat->wl_seat) {
         // No seat yet, will be initialized later.
         return;
     }
@@ -2798,7 +2766,7 @@ static void Wayland_create_text_input(SDL_VideoData *d)
     }
 
     text_input->text_input = zwp_text_input_manager_v3_get_text_input(
-        d->text_input_manager, d->seat->wl_seat);
+        seat->display->text_input_manager, seat->wl_seat);
 
     if (!text_input->text_input) {
         SDL_free(text_input);
@@ -2806,11 +2774,11 @@ static void Wayland_create_text_input(SDL_VideoData *d)
         zwp_text_input_v3_set_user_data(text_input->text_input, text_input);
         zwp_text_input_v3_add_listener(text_input->text_input,
                                        &text_input_listener, text_input);
-        d->seat->text_input = text_input;
+        seat->text_input = text_input;
     }
 }
 
-void Wayland_create_text_input_manager(SDL_VideoData *d, uint32_t id)
+void Wayland_DisplayCreateTextInputManager(SDL_VideoData *d, uint32_t id)
 {
 #ifdef HAVE_FCITX
     const char *im_module = SDL_getenv("SDL_IM_MODULE");
@@ -2825,7 +2793,7 @@ void Wayland_create_text_input_manager(SDL_VideoData *d, uint32_t id)
 #endif
 
     d->text_input_manager = wl_registry_bind(d->registry, id, &zwp_text_input_manager_v3_interface, 1);
-    Wayland_create_text_input(d);
+    Wayland_SeatCreateTextInput(d->seat);
 }
 
 // Pen/Tablet support...
@@ -3132,7 +3100,7 @@ static const struct zwp_tablet_seat_v2_listener tablet_seat_listener = {
     tablet_seat_handle_pad_added
 };
 
-void Wayland_input_init_tablet_support(struct SDL_WaylandSeat *seat, struct zwp_tablet_manager_v2 *tablet_manager)
+void Wayland_SeatInitTabletSupport(struct SDL_WaylandSeat *seat, struct zwp_tablet_manager_v2 *tablet_manager)
 {
     if (!tablet_manager || !seat->wl_seat) {
         return;
@@ -3149,7 +3117,7 @@ static void Wayland_remove_all_pens_callback(SDL_PenID instance_id, void *handle
     SDL_free(sdltool);
 }
 
-void Wayland_input_quit_tablet_support(struct SDL_WaylandSeat *seat)
+void Wayland_SeatQuitTabletSupport(struct SDL_WaylandSeat *seat)
 {
     SDL_RemoveAllPenDevices(Wayland_remove_all_pens_callback, NULL);
 
@@ -3159,35 +3127,35 @@ void Wayland_input_quit_tablet_support(struct SDL_WaylandSeat *seat)
     }
 }
 
-void Wayland_DisplayCreateSeat(SDL_VideoData *d)
+void Wayland_DisplayCreateSeat(SDL_VideoData *display)
 {
-    struct SDL_WaylandSeat *seat = d->seat;
+    struct SDL_WaylandSeat *seat = display->seat;
 
     WAYLAND_wl_list_init(&seat->touch.points);
 
-    if (d->data_device_manager) {
-        Wayland_create_data_device(d);
+    if (display->data_device_manager) {
+        Wayland_DisplayCreateDataDevice(display);
     }
-    if (d->primary_selection_device_manager) {
-        Wayland_create_primary_selection_device(d);
+    if (display->primary_selection_device_manager) {
+        Wayland_DisplayCreatePrimarySelectionDevice(display);
     }
-    if (d->text_input_manager) {
-        Wayland_create_text_input(d);
+    if (display->text_input_manager) {
+        Wayland_SeatCreateTextInput(seat);
     }
 
     wl_seat_add_listener(seat->wl_seat, &seat_listener, seat);
     wl_seat_set_user_data(seat->wl_seat, seat);
 
-    if (d->tablet_manager) {
-        Wayland_input_init_tablet_support(d->seat, d->tablet_manager);
+    if (display->tablet_manager) {
+        Wayland_SeatInitTabletSupport(display->seat, display->tablet_manager);
     }
 
-    WAYLAND_wl_display_flush(d->display);
+    WAYLAND_wl_display_flush(display->display);
 }
 
-void Wayland_DisplayDestroySeat(SDL_VideoData *d)
+void Wayland_DisplayDestroySeat(SDL_VideoData *display)
 {
-    struct SDL_WaylandSeat *seat = d->seat;
+    struct SDL_WaylandSeat *seat = display->seat;
 
     if (seat->data_device) {
         Wayland_data_device_clear_selection(seat->data_device);
@@ -3225,12 +3193,12 @@ void Wayland_DisplayDestroySeat(SDL_VideoData *d)
         SDL_free(seat->text_input);
     }
 
-    Wayland_DestroySeatKeyboard(seat);
-    Wayland_DestroySeatPointer(seat);
-    Wayland_DestroySeatTouch(seat);
+    Wayland_SeatDestroyKeyboard(seat);
+    Wayland_SeatDestroyPointer(seat);
+    Wayland_SeatDestroyTouch(seat);
 
     if (seat->tablet.wl_tablet_seat) {
-        Wayland_input_quit_tablet_support(seat);
+        Wayland_SeatQuitTabletSupport(seat);
     }
 
     if (seat->wl_seat) {
@@ -3242,161 +3210,113 @@ void Wayland_DisplayDestroySeat(SDL_VideoData *d)
     }
 
     SDL_free(seat);
-    d->seat = NULL;
-}
-
-bool Wayland_DisplayEnableRelativePointer(struct SDL_VideoData *display)
-{
-    SDL_VideoDevice *vd = SDL_GetVideoDevice();
-    SDL_Window *window;
-
-    if (!display->relative_pointer_manager) {
-        return false;
-    }
-
-    if (!display->pointer_constraints) {
-        return false;
-    }
-
-    if (!display->seat->pointer.wl_pointer) {
-        return false;
-    }
-
-    /* If we have a pointer confine active, we must destroy it here because
-     * creating a locked pointer otherwise would be a protocol error.
-     */
-    for (window = vd->windows; window; window = window->next) {
-        pointer_confine_destroy(window);
-    }
-
-    for (window = vd->windows; window; window = window->next) {
-        Wayland_input_lock_pointer(display->seat, window);
-    }
-
-    display->relative_mouse_mode = 1;
-
-    return true;
+    display->seat = NULL;
 }
 
 bool Wayland_DisplayDisableRelativePointer(struct SDL_VideoData *display)
 {
+    display->relative_mouse_mode = false;
+    Wayland_SeatUpdateGrabs(display);
+    return true;
+}
+
+bool Wayland_SeatUpdateGrabs(SDL_VideoData *display)
+{
     SDL_VideoDevice *vd = SDL_GetVideoDevice();
-    SDL_Window *window;
 
-    for (window = vd->windows; window; window = window->next) {
-        Wayland_input_unlock_pointer(display->seat, window);
+    if (display->key_inhibitor_manager) {
+        if (display->seat->keyboard.key_inhibitor) {
+            zwp_keyboard_shortcuts_inhibitor_v1_destroy(display->seat->keyboard.key_inhibitor);
+            display->seat->keyboard.key_inhibitor = NULL;
+        }
+
+        if (vd->grabbed_window && vd->grabbed_window->internal == display->seat->keyboard.focus) {
+            SDL_Window *window = vd->grabbed_window;
+            SDL_WindowData *wind = window->internal;
+
+            // Don't grab the keyboard if it shouldn't be grabbed.
+            if (window->flags & SDL_WINDOW_KEYBOARD_GRABBED) {
+                display->seat->keyboard.key_inhibitor =
+                    zwp_keyboard_shortcuts_inhibit_manager_v1_inhibit_shortcuts(display->key_inhibitor_manager, wind->surface,
+                                                                                display->seat->wl_seat);
+            }
+        }
     }
 
-    display->relative_mouse_mode = 0;
+    if (display->pointer_constraints) {
+        struct wl_region *confine_rect;
 
-    for (window = vd->windows; window; window = window->next) {
-        Wayland_input_confine_pointer(display->seat, window);
-    }
+        /* A confine or lock may already be active, in which case we should destroy it and
+         * create a new one.
+         */
+        if (display->seat->pointer.confined_pointer) {
+            zwp_confined_pointer_v1_destroy(display->seat->pointer.confined_pointer);
+            display->seat->pointer.confined_pointer = NULL;
+        }
 
-    return true;
-}
+        if (display->seat->pointer.locked_pointer) {
+            zwp_locked_pointer_v1_destroy(display->seat->pointer.locked_pointer);
+            display->seat->pointer.locked_pointer = NULL;
+        }
 
-bool Wayland_input_confine_pointer(struct SDL_WaylandSeat *seat, SDL_Window *window)
-{
-    SDL_WindowData *w = window->internal;
-    SDL_VideoData *d = seat->display;
-    struct wl_region *confine_rect;
+        /* We cannot create a confine if the pointer is already locked. Defer until
+         * the pointer is unlocked.
+         */
+        if (display->relative_mouse_mode) {
+            SDL_Window *keyboard_focus = SDL_GetKeyboardFocus();
+            if (!display->seat->pointer.locked_pointer && keyboard_focus && keyboard_focus->internal == display->seat->pointer.focus) {
+                display->seat->pointer.locked_pointer = zwp_pointer_constraints_v1_lock_pointer(display->pointer_constraints,
+                                                                                                display->seat->pointer.focus->surface,
+                                                                                                display->seat->pointer.wl_pointer, NULL,
+                                                                                                ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT);
+                zwp_locked_pointer_v1_add_listener(display->seat->pointer.locked_pointer, &locked_pointer_listener, display->seat);
+            }
+            return true;
+        }
 
-    if (!d->pointer_constraints) {
-        return SDL_SetError("Failed to confine pointer: compositor lacks support for the required zwp_pointer_constraints_v1 protocol");
-    }
+        // Only confine if the pointer is in the window that SDL wants grabbed.
+        if (!vd->grabbed_window || vd->grabbed_window->internal != display->seat->pointer.focus) {
+            return true;
+        }
 
-    if (!seat->pointer.wl_pointer) {
-        return SDL_SetError("No pointer to confine");
-    }
+        SDL_Window *window = vd->grabbed_window;
+        SDL_WindowData *w = window->internal;
 
-    /* A confine may already be active, in which case we should destroy it and
-     * create a new one.
-     */
-    pointer_confine_destroy(window);
+        // Don't confine the pointer if it shouldn't be confined.
+        if (SDL_RectEmpty(&window->mouse_rect) && !(window->flags & SDL_WINDOW_MOUSE_GRABBED)) {
+            return true;
+        }
 
-    /* We cannot create a confine if the pointer is already locked. Defer until
-     * the pointer is unlocked.
-     */
-    if (d->relative_mouse_mode) {
-        return true;
-    }
+        if (SDL_RectEmpty(&window->mouse_rect)) {
+            confine_rect = NULL;
+        } else {
+            SDL_Rect scaled_mouse_rect;
 
-    // Don't confine the pointer if it shouldn't be confined.
-    if (SDL_RectEmpty(&window->mouse_rect) && !(window->flags & SDL_WINDOW_MOUSE_GRABBED)) {
-        return true;
-    }
+            scaled_mouse_rect.x = (int)SDL_floor(window->mouse_rect.x / w->pointer_scale.x);
+            scaled_mouse_rect.y = (int)SDL_floor(window->mouse_rect.y / w->pointer_scale.y);
+            scaled_mouse_rect.w = (int)SDL_ceil(window->mouse_rect.w / w->pointer_scale.x);
+            scaled_mouse_rect.h = (int)SDL_ceil(window->mouse_rect.h / w->pointer_scale.y);
 
-    if (SDL_RectEmpty(&window->mouse_rect)) {
-        confine_rect = NULL;
-    } else {
-        SDL_Rect scaled_mouse_rect;
+            confine_rect = wl_compositor_create_region(display->compositor);
+            wl_region_add(confine_rect,
+                          scaled_mouse_rect.x,
+                          scaled_mouse_rect.y,
+                          scaled_mouse_rect.w,
+                          scaled_mouse_rect.h);
+        }
 
-        scaled_mouse_rect.x = (int)SDL_floor(window->mouse_rect.x / w->pointer_scale.x);
-        scaled_mouse_rect.y = (int)SDL_floor(window->mouse_rect.y / w->pointer_scale.y);
-        scaled_mouse_rect.w = (int)SDL_ceil(window->mouse_rect.w / w->pointer_scale.x);
-        scaled_mouse_rect.h = (int)SDL_ceil(window->mouse_rect.h / w->pointer_scale.y);
+        display->seat->pointer.confined_pointer = zwp_pointer_constraints_v1_confine_pointer(display->pointer_constraints,
+                                                                                             w->surface,
+                                                                                             display->seat->pointer.wl_pointer,
+                                                                                             confine_rect,
+                                                                                             ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT);
+        zwp_confined_pointer_v1_add_listener(display->seat->pointer.confined_pointer,
+                                             &confined_pointer_listener,
+                                             window);
 
-        confine_rect = wl_compositor_create_region(d->compositor);
-        wl_region_add(confine_rect,
-                      scaled_mouse_rect.x,
-                      scaled_mouse_rect.y,
-                      scaled_mouse_rect.w,
-                      scaled_mouse_rect.h);
-    }
-
-    struct zwp_confined_pointer_v1 *confined_pointer =
-        zwp_pointer_constraints_v1_confine_pointer(d->pointer_constraints,
-                                                   w->surface,
-                                                   seat->pointer.wl_pointer,
-                                                   confine_rect,
-                                                   ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT);
-    zwp_confined_pointer_v1_add_listener(confined_pointer,
-                                         &confined_pointer_listener,
-                                         window);
-
-    if (confine_rect) {
-        wl_region_destroy(confine_rect);
-    }
-
-    w->confined_pointer = confined_pointer;
-    return true;
-}
-
-bool Wayland_input_unconfine_pointer(struct SDL_WaylandSeat *seat, SDL_Window *window)
-{
-    pointer_confine_destroy(window);
-    return true;
-}
-
-bool Wayland_input_grab_keyboard(SDL_Window *window, struct SDL_WaylandSeat *seat)
-{
-    SDL_WindowData *w = window->internal;
-    SDL_VideoData *d = seat->display;
-
-    if (!d->key_inhibitor_manager) {
-        return SDL_SetError("Failed to grab keyboard: compositor lacks support for the required zwp_keyboard_shortcuts_inhibit_manager_v1 protocol");
-    }
-
-    if (w->key_inhibitor) {
-        return true;
-    }
-
-    w->key_inhibitor =
-        zwp_keyboard_shortcuts_inhibit_manager_v1_inhibit_shortcuts(d->key_inhibitor_manager,
-                                                                    w->surface,
-                                                                    seat->wl_seat);
-
-    return true;
-}
-
-bool Wayland_input_ungrab_keyboard(SDL_Window *window)
-{
-    SDL_WindowData *w = window->internal;
-
-    if (w->key_inhibitor) {
-        zwp_keyboard_shortcuts_inhibitor_v1_destroy(w->key_inhibitor);
-        w->key_inhibitor = NULL;
+        if (confine_rect) {
+            wl_region_destroy(confine_rect);
+        }
     }
 
     return true;

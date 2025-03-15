@@ -812,33 +812,40 @@ static bool Wayland_WarpMouse(SDL_Window *window, float x, float y)
     SDL_VideoDevice *vd = SDL_GetVideoDevice();
     SDL_VideoData *d = vd->internal;
     SDL_WindowData *wind = window->internal;
-    struct SDL_WaylandSeat *seat = d->seat;
 
     if (d->pointer_constraints) {
-        const bool toggle_lock = !wind->locked_pointer;
+        if (d->seat->pointer.wl_pointer && d->seat->pointer.focus == window->internal) {
+            bool toggle_lock = !d->seat->pointer.locked_pointer;
 
-        /* The pointer confinement protocol allows setting a hint to warp the pointer,
-         * but only when the pointer is locked.
-         *
-         * Lock the pointer, set the position hint, unlock, and hope for the best.
-         */
-        if (toggle_lock) {
-            Wayland_input_lock_pointer(seat, window);
-        }
-        if (wind->locked_pointer) {
+            /* The pointer confinement protocol allows setting a hint to warp the pointer,
+             * but only when the pointer is locked.
+             *
+             * Lock the pointer, set the position hint, unlock, and hope for the best.
+             */
+            if (toggle_lock) {
+                if (d->seat->pointer.confined_pointer) {
+                    zwp_confined_pointer_v1_destroy(d->seat->pointer.confined_pointer);
+                    d->seat->pointer.confined_pointer = NULL;
+                }
+                d->seat->pointer.locked_pointer = zwp_pointer_constraints_v1_lock_pointer(d->pointer_constraints, wind->surface,
+                                                                                          d->seat->pointer.wl_pointer, NULL,
+                                                                                          ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_ONESHOT);
+            }
+
             const wl_fixed_t f_x = wl_fixed_from_double(x / wind->pointer_scale.x);
             const wl_fixed_t f_y = wl_fixed_from_double(y / wind->pointer_scale.y);
-            zwp_locked_pointer_v1_set_cursor_position_hint(wind->locked_pointer, f_x, f_y);
+            zwp_locked_pointer_v1_set_cursor_position_hint(d->seat->pointer.locked_pointer, f_x, f_y);
             wl_surface_commit(wind->surface);
-        }
-        if (toggle_lock) {
-            Wayland_input_unlock_pointer(seat, window);
-        }
 
-        /* NOTE: There is a pending warp event under discussion that should replace this when available.
-         * https://gitlab.freedesktop.org/wayland/wayland/-/merge_requests/340
-         */
-        SDL_SendMouseMotion(0, window, SDL_GLOBAL_MOUSE_ID, false, x, y);
+            if (toggle_lock) {
+                Wayland_SeatUpdateGrabs(d);
+            }
+
+            /* NOTE: There is a pending warp event under discussion that should replace this when available.
+             * https://gitlab.freedesktop.org/wayland/wayland/-/merge_requests/340
+             */
+            SDL_SendMouseMotion(0, window, SDL_GLOBAL_MOUSE_ID, false, x, y);
+        }
     } else {
         return SDL_SetError("wayland: mouse warp failed; compositor lacks support for the required zwp_pointer_confinement_v1 protocol");
     }
@@ -867,11 +874,16 @@ static bool Wayland_SetRelativeMouseMode(bool enabled)
     SDL_VideoDevice *vd = SDL_GetVideoDevice();
     SDL_VideoData *data = vd->internal;
 
-    if (enabled) {
-        return Wayland_DisplayEnableRelativePointer(data->seat);
-    } else {
-        return Wayland_DisplayDisableRelativePointer(data->seat);
+    // Relative mode requires both the relative motion and pointer confinement protocols.
+    if (!data->relative_pointer_manager) {
+        return SDL_SetError("Failed to enable relative mode: compositor lacks support for the required zwp_relative_pointer_manager_v1 protocol");
     }
+    if (!data->pointer_constraints) {
+        return SDL_SetError("Failed to enable relative mode: compositor lacks support for the required zwp_pointer_constraints_v1 protocol");
+    }
+
+    data->relative_mouse_mode = enabled;
+    return Wayland_SeatUpdateGrabs(data);
 }
 
 /* Wayland doesn't support getting the true global cursor position, but it can
