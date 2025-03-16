@@ -63,9 +63,10 @@ struct SDL_WaylandSeat
     SDL_WaylandDataDevice *data_device;
     SDL_WaylandPrimarySelectionDevice *primary_selection_device;
     SDL_WaylandTextInput *text_input;
+    struct wl_list link;
 
-    // The serial of the last implicit grab event for window activation and selection data.
-    Uint32 last_implicit_grab_serial;
+    Uint32 last_implicit_grab_serial; // The serial of the last implicit grab event for window activation and selection data.
+    Uint32 registry_id;                        // The ID of the Wayland seat object,
 
     struct
     {
@@ -187,18 +188,18 @@ extern void Wayland_DisplayCreatePrimarySelectionDevice(SDL_VideoData *d);
 
 extern void Wayland_DisplayCreateTextInputManager(SDL_VideoData *d, uint32_t id);
 
-extern void Wayland_DisplayCreateSeat(SDL_VideoData *display, struct wl_seat *wl_seat);
-extern void Wayland_DisplayDestroySeat(SDL_VideoData *display);
+extern void Wayland_DisplayCreateSeat(SDL_VideoData *display, struct wl_seat *wl_seat, Uint32 id);
+extern void Wayland_SeatDestroy(struct SDL_WaylandSeat *seat);
 
 extern bool Wayland_SeatUpdateGrabs(SDL_VideoData *display);
 
 extern void Wayland_DisplayInitRelativePointerManager(SDL_VideoData *d);
 
-extern void Wayland_SeatInitTabletSupport(struct SDL_WaylandSeat *seat);
+extern void Wayland_DisplayInitTabletManager(SDL_VideoData *display);
 extern void Wayland_SeatQuitTabletSupport(struct SDL_WaylandSeat *seat);
 
-extern void Wayland_RegisterTimestampListeners(struct SDL_WaylandSeat *seat);
-extern void Wayland_CreateCursorShapeDevice(struct SDL_WaylandSeat *seat);
+extern void Wayland_RegisterTimestampListeners(SDL_VideoData *display);
+extern void Wayland_DisplayInitCursorShapeManager(SDL_VideoData *display);
 
 /* The implicit grab serial needs to be updated on:
  * - Keyboard key down/up
@@ -207,6 +208,6 @@ extern void Wayland_CreateCursorShapeDevice(struct SDL_WaylandSeat *seat);
  * - Tablet tool down
  * - Tablet tool button down/up
  */
-extern void Wayland_UpdateImplicitGrabSerial(struct SDL_WaylandSeat *seat, Uint32 serial);
+extern void Wayland_UpdateImplicitGrabSerial(struct SDL_WaylandSeat *seat, Uint32 serial, bool is_pointer);
 
 #endif // SDL_waylandevents_h_

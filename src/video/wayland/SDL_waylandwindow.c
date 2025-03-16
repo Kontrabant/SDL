@@ -2216,7 +2216,7 @@ static const struct xdg_activation_token_v1_listener activation_listener_xdg = {
  */
 static void Wayland_activate_window(SDL_VideoData *data, SDL_WindowData *target_wind, bool set_serial)
 {
-    struct SDL_WaylandSeat * input = data->seat;
+    struct SDL_WaylandSeat *seat = data->last_implicit_grab_seat;
     SDL_Window *focus = SDL_GetKeyboardFocus();
     struct wl_surface *requesting_surface = focus ? focus->internal->surface : NULL;
 
@@ -2242,8 +2242,8 @@ static void Wayland_activate_window(SDL_VideoData *data, SDL_WindowData *target_
             // This specifies the surface from which the activation request is originating, not the activation target surface.
             xdg_activation_token_v1_set_surface(target_wind->activation_token, requesting_surface);
         }
-        if (set_serial && input && input->wl_seat) {
-            xdg_activation_token_v1_set_serial(target_wind->activation_token, input->last_implicit_grab_serial, input->wl_seat);
+        if (set_serial && seat && seat->wl_seat) {
+            xdg_activation_token_v1_set_serial(target_wind->activation_token, seat->last_implicit_grab_serial, seat->wl_seat);
         }
         xdg_activation_token_v1_commit(target_wind->activation_token);
     }
@@ -2514,7 +2514,8 @@ bool Wayland_SetWindowKeyboardGrab(SDL_VideoDevice *_this, SDL_Window *window, b
     if (!data->key_inhibitor_manager) {
         return SDL_SetError("Failed to grab keyboard: compositor lacks support for the required zwp_keyboard_shortcuts_inhibit_manager_v1 protocol");
     }
-    return Wayland_SeatUpdateGrabs(data);
+    Wayland_SeatUpdateGrabs(data);
+    return true;
 }
 
 bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_PropertiesID create_props)
@@ -2971,6 +2972,11 @@ bool Wayland_SyncWindow(SDL_VideoDevice *_this, SDL_Window *window)
 void Wayland_ShowWindowSystemMenu(SDL_Window *window, int x, int y)
 {
     SDL_WindowData *wind = window->internal;
+    struct SDL_WaylandSeat *seat = wind->waylandData->last_implicit_grab_seat;
+
+    if (!seat) {
+        return;
+    }
 
     if (wind->scale_to_display) {
         x = PixelToPoint(window, x);
@@ -2980,13 +2986,13 @@ void Wayland_ShowWindowSystemMenu(SDL_Window *window, int x, int y)
 #ifdef HAVE_LIBDECOR_H
     if (wind->shell_surface_type == WAYLAND_SHELL_SURFACE_TYPE_LIBDECOR) {
         if (wind->shell_surface.libdecor.frame) {
-            libdecor_frame_show_window_menu(wind->shell_surface.libdecor.frame, wind->waylandData->seat->wl_seat, wind->waylandData->seat->last_implicit_grab_serial, x, y);
+            libdecor_frame_show_window_menu(wind->shell_surface.libdecor.frame, seat->wl_seat, seat->last_implicit_grab_serial, x, y);
         }
     } else
 #endif
     if (wind->shell_surface_type == WAYLAND_SHELL_SURFACE_TYPE_XDG_TOPLEVEL) {
         if (wind->shell_surface.xdg.toplevel.xdg_toplevel) {
-            xdg_toplevel_show_window_menu(wind->shell_surface.xdg.toplevel.xdg_toplevel, wind->waylandData->seat->wl_seat, wind->waylandData->seat->last_implicit_grab_serial, x, y);
+            xdg_toplevel_show_window_menu(wind->shell_surface.xdg.toplevel.xdg_toplevel, seat->wl_seat, seat->last_implicit_grab_serial, x, y);
         }
     }
 }

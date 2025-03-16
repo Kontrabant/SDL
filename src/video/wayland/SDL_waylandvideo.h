@@ -86,7 +86,8 @@ struct SDL_VideoData
     struct zwp_tablet_manager_v2 *tablet_manager;
 
     struct xkb_context *xkb_context;
-    struct SDL_WaylandSeat *seat;
+    struct wl_list seat_list;
+    struct SDL_WaylandSeat *last_implicit_grab_seat;
     SDL_DisplayData **output_list;
     int output_count;
     int output_max;
@@ -131,6 +132,8 @@ extern bool SDL_WAYLAND_own_output(struct wl_output *output);
 extern SDL_WindowData *Wayland_GetWindowDataForOwnedSurface(struct wl_surface *surface);
 void Wayland_AddWindowDataToExternalList(SDL_WindowData *data);
 void Wayland_RemoveWindowDataFromExternalList(SDL_WindowData *data);
+
+struct SDL_WaylandSeat *Wayland_DisplayGetPrimarySeat(SDL_VideoData *display);
 
 extern bool Wayland_LoadLibdecor(SDL_VideoData *data, bool ignore_xdg);
 
