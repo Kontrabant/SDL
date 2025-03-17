@@ -1291,8 +1291,8 @@ static void Wayland_UpdateKeymap(struct SDL_WaylandSeat *seat)
     if (!seat->keyboard.is_virtual) {
         Wayland_KeymapBuilderState keymap;
 
-        keymap.keymap = seat->keyboard.sdl_keymap = SDL_CreateKeymap();
-        if (!seat->keyboard.sdl_keymap) {
+        keymap.keymap = SDL_CreateKeymap(false);
+        if (!keymap.keymap) {
             return;
         }
 
@@ -1315,9 +1315,13 @@ static void Wayland_UpdateKeymap(struct SDL_WaylandSeat *seat)
 
         WAYLAND_xkb_state_unref(keymap.state);
         SDL_SetKeymap(keymap.keymap, true);
+        SDL_DestroyKeymap(seat->keyboard.sdl_keymap);
+        seat->keyboard.sdl_keymap = keymap.keymap;
     } else {
         // Virtual keyboards use the default keymap.
         SDL_SetKeymap(NULL, true);
+        SDL_DestroyKeymap(seat->keyboard.sdl_keymap);
+        seat->keyboard.sdl_keymap = NULL;
     }
 }
 
@@ -1837,6 +1841,11 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard,
         keyboard_input_get_text(text, seat, key, false, &handled_by_ime);
     }
 
+    if (seat->keyboard.sdl_keymap != SDL_GetCurrentKeymap()) {
+        SDL_SetKeymap(seat->keyboard.sdl_keymap, true);
+        SDL_SetModState(seat->keyboard.pressed_modifiers | seat->keyboard.locked_modifiers);
+    }
+
     const SDL_Scancode scancode = Wayland_GetScancodeForKey(seat, key);
     Wayland_HandleModifierKeys(seat, scancode, state == WL_KEYBOARD_KEY_STATE_PRESSED);
     Uint64 timestamp = Wayland_GetKeyboardTimestamp(seat, time);
@@ -1984,7 +1993,10 @@ static void Wayland_SeatDestroyPointer(struct SDL_WaylandSeat *seat)
 static void Wayland_SeatDestroyKeyboard(struct SDL_WaylandSeat *seat)
 {
     if (seat->keyboard.sdl_keymap) {
-        SDL_SetKeymap(NULL, false);
+        if (seat->keyboard.sdl_keymap == SDL_GetCurrentKeymap()) {
+            SDL_SetKeymap(NULL, false);
+        }
+        SDL_DestroyKeymap(seat->keyboard.sdl_keymap);
     }
 
     if (seat->keyboard.key_inhibitor) {
