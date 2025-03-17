@@ -30,8 +30,6 @@
 #include "SDL_waylandvideo.h"
 #include "SDL_waylandshmbuffer.h"
 
-struct SDL_WaylandSeat;
-
 struct SDL_WindowData
 {
     SDL_Window *sdlwindow;
@@ -129,7 +127,8 @@ struct SDL_WindowData
     struct Wayland_SHMBuffer *icon_buffers;
     int icon_buffer_count;
 
-    // Pointer focus refcount
+    // Keyboard and pointer focus refcount.
+    int keyboard_focus_count;
     int pointer_focus_count;
 
     struct

@@ -101,16 +101,6 @@
 #define DISPLAY_INFO_METHOD "GetCurrentState"
 #endif
 
-struct SDL_WaylandSeat *Wayland_DisplayGetPrimarySeat(SDL_VideoData *display)
-{
-    if (!WAYLAND_wl_list_empty(&display->seat_list)) {
-        struct SDL_WaylandSeat *seat = wl_container_of(display->seat_list.next, seat, link);
-        return seat;
-    }
-
-    return NULL;
-}
-
 /* GNOME doesn't expose displays in any particular order, but we can find the
  * primary display and its logical coordinates via a DBus method.
  */
@@ -443,6 +433,16 @@ SDL_WindowData *Wayland_GetWindowDataForOwnedSurface(struct wl_surface *surface)
                 return p;
             }
         }
+    }
+
+    return NULL;
+}
+
+SDL_WaylandSeat *Wayland_DisplayGetPrimarySeat(SDL_VideoData *display)
+{
+    if (!WAYLAND_wl_list_empty(&display->seat_list)) {
+        SDL_WaylandSeat *seat = wl_container_of(display->seat_list.next, seat, link);
+        return seat;
     }
 
     return NULL;
@@ -1279,10 +1279,10 @@ static void display_handle_global(void *data, struct wl_registry *registry, uint
         Wayland_DisplayCreateTextInputManager(d, id);
     } else if (SDL_strcmp(interface, "wl_data_device_manager") == 0) {
         d->data_device_manager = wl_registry_bind(d->registry, id, &wl_data_device_manager_interface, SDL_min(3, version));
-        Wayland_DisplayCreateDataDevice(d);
+        Wayland_DisplayInitDataDeviceManager(d);
     } else if (SDL_strcmp(interface, "zwp_primary_selection_device_manager_v1") == 0) {
         d->primary_selection_device_manager = wl_registry_bind(d->registry, id, &zwp_primary_selection_device_manager_v1_interface, 1);
-        Wayland_DisplayCreatePrimarySelectionDevice(d);
+        Wayland_DisplayInitPrimarySelectionDeviceManager(d);
     } else if (SDL_strcmp(interface, "zxdg_decoration_manager_v1") == 0) {
         d->decoration_manager = wl_registry_bind(d->registry, id, &zxdg_decoration_manager_v1_interface, 1);
     } else if (SDL_strcmp(interface, "zwp_tablet_manager_v2") == 0) {

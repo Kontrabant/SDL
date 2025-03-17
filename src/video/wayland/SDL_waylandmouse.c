@@ -291,7 +291,7 @@ struct wl_callback_listener cursor_frame_listener = {
 
 static void cursor_frame_done(void *data, struct wl_callback *cb, uint32_t time)
 {
-    struct SDL_WaylandSeat *seat = (struct SDL_WaylandSeat *)data;
+    SDL_WaylandSeat *seat = (SDL_WaylandSeat *)data;
     SDL_CursorData *c = (struct SDL_CursorData *)seat->pointer.current_cursor;
 
     const Uint64 now = SDL_GetTicksNS();
@@ -581,7 +581,7 @@ static void Wayland_FreeCursorData(SDL_CursorData *d)
 {
     SDL_VideoDevice *video_device = SDL_GetVideoDevice();
     SDL_VideoData *video_data = video_device->internal;
-    struct SDL_WaylandSeat *seat;
+    SDL_WaylandSeat *seat;
 
     // Stop any frame callbacks and detach buffers associated with the cursor being destroyed.
     wl_list_for_each (seat, &video_data->seat_list, link)
@@ -630,7 +630,7 @@ static void Wayland_FreeCursor(SDL_Cursor *cursor)
     SDL_free(cursor);
 }
 
-static void Wayland_SetSystemCursorShape(struct SDL_WaylandSeat *seat, SDL_SystemCursor id)
+static void Wayland_SetSystemCursorShape(SDL_WaylandSeat *seat, SDL_SystemCursor id)
 {
     Uint32 shape;
 
@@ -707,7 +707,7 @@ static bool Wayland_ShowCursor(SDL_Cursor *cursor)
 {
     SDL_VideoDevice *vd = SDL_GetVideoDevice();
     SDL_VideoData *d = vd->internal;
-    struct SDL_WaylandSeat *seat;
+    SDL_WaylandSeat *seat;
     struct wl_buffer *buffer = NULL;
     int scale = 1;
     int dst_width = 0;
@@ -810,7 +810,7 @@ static bool Wayland_ShowCursor(SDL_Cursor *cursor)
     return true;
 }
 
-static void Wayland_WarpMouse(struct SDL_WaylandSeat *seat, SDL_WindowData *window, float x, float y)
+static void Wayland_WarpMouse(SDL_WaylandSeat *seat, SDL_WindowData *window, float x, float y)
 {
     SDL_VideoDevice *vd = SDL_GetVideoDevice();
     SDL_VideoData *d = vd->internal;
@@ -845,7 +845,7 @@ static void Wayland_WarpMouse(struct SDL_WaylandSeat *seat, SDL_WindowData *wind
         /* NOTE: There is a pending warp event under discussion that should replace this when available.
          * https://gitlab.freedesktop.org/wayland/wayland/-/merge_requests/340
          */
-        SDL_SendMouseMotion(0, window->sdlwindow, SDL_GLOBAL_MOUSE_ID, false, x, y);
+        SDL_SendMouseMotion(0, window->sdlwindow, seat->pointer.sdl_id, false, x, y);
     }
 }
 
@@ -854,11 +854,10 @@ static bool Wayland_WarpMouseRelative(SDL_Window *window, float x, float y)
     SDL_VideoDevice *vd = SDL_GetVideoDevice();
     SDL_VideoData *d = vd->internal;
     SDL_WindowData *wind = window->internal;
-    struct SDL_WaylandSeat *seat;
+    SDL_WaylandSeat *seat;
 
     if (d->pointer_constraints) {
         wl_list_for_each (seat, &d->seat_list, link) {
-            // If the client wants the coordinates warped to within the focused window, just convert the coordinates to relative.
             if (seat->pointer.focus && wind == seat->pointer.focus) {
                 Wayland_WarpMouse(seat, wind, x, y);
             }
@@ -874,15 +873,19 @@ static bool Wayland_WarpMouseGlobal(float x, float y)
 {
     SDL_VideoDevice *vd = SDL_GetVideoDevice();
     SDL_VideoData *d = vd->internal;
-    struct SDL_WaylandSeat *seat;
+    SDL_WaylandSeat *seat;
 
     if (d->pointer_constraints) {
         wl_list_for_each (seat, &d->seat_list, link) {
             SDL_WindowData *wind = seat->pointer.focus;
-            // If the client wants the coordinates warped to within the focused window, just convert the coordinates to relative.
+            // If the client wants the coordinates warped to within a window, just convert the coordinates to relative.
             if (wind) {
                 SDL_Window *window = wind->sdlwindow;
-                Wayland_WarpMouse(seat, wind, x - (float)window->x, y - (float)window->y);
+                const SDL_FPoint p = { x - (float)window->x, y - (float)window->y };
+                const SDL_FRect r = { window->x, window->y, window->w, window->h };
+                if (SDL_PointInRectFloat(&p, &r)) {
+                    Wayland_WarpMouse(seat, wind, p.x, p.y);
+                }
             }
         }
     } else {
@@ -906,7 +909,8 @@ static bool Wayland_SetRelativeMouseMode(bool enabled)
     }
 
     data->relative_mouse_mode = enabled;
-    return Wayland_SeatUpdateGrabs(data);
+    Wayland_SeatUpdateGrabs(data);
+    return true;
 }
 
 /* Wayland doesn't support getting the true global cursor position, but it can
@@ -929,7 +933,7 @@ static SDL_MouseButtonFlags SDLCALL Wayland_GetGlobalMouseState(float *x, float 
 
     if (focus) {
         SDL_VideoData *viddata = SDL_GetVideoDevice()->internal;
-        struct SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(viddata);
+        SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(viddata);
         int off_x, off_y;
 
         *x = mouse->last_x;

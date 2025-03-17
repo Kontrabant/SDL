@@ -32,7 +32,7 @@
 bool Wayland_SetClipboardData(SDL_VideoDevice *_this)
 {
     SDL_VideoData *video_data = _this->internal;
-    struct SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(video_data);
+    SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(video_data);
     bool result = false;
 
     if (seat && seat->data_device) {
@@ -57,7 +57,7 @@ bool Wayland_SetClipboardData(SDL_VideoDevice *_this)
 void *Wayland_GetClipboardData(SDL_VideoDevice *_this, const char *mime_type, size_t *length)
 {
     SDL_VideoData *video_data = _this->internal;
-    struct SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(video_data);
+    SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(video_data);
     void *buffer = NULL;
 
     if (seat && seat->data_device) {
@@ -75,7 +75,7 @@ void *Wayland_GetClipboardData(SDL_VideoDevice *_this, const char *mime_type, si
 bool Wayland_HasClipboardData(SDL_VideoDevice *_this, const char *mime_type)
 {
     SDL_VideoData *video_data = _this->internal;
-    struct SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(video_data);
+    SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(video_data);
     bool result = false;
 
     if (seat && seat->data_device) {
@@ -106,7 +106,7 @@ const char **Wayland_GetTextMimeTypes(SDL_VideoDevice *_this, size_t *num_mime_t
 bool Wayland_SetPrimarySelectionText(SDL_VideoDevice *_this, const char *text)
 {
     SDL_VideoData *video_data = _this->internal;
-    struct SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(video_data);
+    SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(video_data);
     bool result;
 
     if (seat && seat->primary_selection_device) {
@@ -134,7 +134,7 @@ bool Wayland_SetPrimarySelectionText(SDL_VideoDevice *_this, const char *text)
 char *Wayland_GetPrimarySelectionText(SDL_VideoDevice *_this)
 {
     SDL_VideoData *video_data = _this->internal;
-    struct SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(video_data);
+    SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(video_data);
     char *text = NULL;
     size_t length = 0;
 
@@ -162,7 +162,7 @@ char *Wayland_GetPrimarySelectionText(SDL_VideoDevice *_this)
 bool Wayland_HasPrimarySelectionText(SDL_VideoDevice *_this)
 {
     SDL_VideoData *video_data = _this->internal;
-    struct SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(video_data);
+    SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(video_data);
     bool result = false;
 
     if (seat && seat->primary_selection_device) {

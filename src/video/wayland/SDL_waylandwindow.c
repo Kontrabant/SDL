@@ -2216,7 +2216,7 @@ static const struct xdg_activation_token_v1_listener activation_listener_xdg = {
  */
 static void Wayland_activate_window(SDL_VideoData *data, SDL_WindowData *target_wind, bool set_serial)
 {
-    struct SDL_WaylandSeat *seat = data->last_implicit_grab_seat;
+    SDL_WaylandSeat *seat = data->last_implicit_grab_seat;
     SDL_Window *focus = SDL_GetKeyboardFocus();
     struct wl_surface *requesting_surface = focus ? focus->internal->surface : NULL;
 
@@ -2488,14 +2488,11 @@ bool Wayland_SetWindowMouseRect(SDL_VideoDevice *_this, SDL_Window *window)
      * Just know that this call lets you confine with a rect, SetWindowGrab
      * lets you confine without a rect.
      */
-    return Wayland_SeatUpdateGrabs(data);
-#if 0
-    if (SDL_RectEmpty(&window->mouse_rect) && !(window->flags & SDL_WINDOW_MOUSE_GRABBED)) {
-        return Wayland_UnconfinePointerForWindow(data, window);
-    } else {
-        return Wayland_ConfinePointerForWindow(data, window);
+    if (!data->pointer_constraints) {
+        return SDL_SetError("Failed to grab mouse: compositor lacks support for the required zwp_pointer_constraints_v1 protocol");
     }
-#endif
+    Wayland_SeatUpdateGrabs(data);
+    return true;
 }
 
 bool Wayland_SetWindowMouseGrab(SDL_VideoDevice *_this, SDL_Window *window, bool grabbed)
@@ -2972,7 +2969,7 @@ bool Wayland_SyncWindow(SDL_VideoDevice *_this, SDL_Window *window)
 void Wayland_ShowWindowSystemMenu(SDL_Window *window, int x, int y)
 {
     SDL_WindowData *wind = window->internal;
-    struct SDL_WaylandSeat *seat = wind->waylandData->last_implicit_grab_seat;
+    SDL_WaylandSeat *seat = wind->waylandData->last_implicit_grab_seat;
 
     if (!seat) {
         return;

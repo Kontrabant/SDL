@@ -586,14 +586,14 @@ bool Wayland_primary_selection_device_set_selection(SDL_WaylandPrimarySelectionD
 void Wayland_data_device_set_serial(SDL_WaylandDataDevice *data_device, uint32_t serial)
 {
     if (data_device) {
+        data_device->selection_serial = serial;
+
         // If there was no serial and there is a pending selection set it now.
         if (data_device->selection_serial == 0 && data_device->selection_source) {
             wl_data_device_set_selection(data_device->data_device,
                                          data_device->selection_source->source,
                                          data_device->selection_serial);
         }
-
-        data_device->selection_serial = serial;
     }
 }
 
@@ -601,14 +601,14 @@ void Wayland_primary_selection_device_set_serial(SDL_WaylandPrimarySelectionDevi
                                                  uint32_t serial)
 {
     if (primary_selection_device) {
+        primary_selection_device->selection_serial = serial;
+
         // If there was no serial and there is a pending selection set it now.
         if (primary_selection_device->selection_serial == 0 && primary_selection_device->selection_source) {
             zwp_primary_selection_device_v1_set_selection(primary_selection_device->primary_selection_device,
                                                           primary_selection_device->selection_source->source,
                                                           primary_selection_device->selection_serial);
         }
-
-        primary_selection_device->selection_serial = serial;
     }
 }
 

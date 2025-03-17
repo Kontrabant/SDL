@@ -53,32 +53,32 @@ void Wayland_QuitKeyboard(SDL_VideoDevice *_this)
 
 void Wayland_UpdateTextInput(SDL_VideoData *display)
 {
-    struct SDL_WaylandSeat *seat = NULL;
+    SDL_WaylandSeat *seat = NULL;
 
     if (display->text_input_manager) {
         wl_list_for_each(seat, &display->seat_list, link) {
             SDL_WindowData *focus = seat->keyboard.focus;
 
-            if (seat->text_input) {
+            if (seat->text_input.zwp_text_input) {
                 if (focus && focus->text_input_props.active) {
                     // Enabling will reset all state, so don't do it redundantly.
-                    if (!seat->text_input->enabled) {
-                        seat->text_input->enabled = true;
-                        zwp_text_input_v3_enable(seat->text_input->text_input);
+                    if (!seat->text_input.enabled) {
+                        seat->text_input.enabled = true;
+                        zwp_text_input_v3_enable(seat->text_input.zwp_text_input);
 
                         // Now that it's enabled, set the input properties
-                        zwp_text_input_v3_set_content_type(seat->text_input->text_input, focus->text_input_props.hint, focus->text_input_props.purpose);
+                        zwp_text_input_v3_set_content_type(seat->text_input.zwp_text_input, focus->text_input_props.hint, focus->text_input_props.purpose);
                         if (!SDL_RectEmpty(&focus->sdlwindow->text_input_rect)) {
-                            SDL_copyp(&seat->text_input->cursor_rect, &focus->sdlwindow->text_input_rect);
+                            SDL_copyp(&seat->text_input.cursor_rect, &focus->sdlwindow->text_input_rect);
 
                             // This gets reset on enable so we have to cache it
-                            zwp_text_input_v3_set_cursor_rectangle(seat->text_input->text_input,
+                            zwp_text_input_v3_set_cursor_rectangle(seat->text_input.zwp_text_input,
                                                                    focus->sdlwindow->text_input_rect.x,
                                                                    focus->sdlwindow->text_input_rect.y,
                                                                    focus->sdlwindow->text_input_rect.w,
                                                                    focus->sdlwindow->text_input_rect.h);
                         }
-                        zwp_text_input_v3_commit(seat->text_input->text_input);
+                        zwp_text_input_v3_commit(seat->text_input.zwp_text_input);
 
                         if (seat->keyboard.xkb.compose_state) {
                             // Reset compose state so composite and dead keys don't carry over
@@ -86,11 +86,11 @@ void Wayland_UpdateTextInput(SDL_VideoData *display)
                         }
                     }
                 } else {
-                    if (seat->text_input->enabled) {
-                        seat->text_input->enabled = false;
-                        SDL_zero(seat->text_input->cursor_rect);
-                        zwp_text_input_v3_disable(seat->text_input->text_input);
-                        zwp_text_input_v3_commit(seat->text_input->text_input);
+                    if (seat->text_input.enabled) {
+                        seat->text_input.enabled = false;
+                        SDL_zero(seat->text_input.cursor_rect);
+                        zwp_text_input_v3_disable(seat->text_input.zwp_text_input);
+                        zwp_text_input_v3_commit(seat->text_input.zwp_text_input);
                     }
 
                     if (seat->keyboard.xkb.compose_state) {
@@ -198,18 +198,18 @@ bool Wayland_UpdateTextInputArea(SDL_VideoDevice *_this, SDL_Window *window)
 {
     SDL_VideoData *internal = _this->internal;
     if (internal->text_input_manager) {
-        struct SDL_WaylandSeat *seat;
+        SDL_WaylandSeat *seat;
 
         wl_list_for_each (seat, &internal->seat_list, link) {
-            if (seat->text_input && seat->keyboard.focus == window->internal) {
-                if (!SDL_RectsEqual(&window->text_input_rect, &seat->text_input->cursor_rect)) {
-                    SDL_copyp(&seat->text_input->cursor_rect, &window->text_input_rect);
-                    zwp_text_input_v3_set_cursor_rectangle(seat->text_input->text_input,
+            if (seat->text_input.zwp_text_input && seat->keyboard.focus == window->internal) {
+                if (!SDL_RectsEqual(&window->text_input_rect, &seat->text_input.cursor_rect)) {
+                    SDL_copyp(&seat->text_input.cursor_rect, &window->text_input_rect);
+                    zwp_text_input_v3_set_cursor_rectangle(seat->text_input.zwp_text_input,
                                                            window->text_input_rect.x,
                                                            window->text_input_rect.y,
                                                            window->text_input_rect.w,
                                                            window->text_input_rect.h);
-                    zwp_text_input_v3_commit(seat->text_input->text_input);
+                    zwp_text_input_v3_commit(seat->text_input.zwp_text_input);
                 }
             }
         }
@@ -229,7 +229,7 @@ bool Wayland_HasScreenKeyboardSupport(SDL_VideoDevice *_this)
      * input protocol, make sure we don't have any physical keyboards either.
      */
     SDL_VideoData *internal = _this->internal;
-    struct SDL_WaylandSeat *seat;
+    SDL_WaylandSeat *seat;
     bool hastextmanager = (internal->text_input_manager != NULL);
     bool haskeyboard = false;
 
