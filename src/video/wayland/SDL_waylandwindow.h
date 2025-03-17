@@ -129,6 +129,9 @@ struct SDL_WindowData
     struct Wayland_SHMBuffer *icon_buffers;
     int icon_buffer_count;
 
+    // Pointer focus refcount
+    int pointer_focus_count;
+
     struct
     {
         double x;
