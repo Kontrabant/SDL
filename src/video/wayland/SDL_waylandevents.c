@@ -1685,6 +1685,9 @@ static void keyboard_handle_enter(void *data, struct wl_keyboard *keyboard,
     SDL_SetKeyboardFocus(window->keyboard_focus ? window->keyboard_focus : window->sdlwindow);
     Wayland_SeatUpdateGrabs(seat->display);
 
+    // Update text input and IME focus.
+    Wayland_UpdateTextInput(seat->display);
+
 #ifdef SDL_USE_IME
     if (!seat->text_input) {
         SDL_IME_SetFocus(true);
@@ -1745,6 +1748,9 @@ static void keyboard_handle_leave(void *data, struct wl_keyboard *keyboard,
 
     // Clear the pressed modifiers.
     seat->keyboard.pressed_modifiers = SDL_KMOD_NONE;
+
+    // Update text input and IME focus.
+    Wayland_UpdateTextInput(seat->display);
 
 #ifdef SDL_USE_IME
     if (!seat->text_input) {
@@ -2793,16 +2799,15 @@ static void Wayland_SeatCreateTextInput(struct SDL_WaylandSeat *seat)
         return;
     }
 
-    text_input->text_input = zwp_text_input_manager_v3_get_text_input(
-        seat->display->text_input_manager, seat->wl_seat);
+    text_input->text_input = zwp_text_input_manager_v3_get_text_input(seat->display->text_input_manager, seat->wl_seat);
 
-    if (!text_input->text_input) {
-        SDL_free(text_input);
-    } else {
+    if (text_input->text_input) {
         zwp_text_input_v3_set_user_data(text_input->text_input, text_input);
         zwp_text_input_v3_add_listener(text_input->text_input,
                                        &text_input_listener, text_input);
         seat->text_input = text_input;
+    } else {
+        SDL_free(text_input);
     }
 }
 

@@ -180,6 +180,13 @@ struct SDL_WindowData
         int height;
     } toplevel_bounds;
 
+    struct
+    {
+        int hint;
+        int purpose;
+        bool active;
+    } text_input_props;
+
     SDL_DisplayID last_displayID;
     int fullscreen_deadline_count;
     int maximized_restored_deadline_count;
