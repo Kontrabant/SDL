@@ -567,7 +567,7 @@ static void pointer_handle_motion(void *data, struct wl_pointer *pointer,
             return;
         }
 
-        Wayland_SetHitTestCursor(rc);
+        Wayland_SeatSetHitTestCursor(seat, rc);
         window_data->hit_test_result = rc;
     }
 }
@@ -590,7 +590,7 @@ static void pointer_handle_enter(void *data, struct wl_pointer *pointer,
     SDL_WaylandSeat *seat = (SDL_WaylandSeat *)data;
     seat->pointer.focus = window;
     seat->pointer.enter_serial = serial;
-    ++seat->pointer.focus->pointer_focus_count;
+    ++window->pointer_focus_count;
     SDL_SetMouseFocus(window->sdlwindow);
     Wayland_SeatUpdateGrabs(seat->display);
     /* In the case of e.g. a pointer confine warp, we may receive an enter
@@ -603,8 +603,13 @@ static void pointer_handle_enter(void *data, struct wl_pointer *pointer,
     pointer_handle_motion(data, pointer, 0, sx_w, sy_w);
     /* If the cursor was changed while our window didn't have pointer
      * focus, we might need to trigger another call to
-     * wl_pointer_set_cursor() for the new cursor to be displayed. */
-    Wayland_SetHitTestCursor(window->hit_test_result);
+     * wl_pointer_set_cursor() for the new cursor to be displayed.
+     *
+     * This will also update the cursor if a second pointer entered a
+     * window that already has focus, as the focus change sequence
+     * won't be run.
+     */
+    Wayland_SeatSetHitTestCursor(seat, window->hit_test_result);
 }
 
 static void pointer_handle_leave(void *data, struct wl_pointer *pointer,
@@ -636,7 +641,7 @@ static void pointer_handle_leave(void *data, struct wl_pointer *pointer,
     /* A pointer leave event may be emitted if the compositor hides the pointer in response to receiving a touch event.
      * Don't relinquish focus if the surface has active touches, as the compositor is just transitioning from mouse to touch mode.
      */
-    if (!--seat->pointer.focus->pointer_focus_count && !Wayland_SurfaceHasActiveTouches(seat->display, surface)) {
+    if (!--window->pointer_focus_count && !Wayland_SurfaceHasActiveTouches(seat->display, surface)) {
         SDL_SetMouseFocus(NULL);
     }
 
