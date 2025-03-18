@@ -1052,7 +1052,7 @@ static void relative_pointer_handle_relative_motion(void *data,
     const Uint64 timestamp = Wayland_GetEventTimestamp(SDL_US_TO_NS(((Uint64)time_hi << 32) | (Uint64)time_lo));
 
     // Relative motion follows keyboard focus.
-    if (keyboard_focus && keyboard_focus->internal == seat->pointer.focus && d->relative_mouse_mode) {
+    if (d->relative_mouse_mode && keyboard_focus && keyboard_focus->internal == seat->pointer.focus) {
         double dx;
         double dy;
         if (mouse->InputTransform || !mouse->enable_relative_system_scale) {
@@ -1232,14 +1232,24 @@ static void touch_handler_cancel(void *data, struct wl_touch *touch)
     }
 }
 
+static void touch_handler_shape(void *data, struct wl_touch *wl_touch, int32_t id, wl_fixed_t major, wl_fixed_t minor)
+{
+    // no-op
+}
+
+static void touch_handler_orientation(void *data, struct wl_touch *wl_touch, int32_t id, wl_fixed_t orientation)
+{
+    // no-op
+}
+
 static const struct wl_touch_listener touch_listener = {
     touch_handler_down,
     touch_handler_up,
     touch_handler_motion,
     touch_handler_frame,
     touch_handler_cancel,
-    NULL, // shape
-    NULL, // orientation
+    touch_handler_shape,      // Version 6
+    touch_handler_orientation // Version 6
 };
 
 typedef struct Wayland_KeymapBuilderState
@@ -2876,6 +2886,7 @@ typedef struct SDL_WaylandPenTool  // a stylus, etc, on a tablet.
     Uint32 frame_axes_set;
     int frame_pen_down;
     int frame_buttons[3];
+    struct wl_list link;
 } SDL_WaylandPenTool;
 
 static void tablet_tool_handle_type(void *data, struct zwp_tablet_tool_v2 *tool, uint32_t type)
@@ -2930,6 +2941,7 @@ static void tablet_tool_handle_removed(void *data, struct zwp_tablet_tool_v2 *to
         SDL_RemovePenDevice(0, sdltool->instance_id);
     }
     zwp_tablet_tool_v2_destroy(tool);
+    WAYLAND_wl_list_remove(&sdltool->link);
     SDL_free(sdltool);
 }
 
@@ -3130,13 +3142,14 @@ static const struct zwp_tablet_tool_v2_listener tablet_tool_listener = {
 };
 
 
-static void tablet_seat_handle_tablet_added(void *data, struct zwp_tablet_seat_v2 *seat, struct zwp_tablet_v2 *tablet)
+static void tablet_seat_handle_tablet_added(void *data, struct zwp_tablet_seat_v2 *zwp_tablet_seat_v2, struct zwp_tablet_v2 *tablet)
 {
     // don't care atm.
 }
 
-static void tablet_seat_handle_tool_added(void *data, struct zwp_tablet_seat_v2 *seat, struct zwp_tablet_tool_v2 *tool)
+static void tablet_seat_handle_tool_added(void *data, struct zwp_tablet_seat_v2 *zwp_tablet_seat_v2, struct zwp_tablet_tool_v2 *tool)
 {
+    SDL_WaylandSeat *seat = (SDL_WaylandSeat *)data;
     SDL_WaylandPenTool *sdltool = SDL_calloc(1, sizeof(*sdltool));
 
     if (sdltool) {  // if allocation failed, oh well, we won't report this device.
@@ -3147,6 +3160,7 @@ static void tablet_seat_handle_tool_added(void *data, struct zwp_tablet_seat_v2 
         for (int i = 0; i < SDL_arraysize(sdltool->frame_buttons); i++) {
             sdltool->frame_buttons[i] = -1;
         }
+        WAYLAND_wl_list_insert(&seat->tablet.tool_list, &sdltool->link);
 
         // this will send a bunch of zwp_tablet_tool_v2 events right up front to tell
         // us device details, with a "done" event to let us know we have everything.
@@ -3154,7 +3168,7 @@ static void tablet_seat_handle_tool_added(void *data, struct zwp_tablet_seat_v2 
     }
 }
 
-static void tablet_seat_handle_pad_added(void *data, struct zwp_tablet_seat_v2 *seat, struct zwp_tablet_pad_v2 *pad)
+static void tablet_seat_handle_pad_added(void *data, struct zwp_tablet_seat_v2 *zwp_tablet_seat_v2, struct zwp_tablet_pad_v2 *pad)
 {
     // we don't care atm.
 }
@@ -3167,10 +3181,7 @@ static const struct zwp_tablet_seat_v2_listener tablet_seat_listener = {
 
 static void Wayland_SeatInitTabletSupport(SDL_WaylandSeat *seat)
 {
-    if (!seat) {
-        return;
-    }
-
+    WAYLAND_wl_list_init(&seat->tablet.tool_list);
     seat->tablet.wl_tablet_seat = zwp_tablet_manager_v2_get_tablet_seat(seat->display->tablet_manager, seat->wl_seat);
     zwp_tablet_seat_v2_add_listener(seat->tablet.wl_tablet_seat, &tablet_seat_listener, seat);
 }
@@ -3190,9 +3201,18 @@ static void Wayland_remove_all_pens_callback(SDL_PenID instance_id, void *handle
     SDL_free(sdltool);
 }
 
-void Wayland_SeatDestroyTablet(SDL_WaylandSeat *seat)
+void Wayland_SeatDestroyTablet(SDL_WaylandSeat *seat, bool send_events)
 {
-    SDL_RemoveAllPenDevices(Wayland_remove_all_pens_callback, NULL);
+    if (send_events) {
+        SDL_WaylandPenTool *pen, *temp;
+        wl_list_for_each_safe (pen, temp, &seat->tablet.tool_list, link) {
+            // Remove all tools for this seat, sending PROXIMITY_OUT events.
+            tablet_tool_handle_removed(pen, pen->wltool);
+        }
+    } else {
+        // Shutting down, just delete everything.
+        SDL_RemoveAllPenDevices(Wayland_remove_all_pens_callback, NULL);
+    }
 
     if (seat && seat->tablet.wl_tablet_seat) {
         zwp_tablet_seat_v2_destroy(seat->tablet.wl_tablet_seat);
@@ -3281,7 +3301,7 @@ void Wayland_SeatDestroy(SDL_WaylandSeat *seat, bool send_events)
     Wayland_SeatDestroyKeyboard(seat, send_events);
     Wayland_SeatDestroyPointer(seat, send_events);
     Wayland_SeatDestroyTouch(seat);
-    Wayland_SeatDestroyTablet(seat);
+    Wayland_SeatDestroyTablet(seat, send_events);
 
     if (wl_seat_get_version(seat->wl_seat) >= WL_SEAT_RELEASE_SINCE_VERSION) {
         wl_seat_release(seat->wl_seat);
@@ -3341,19 +3361,17 @@ void Wayland_SeatUpdateGrabs(SDL_VideoData *display)
                 seat->pointer.locked_pointer = NULL;
             }
 
-            /* We cannot create a confine if the pointer is already locked. Defer until
-             * the pointer is unlocked.
-             */
+            // If relative mode is active, and the pointer focus matches the keyboard focus, lock it.
             if (display->relative_mouse_mode) {
                 SDL_Window *keyboard_focus = SDL_GetKeyboardFocus();
-                if (!seat->pointer.locked_pointer && keyboard_focus && keyboard_focus->internal == seat->pointer.focus) {
+                if (keyboard_focus && keyboard_focus->internal == seat->pointer.focus) {
                     seat->pointer.locked_pointer = zwp_pointer_constraints_v1_lock_pointer(display->pointer_constraints,
                                                                                                     seat->pointer.focus->surface,
                                                                                                     seat->pointer.wl_pointer, NULL,
                                                                                                     ZWP_POINTER_CONSTRAINTS_V1_LIFETIME_PERSISTENT);
                     zwp_locked_pointer_v1_add_listener(seat->pointer.locked_pointer, &locked_pointer_listener, seat);
+                    return;
                 }
-                return;
             }
 
             // Only confine if the pointer is in the window that SDL wants grabbed.
