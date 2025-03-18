@@ -1337,7 +1337,7 @@ static void display_remove_global(void *data, struct wl_registry *registry, uint
             if (seat->keyboard.wl_keyboard) {
                 SDL_RemoveMouse(seat->pointer.sdl_id, true);
             }
-            Wayland_SeatDestroy(seat);
+            Wayland_SeatDestroy(seat, true);
         }
     }
 }
@@ -1477,7 +1477,7 @@ static bool Wayland_GetDisplayBounds(SDL_VideoDevice *_this, SDL_VideoDisplay *d
 static void Wayland_VideoCleanup(SDL_VideoDevice *_this)
 {
     SDL_VideoData *data = _this->internal;
-    struct SDL_WaylandSeat *seat, *tmp;
+    SDL_WaylandSeat *seat, *tmp;
     int i;
 
     Wayland_FiniMouse(data);
@@ -1489,7 +1489,7 @@ static void Wayland_VideoCleanup(SDL_VideoDevice *_this)
     SDL_free(data->output_list);
 
     wl_list_for_each_safe (seat, tmp, &data->seat_list, link) {
-        Wayland_SeatDestroy(seat);
+        Wayland_SeatDestroy(seat, false);
     }
 
     if (data->pointer_constraints) {
