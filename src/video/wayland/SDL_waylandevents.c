@@ -1234,12 +1234,10 @@ static void touch_handler_cancel(void *data, struct wl_touch *touch)
 
 static void touch_handler_shape(void *data, struct wl_touch *wl_touch, int32_t id, wl_fixed_t major, wl_fixed_t minor)
 {
-    // no-op
 }
 
 static void touch_handler_orientation(void *data, struct wl_touch *wl_touch, int32_t id, wl_fixed_t orientation)
 {
-    // no-op
 }
 
 static const struct wl_touch_listener touch_listener = {
