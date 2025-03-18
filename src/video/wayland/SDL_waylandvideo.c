@@ -438,16 +438,6 @@ SDL_WindowData *Wayland_GetWindowDataForOwnedSurface(struct wl_surface *surface)
     return NULL;
 }
 
-SDL_WaylandSeat *Wayland_DisplayGetPrimarySeat(SDL_VideoData *display)
-{
-    if (!WAYLAND_wl_list_empty(&display->seat_list)) {
-        SDL_WaylandSeat *seat = wl_container_of(display->seat_list.next, seat, link);
-        return seat;
-    }
-
-    return NULL;
-}
-
 static void Wayland_DeleteDevice(SDL_VideoDevice *device)
 {
     SDL_VideoData *data = device->internal;

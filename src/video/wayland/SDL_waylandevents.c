@@ -2324,8 +2324,10 @@ static void data_device_handle_data_offer(void *data, struct wl_data_device *wl_
 {
     SDL_WaylandDataOffer *data_offer = SDL_calloc(1, sizeof(*data_offer));
     if (data_offer) {
+        SDL_WaylandDataDevice *data_device = (SDL_WaylandDataDevice *)data;
+        data_device->seat->display->last_incoming_data_offer_seat = data_device->seat;
         data_offer->offer = id;
-        data_offer->data_device = data;
+        data_offer->data_device = data_device;
         WAYLAND_wl_list_init(&(data_offer->mimes));
         wl_data_offer_set_user_data(id, data_offer);
         wl_data_offer_add_listener(id, &data_offer_listener, data_offer);
@@ -2637,8 +2639,10 @@ static void primary_selection_device_handle_offer(void *data, struct zwp_primary
 {
     SDL_WaylandPrimarySelectionOffer *primary_selection_offer = SDL_calloc(1, sizeof(*primary_selection_offer));
     if (primary_selection_offer) {
+        SDL_WaylandPrimarySelectionDevice *primary_selection_device = (SDL_WaylandPrimarySelectionDevice *)data;
+        primary_selection_device->seat->display->last_incoming_primary_selection_seat = primary_selection_device->seat;
         primary_selection_offer->offer = id;
-        primary_selection_offer->primary_selection_device = data;
+        primary_selection_offer->primary_selection_device = primary_selection_device;
         WAYLAND_wl_list_init(&(primary_selection_offer->mimes));
         zwp_primary_selection_offer_v1_set_user_data(id, primary_selection_offer);
         zwp_primary_selection_offer_v1_add_listener(id, &primary_selection_offer_listener, primary_selection_offer);
@@ -2757,7 +2761,7 @@ static void Wayland_SeatCreateDataDevice(SDL_WaylandSeat *seat)
 
     data_device->data_device = wl_data_device_manager_get_data_device(
         seat->display->data_device_manager, seat->wl_seat);
-    data_device->video_data = seat->display;
+    data_device->seat = seat;
 
     if (!data_device->data_device) {
         SDL_free(data_device);
@@ -2786,7 +2790,7 @@ static void Wayland_SeatCreatePrimarySelectionDevice(SDL_WaylandSeat *seat)
 
     primary_selection_device->primary_selection_device = zwp_primary_selection_device_manager_v1_get_device(
         seat->display->primary_selection_device_manager, seat->wl_seat);
-    primary_selection_device->video_data = seat->display;
+    primary_selection_device->seat = seat;
 
     if (!primary_selection_device->primary_selection_device) {
         SDL_free(primary_selection_device);

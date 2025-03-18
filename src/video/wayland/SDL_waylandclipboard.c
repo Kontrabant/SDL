@@ -32,8 +32,13 @@
 bool Wayland_SetClipboardData(SDL_VideoDevice *_this)
 {
     SDL_VideoData *video_data = _this->internal;
-    SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(video_data);
+    SDL_WaylandSeat *seat = video_data->last_implicit_grab_seat;
     bool result = false;
+
+    // If no implicit grab is available yet, just attach it to the first available seat.
+    if (!seat && !WAYLAND_wl_list_empty(&video_data->seat_list)) {
+        seat = wl_container_of(video_data->seat_list.next, seat, link);
+    }
 
     if (seat && seat->data_device) {
         SDL_WaylandDataDevice *data_device = seat->data_device;
@@ -57,7 +62,7 @@ bool Wayland_SetClipboardData(SDL_VideoDevice *_this)
 void *Wayland_GetClipboardData(SDL_VideoDevice *_this, const char *mime_type, size_t *length)
 {
     SDL_VideoData *video_data = _this->internal;
-    SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(video_data);
+    SDL_WaylandSeat *seat = video_data->last_incoming_data_offer_seat;
     void *buffer = NULL;
 
     if (seat && seat->data_device) {
@@ -75,7 +80,7 @@ void *Wayland_GetClipboardData(SDL_VideoDevice *_this, const char *mime_type, si
 bool Wayland_HasClipboardData(SDL_VideoDevice *_this, const char *mime_type)
 {
     SDL_VideoData *video_data = _this->internal;
-    SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(video_data);
+    SDL_WaylandSeat *seat = video_data->last_incoming_data_offer_seat;
     bool result = false;
 
     if (seat && seat->data_device) {
@@ -106,8 +111,13 @@ const char **Wayland_GetTextMimeTypes(SDL_VideoDevice *_this, size_t *num_mime_t
 bool Wayland_SetPrimarySelectionText(SDL_VideoDevice *_this, const char *text)
 {
     SDL_VideoData *video_data = _this->internal;
-    SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(video_data);
+    SDL_WaylandSeat *seat = video_data->last_implicit_grab_seat;
     bool result;
+
+    // If no implicit grab is available yet, just attach it to the first available seat.
+    if (!seat && !WAYLAND_wl_list_empty(&video_data->seat_list)) {
+        seat = wl_container_of(video_data->seat_list.next, seat, link);
+    }
 
     if (seat && seat->primary_selection_device) {
         SDL_WaylandPrimarySelectionDevice *primary_selection_device = seat->primary_selection_device;
@@ -134,7 +144,7 @@ bool Wayland_SetPrimarySelectionText(SDL_VideoDevice *_this, const char *text)
 char *Wayland_GetPrimarySelectionText(SDL_VideoDevice *_this)
 {
     SDL_VideoData *video_data = _this->internal;
-    SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(video_data);
+    SDL_WaylandSeat *seat = video_data->last_incoming_primary_selection_seat;
     char *text = NULL;
     size_t length = 0;
 
@@ -162,7 +172,7 @@ char *Wayland_GetPrimarySelectionText(SDL_VideoDevice *_this)
 bool Wayland_HasPrimarySelectionText(SDL_VideoDevice *_this)
 {
     SDL_VideoData *video_data = _this->internal;
-    SDL_WaylandSeat *seat = Wayland_DisplayGetPrimarySeat(video_data);
+    SDL_WaylandSeat *seat = video_data->last_incoming_primary_selection_seat;
     bool result = false;
 
     if (seat && seat->primary_selection_device) {

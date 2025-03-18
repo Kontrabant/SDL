@@ -33,6 +33,7 @@
 #include "../SDL_clipboard_c.h"
 
 #include "SDL_waylandvideo.h"
+#include "SDL_waylandevents_c.h"
 #include "SDL_waylanddatamanager.h"
 #include "primary-selection-unstable-v1-client-protocol.h"
 
@@ -373,7 +374,7 @@ void *Wayland_data_offer_receive(SDL_WaylandDataOffer *offer,
         wl_data_offer_receive(offer->offer, mime_type, pipefd[1]);
         close(pipefd[1]);
 
-        WAYLAND_wl_display_flush(data_device->video_data->display);
+        WAYLAND_wl_display_flush(data_device->seat->display->display);
 
         while (read_pipe(pipefd[0], &buffer, length) > 0) {
         }
@@ -407,7 +408,7 @@ void *Wayland_primary_selection_offer_receive(SDL_WaylandPrimarySelectionOffer *
         zwp_primary_selection_offer_v1_receive(offer->offer, mime_type, pipefd[1]);
         close(pipefd[1]);
 
-        WAYLAND_wl_display_flush(primary_selection_device->video_data->display);
+        WAYLAND_wl_display_flush(primary_selection_device->seat->display->display);
 
         while (read_pipe(pipefd[0], &buffer, length) > 0) {
         }
