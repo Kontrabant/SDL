@@ -878,13 +878,19 @@ static bool Wayland_WarpMouseGlobal(float x, float y)
     if (d->pointer_constraints) {
         wl_list_for_each (seat, &d->seat_list, link) {
             SDL_WindowData *wind = seat->pointer.focus;
-            // If the client wants the coordinates warped to within a window, just convert the coordinates to relative.
+            // If the client wants the coordinates warped to within a focused window, just convert the coordinates to relative.
             if (wind) {
                 SDL_Window *window = wind->sdlwindow;
-                const SDL_FPoint p = { x - (float)window->x, y - (float)window->y };
-                const SDL_FRect r = { window->x, window->y, window->w, window->h };
+
+                int abs_x, abs_y;
+                SDL_RelativeToGlobalForWindow(window, window->x, window->y, &abs_x, &abs_y);
+
+                const SDL_FPoint p = { x, y };
+                const SDL_FRect r = { abs_x, abs_y, window->w, window->h };
+
+                // Try to warp the cursor if the point is within the seat's focused window.
                 if (SDL_PointInRectFloat(&p, &r)) {
-                    Wayland_WarpMouse(seat, wind, p.x, p.y);
+                    Wayland_WarpMouse(seat, wind, p.x - abs_x, p.y - abs_y);
                 }
             }
         }
@@ -928,19 +934,18 @@ static bool Wayland_SetRelativeMouseMode(bool enabled)
 static SDL_MouseButtonFlags SDLCALL Wayland_GetGlobalMouseState(float *x, float *y)
 {
     SDL_Mouse *mouse = SDL_GetMouse();
-    SDL_Window *focus = SDL_GetMouseFocus();
     SDL_MouseButtonFlags result = 0;
 
-    if (focus) {
+    // If there is no window with mouse focus, we have no idea what the actual position or button state is.
+    if (mouse->focus) {
         int off_x, off_y;
-
-        // TODO: Actually get the button states!
-        *x = mouse->last_x;
-        *y = mouse->last_y;
-        result = 0;
-        SDL_RelativeToGlobalForWindow(focus, focus->x, focus->y, &off_x, &off_y);
-        *x += off_x;
-        *y += off_y;
+        SDL_RelativeToGlobalForWindow(mouse->focus, mouse->focus->x, mouse->focus->y, &off_x, &off_y);
+        result = SDL_GetMouseState(x, y);
+        *x = mouse->x + off_x;
+        *y = mouse->y + off_y;
+    } else {
+        *x = 0.f;
+        *y = 0.f;
     }
 
     return result;

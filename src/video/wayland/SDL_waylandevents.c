@@ -515,6 +515,11 @@ void Wayland_PumpEvents(SDL_VideoDevice *_this)
 
     wl_list_for_each (seat, &d->seat_list, link) {
         if (keyboard_repeat_is_set(&seat->keyboard.repeat)) {
+            if (seat->keyboard.sdl_keymap != SDL_GetCurrentKeymap()) {
+                SDL_SetKeymap(seat->keyboard.sdl_keymap, true);
+                SDL_SetModState(seat->keyboard.pressed_modifiers | seat->keyboard.locked_modifiers);
+            }
+
             const Uint64 elapsed = SDL_GetTicksNS() - seat->keyboard.repeat.sdl_press_time_ns;
             keyboard_repeat_handle(&seat->keyboard.repeat, elapsed);
         }
@@ -571,73 +576,68 @@ static void pointer_handle_enter(void *data, struct wl_pointer *pointer,
                                  uint32_t serial, struct wl_surface *surface,
                                  wl_fixed_t sx_w, wl_fixed_t sy_w)
 {
-    SDL_WaylandSeat *seat = data;
-    SDL_WindowData *window;
-
     if (!surface) {
-        // enter event for a window we've just destroyed
+        // Enter event for a destroyed surface.
         return;
     }
 
-    /* This handler will be called twice in Wayland 1.4
-     * Once for the window surface which has valid user data
-     * and again for the mouse cursor surface which does not have valid user data
-     * We ignore the later
-     */
-    window = Wayland_GetWindowDataForOwnedSurface(surface);
-
-    if (window) {
-        seat->pointer.focus = window;
-        seat->pointer.enter_serial = serial;
-        ++seat->pointer.focus->pointer_focus_count;
-        SDL_SetMouseFocus(window->sdlwindow);
-        Wayland_SeatUpdateGrabs(seat->display);
-        /* In the case of e.g. a pointer confine warp, we may receive an enter
-         * event with no following motion event, but with the new coordinates
-         * as part of the enter event.
-         *
-         * FIXME: This causes a movement event with an anomalous timestamp when
-         *        the cursor enters the window.
-         */
-        pointer_handle_motion(data, pointer, 0, sx_w, sy_w);
-        /* If the cursor was changed while our window didn't have pointer
-         * focus, we might need to trigger another call to
-         * wl_pointer_set_cursor() for the new cursor to be displayed. */
-        Wayland_SetHitTestCursor(window->hit_test_result);
+    SDL_WindowData *window = Wayland_GetWindowDataForOwnedSurface(surface);
+    if (!window) {
+        // Not a surface owned by SDL.
+        return;
     }
+
+    SDL_WaylandSeat *seat = (SDL_WaylandSeat *)data;
+    seat->pointer.focus = window;
+    seat->pointer.enter_serial = serial;
+    ++seat->pointer.focus->pointer_focus_count;
+    SDL_SetMouseFocus(window->sdlwindow);
+    Wayland_SeatUpdateGrabs(seat->display);
+    /* In the case of e.g. a pointer confine warp, we may receive an enter
+     * event with no following motion event, but with the new coordinates
+     * as part of the enter event.
+     *
+     * FIXME: This causes a movement event with an anomalous timestamp when
+     *        the cursor enters the window.
+     */
+    pointer_handle_motion(data, pointer, 0, sx_w, sy_w);
+    /* If the cursor was changed while our window didn't have pointer
+     * focus, we might need to trigger another call to
+     * wl_pointer_set_cursor() for the new cursor to be displayed. */
+    Wayland_SetHitTestCursor(window->hit_test_result);
 }
 
 static void pointer_handle_leave(void *data, struct wl_pointer *pointer,
                                  uint32_t serial, struct wl_surface *surface)
 {
-    SDL_WaylandSeat *seat = data;
-
     if (!surface) {
+        // Leave event for a destroyed surface.
         return;
     }
 
-    // Only relinquish focus if all pointers have left the surface.
-    if (seat->pointer.focus && !--seat->pointer.focus->pointer_focus_count) {
-        SDL_WindowData *wind = Wayland_GetWindowDataForOwnedSurface(surface);
+    SDL_WindowData *window = Wayland_GetWindowDataForOwnedSurface(surface);
+    if (!window) {
+        // Not a surface owned by SDL.
+        return;
+    }
 
-        if (wind) {
-            // Clear the capture flag and raise all buttons
-            wind->sdlwindow->flags &= ~SDL_WINDOW_MOUSE_CAPTURE;
+    SDL_WaylandSeat *seat = (SDL_WaylandSeat *)data;
 
-            seat->pointer.buttons_pressed = 0;
-            SDL_SendMouseButton(Wayland_GetPointerTimestamp(seat, 0), wind->sdlwindow, seat->pointer.sdl_id, SDL_BUTTON_LEFT, false);
-            SDL_SendMouseButton(Wayland_GetPointerTimestamp(seat, 0), wind->sdlwindow, seat->pointer.sdl_id, SDL_BUTTON_RIGHT, false);
-            SDL_SendMouseButton(Wayland_GetPointerTimestamp(seat, 0), wind->sdlwindow, seat->pointer.sdl_id, SDL_BUTTON_MIDDLE, false);
-            SDL_SendMouseButton(Wayland_GetPointerTimestamp(seat, 0), wind->sdlwindow, seat->pointer.sdl_id, SDL_BUTTON_X1, false);
-            SDL_SendMouseButton(Wayland_GetPointerTimestamp(seat, 0), wind->sdlwindow, seat->pointer.sdl_id, SDL_BUTTON_X2, false);
-        }
+    // Clear the capture flag and raise all buttons
+    window->sdlwindow->flags &= ~SDL_WINDOW_MOUSE_CAPTURE;
 
-        /* A pointer leave event may be emitted if the compositor hides the pointer in response to receiving a touch event.
-         * Don't relinquish focus if the surface has active touches, as the compositor is just transitioning from mouse to touch mode.
-         */
-        if (!Wayland_SurfaceHasActiveTouches(seat->display, surface)) {
-            SDL_SetMouseFocus(NULL);
-        }
+    seat->pointer.buttons_pressed = 0;
+    SDL_SendMouseButton(Wayland_GetPointerTimestamp(seat, 0), window->sdlwindow, seat->pointer.sdl_id, SDL_BUTTON_LEFT, false);
+    SDL_SendMouseButton(Wayland_GetPointerTimestamp(seat, 0), window->sdlwindow, seat->pointer.sdl_id, SDL_BUTTON_RIGHT, false);
+    SDL_SendMouseButton(Wayland_GetPointerTimestamp(seat, 0), window->sdlwindow, seat->pointer.sdl_id, SDL_BUTTON_MIDDLE, false);
+    SDL_SendMouseButton(Wayland_GetPointerTimestamp(seat, 0), window->sdlwindow, seat->pointer.sdl_id, SDL_BUTTON_X1, false);
+    SDL_SendMouseButton(Wayland_GetPointerTimestamp(seat, 0), window->sdlwindow, seat->pointer.sdl_id, SDL_BUTTON_X2, false);
+
+    /* A pointer leave event may be emitted if the compositor hides the pointer in response to receiving a touch event.
+     * Don't relinquish focus if the surface has active touches, as the compositor is just transitioning from mouse to touch mode.
+     */
+    if (!--seat->pointer.focus->pointer_focus_count && !Wayland_SurfaceHasActiveTouches(seat->display, surface)) {
+        SDL_SetMouseFocus(NULL);
     }
 
     seat->pointer.focus = NULL;
@@ -1685,13 +1685,13 @@ static void keyboard_handle_enter(void *data, struct wl_keyboard *keyboard,
     uint32_t *key;
 
     if (!surface) {
-        // enter event for a window we've just destroyed
+        // Enter event for a destroyed surface.
         return;
     }
 
     SDL_WindowData *window = Wayland_GetWindowDataForOwnedSurface(surface);
-
     if (!window) {
+        // Not a surface owned by SDL.
         return;
     }
 
@@ -1748,11 +1748,13 @@ static void keyboard_handle_leave(void *data, struct wl_keyboard *keyboard,
     SDL_WaylandSeat *seat = (SDL_WaylandSeat *)data;
 
     if (!surface) {
+        // Leave event for a destroyed surface.
         return;
     }
 
     SDL_WindowData *window = Wayland_GetWindowDataForOwnedSurface(surface);
     if (!window) {
+        // Not a surface owned by SDL.
         return;
     }
 
