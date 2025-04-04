@@ -528,6 +528,8 @@ static void X11_DispatchUnmapNotify(SDL_WindowData *data)
     if (!window->is_hiding) {
         SDL_SendWindowEvent(data->window, SDL_EVENT_WINDOW_MINIMIZED, 0, 0);
         SDL_SendWindowEvent(data->window, SDL_EVENT_WINDOW_OCCLUDED, 0, 0);
+    } else {
+        SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_HIDDEN, 0, 0);
     }
 }
 

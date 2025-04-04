@@ -56,6 +56,7 @@ struct SDL_Window
     int last_pixel_w, last_pixel_h;
     SDL_WindowFlags flags;
     SDL_WindowFlags pending_flags;
+    SDL_WindowFlags pending_flag_mask;
     float display_scale;
     bool external_graphics_context;
     bool fullscreen_exclusive;  // The window is currently fullscreen exclusive

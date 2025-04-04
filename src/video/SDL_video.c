@@ -2212,17 +2212,19 @@ SDL_Window ** SDLCALL SDL_GetWindows(int *count)
     return windows;
 }
 
-static void ApplyWindowFlags(SDL_Window *window, SDL_WindowFlags flags)
+static void ApplyWindowFlags(SDL_Window *window, SDL_WindowFlags flags, SDL_WindowFlags changed_flag_mask)
 {
     if (!SDL_WINDOW_IS_POPUP(window)) {
-        if (!(flags & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_MAXIMIZED))) {
+        if (!(flags & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_MAXIMIZED)) && (changed_flag_mask & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_MAXIMIZED))) {
             SDL_RestoreWindow(window);
         }
         if (flags & SDL_WINDOW_MAXIMIZED) {
             SDL_MaximizeWindow(window);
         }
 
-        SDL_SetWindowFullscreen(window, (flags & SDL_WINDOW_FULLSCREEN) != 0);
+        if (changed_flag_mask & SDL_WINDOW_FULLSCREEN) {
+            SDL_SetWindowFullscreen(window, (flags & SDL_WINDOW_FULLSCREEN) != 0);
+        }
 
         if (flags & SDL_WINDOW_MINIMIZED) {
             SDL_MinimizeWindow(window);
@@ -2248,7 +2250,7 @@ static void SDL_FinishWindowCreation(SDL_Window *window, SDL_WindowFlags flags)
     if (window->flags & SDL_WINDOW_EXTERNAL) {
         // Whoever has created the window has already applied whatever flags are needed
     } else {
-        ApplyWindowFlags(window, flags);
+        ApplyWindowFlags(window, flags, flags);
         if (!(flags & SDL_WINDOW_HIDDEN)) {
             SDL_ShowWindow(window);
         }
@@ -3283,6 +3285,7 @@ bool SDL_HideWindow(SDL_Window *window)
     // Store the flags for restoration later.
     const SDL_WindowFlags pending_mask = (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_MINIMIZED | SDL_WINDOW_FULLSCREEN | SDL_WINDOW_KEYBOARD_GRABBED | SDL_WINDOW_MOUSE_GRABBED);
     window->pending_flags = (window->flags & pending_mask);
+    window->pending_flag_mask = window->pending_flags;
 
     window->is_hiding = true;
     if (_this->HideWindow) {
@@ -3323,6 +3326,7 @@ bool SDL_MaximizeWindow(SDL_Window *window)
     }
 
     if (window->flags & SDL_WINDOW_HIDDEN) {
+        window->pending_flag_mask |= SDL_WINDOW_MAXIMIZED;
         window->pending_flags |= SDL_WINDOW_MAXIMIZED;
         return true;
     }
@@ -3342,6 +3346,7 @@ bool SDL_MinimizeWindow(SDL_Window *window)
     }
 
     if (window->flags & SDL_WINDOW_HIDDEN) {
+        window->pending_flag_mask |= SDL_WINDOW_MINIMIZED;
         window->pending_flags |= SDL_WINDOW_MINIMIZED;
         return true;
     }
@@ -3361,6 +3366,7 @@ bool SDL_RestoreWindow(SDL_Window *window)
     }
 
     if (window->flags & SDL_WINDOW_HIDDEN) {
+        window->pending_flag_mask |= window->pending_flags & (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_MINIMIZED);
         window->pending_flags &= ~(SDL_WINDOW_MAXIMIZED | SDL_WINDOW_MINIMIZED);
         return true;
     }
@@ -3383,6 +3389,7 @@ bool SDL_SetWindowFullscreen(SDL_Window *window, bool fullscreen)
         } else {
             window->pending_flags &= ~SDL_WINDOW_FULLSCREEN;
         }
+        window->pending_flag_mask |= SDL_WINDOW_FULLSCREEN;
         return true;
     }
 
@@ -3978,8 +3985,9 @@ float SDL_GetWindowProgressValue(SDL_Window *window)
 void SDL_OnWindowShown(SDL_Window *window)
 {
     // Set window state if we have pending window flags cached
-    ApplyWindowFlags(window, window->pending_flags);
+    ApplyWindowFlags(window, window->pending_flags, window->pending_flag_mask);
     window->pending_flags = 0;
+    window->pending_flag_mask = 0;
 }
 
 void SDL_OnWindowHidden(SDL_Window *window)
@@ -3989,6 +3997,7 @@ void SDL_OnWindowHidden(SDL_Window *window)
      * when minimized.
      */
     window->pending_flags |= (window->flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_MAXIMIZED));
+    window->pending_flag_mask |= window->pending_flags;
 
     // The window is already hidden at this point, so just change the mode back if necessary.
     SDL_UpdateFullscreenMode(window, SDL_FULLSCREEN_OP_LEAVE, false);
