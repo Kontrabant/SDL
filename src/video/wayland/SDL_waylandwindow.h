@@ -204,9 +204,8 @@ struct SDL_WindowData
     Uint32 icc_size;
     bool floating;
     bool suspended;
-    bool resizing;
+    bool defer_size_events;
     bool active;
-    bool drop_interactive_resizes;
     bool is_fullscreen;
     bool fullscreen_exclusive;
     bool drop_fullscreen_requests;
