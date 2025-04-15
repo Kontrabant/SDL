@@ -301,7 +301,7 @@ static void SetSurfaceOpaqueRegion(SDL_WindowData *wind, bool is_opaque)
     }
 }
 
-static bool ConfigureWindowGeometry(SDL_Window *window)
+static void ConfigureWindowGeometry(SDL_Window *window, bool interactive_resize)
 {
     SDL_WindowData *data = window->internal;
     const double scale_factor = GetWindowScale(window);
@@ -309,17 +309,6 @@ static bool ConfigureWindowGeometry(SDL_Window *window)
     const int old_pixel_height = data->current.pixel_height;
     int window_width, window_height;
     bool window_size_changed;
-
-    // Throttle interactive resize events to once per refresh cycle to prevent lag.
-    if (data->resizing) {
-        data->resizing = false;
-
-        if (data->drop_interactive_resizes) {
-            return false;
-        } else {
-            data->drop_interactive_resizes = true;
-        }
-    }
 
     // Set the drawable backbuffer size.
     GetBufferSize(window, &data->current.pixel_width, &data->current.pixel_height);
@@ -445,32 +434,33 @@ static bool ConfigureWindowGeometry(SDL_Window *window)
      */
     SetMinMaxDimensions(window);
 
-    // Unconditionally send the window and drawable size, the video core will deduplicate when required.
-    if (!data->scale_to_display) {
-        SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_RESIZED, window_width, window_height);
-    } else {
-        SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_RESIZED, data->current.pixel_width, data->current.pixel_height);
-    }
-    SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED, data->current.pixel_width, data->current.pixel_height);
-
-    /* Send an exposure event if the window is in the shown state and the size has changed,
-     * even if the window is occluded, as the client needs to commit a new frame for the
-     * changes to take effect.
-     *
-     * The occlusion state is immediately set again afterward, if necessary.
-     */
-    if (data->shell_surface_status == WAYLAND_SHELL_SURFACE_STATUS_SHOWN) {
-        if ((buffer_size_changed || window_size_changed) ||
-            (!data->suspended && (window->flags & SDL_WINDOW_OCCLUDED))) {
-            SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_EXPOSED, 0, 0);
+    if (!interactive_resize) {
+        // Unconditionally send the window and drawable size, the video core will deduplicate when required.
+        if (!data->scale_to_display) {
+            SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_RESIZED, window_width, window_height);
+        } else {
+            SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_RESIZED, data->current.pixel_width, data->current.pixel_height);
         }
+        SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED, data->current.pixel_width, data->current.pixel_height);
 
-        if (data->suspended) {
-            SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_OCCLUDED, 0, 0);
+        /* Send an exposure event if the window is in the shown state and the size has changed,
+         * even if the window is occluded, as the client needs to commit a new frame for the
+         * changes to take effect.
+         *
+         * The occlusion state is immediately set again afterward, if necessary.
+         */
+        if (data->shell_surface_status == WAYLAND_SHELL_SURFACE_STATUS_SHOWN) {
+            if ((buffer_size_changed || window_size_changed) ||
+                (!interactive_resize && data->defer_size_events) ||
+                (!data->suspended && (window->flags & SDL_WINDOW_OCCLUDED))) {
+                SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_EXPOSED, 0, 0);
+                }
+
+            if (data->suspended) {
+                SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_OCCLUDED, 0, 0);
+            }
         }
     }
-
-    return true;
 }
 
 static void CommitLibdecorFrame(SDL_Window *window)
@@ -690,7 +680,10 @@ static void surface_frame_done(void *data, struct wl_callback *cb, uint32_t time
         wl_surface_damage(wind->surface, 0, 0, SDL_MAX_SINT32, SDL_MAX_SINT32);
     }
 
-    wind->drop_interactive_resizes = false;
+    if (wind->defer_size_events) {
+        ConfigureWindowGeometry(wind->sdlwindow, false);
+        wind->defer_size_events = false;
+    }
 
     if (wind->shell_surface_status == WAYLAND_SHELL_SURFACE_STATUS_WAITING_FOR_FRAME) {
         wind->shell_surface_status = WAYLAND_SHELL_SURFACE_STATUS_SHOWN;
@@ -746,9 +739,8 @@ static void handle_configure_xdg_shell_surface(void *data, struct xdg_surface *x
     SDL_WindowData *wind = (SDL_WindowData *)data;
     SDL_Window *window = wind->sdlwindow;
 
-    if (ConfigureWindowGeometry(window)) {
-        xdg_surface_ack_configure(xdg, serial);
-    }
+    ConfigureWindowGeometry(window, wind->defer_size_events);
+    xdg_surface_ack_configure(xdg, serial);
 
     wind->shell_surface.xdg.initial_configure_seen = true;
 }
@@ -979,7 +971,7 @@ static void handle_configure_xdg_toplevel(void *data,
     wind->suspended = suspended;
     wind->active = active;
     window->tiled = tiled;
-    wind->resizing = resizing;
+    wind->defer_size_events = resizing;
 
     if (wind->shell_surface_status == WAYLAND_SHELL_SURFACE_STATUS_WAITING_FOR_CONFIGURE) {
         wind->shell_surface_status = WAYLAND_SHELL_SURFACE_STATUS_WAITING_FOR_FRAME;
@@ -1389,7 +1381,7 @@ static void decoration_frame_configure(struct libdecor_frame *frame,
     wind->suspended = suspended;
     wind->active = active;
     window->tiled = tiled;
-    wind->resizing = resizing;
+    wind->defer_size_events = resizing;
 
     // Update the window manager capabilities.
 #if SDL_LIBDECOR_CHECK_VERSION(0, 3, 0)
@@ -1410,12 +1402,12 @@ static void decoration_frame_configure(struct libdecor_frame *frame,
 #endif
 
     // Calculate the new window geometry
-    if (ConfigureWindowGeometry(window)) {
-        // ... then commit the changes on the libdecor side.
-        struct libdecor_state *state = libdecor_state_new(wind->current.logical_width, wind->current.logical_height);
-        libdecor_frame_commit(frame, state, configuration);
-        libdecor_state_free(state);
-    }
+    ConfigureWindowGeometry(window, resizing);
+
+    // ... then commit the changes on the libdecor side.
+    struct libdecor_state *state = libdecor_state_new(wind->current.logical_width, wind->current.logical_height);
+    libdecor_frame_commit(frame, state, configuration);
+    libdecor_state_free(state);
 
     if (!wind->shell_surface.libdecor.initial_configure_seen) {
         LibdecorGetMinContentSize(frame, &wind->system_limits.min_width, &wind->system_limits.min_height);
@@ -1493,7 +1485,7 @@ static void Wayland_HandlePreferredScaleChanged(SDL_WindowData *window_data, dou
         }
 
         if (window_data->sdlwindow->flags & SDL_WINDOW_HIGH_PIXEL_DENSITY || window_data->scale_to_display) {
-            ConfigureWindowGeometry(window_data->sdlwindow);
+            ConfigureWindowGeometry(window_data->sdlwindow, false);
             CommitLibdecorFrame(window_data->sdlwindow);
         }
     }
@@ -2345,7 +2337,7 @@ SDL_FullscreenResult Wayland_SetWindowFullscreen(SDL_VideoDevice *_this, SDL_Win
             wind->fullscreen_was_positioned = true;
             SetFullscreen(window, output);
         } else {
-            ConfigureWindowGeometry(window);
+            ConfigureWindowGeometry(window, false);
             CommitLibdecorFrame(window);
 
             return SDL_FULLSCREEN_SUCCEEDED;
@@ -2661,7 +2653,7 @@ bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
     }
 
     // Must be called before EGL configuration to set the drawable backbuffer size.
-    ConfigureWindowGeometry(window);
+    ConfigureWindowGeometry(window, false);
 
     /* Fire a callback when the compositor wants a new frame rendered.
      * Right now this only matters for OpenGL; we use this callback to add a
@@ -2813,7 +2805,7 @@ void Wayland_SetWindowSize(SDL_VideoDevice *_this, SDL_Window *window)
             wind->requested.pixel_height = window->pending.h;
         }
 
-        ConfigureWindowGeometry(window);
+        ConfigureWindowGeometry(window, false);
     } else {
         // Can't resize the window.
         window->last_size_pending = false;
