@@ -1271,6 +1271,10 @@ extern SDL_DECLSPEC SDL_Window * SDLCALL SDL_CreatePopupWindow(SDL_Window *paren
  *   and "modal" properties
  * - `SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN`: true if the window should be
  *   resizable
+ * - `SDL_PROP_WINDOW_CREATE_ID_STRING`: an identifier string for a window, in UTF-8 encoding,
+ *   used by desktops for window management purposes. It should be stable, human readable, and
+ *   not translated. Examples of suitable strings would be "main window", "settings",
+ *   or similar. This property is ignored on popup windows.
  * - `SDL_PROP_WINDOW_CREATE_TITLE_STRING`: the title of the window, in UTF-8
  *   encoding
  * - `SDL_PROP_WINDOW_CREATE_TRANSPARENT_BOOLEAN`: true if the window show
@@ -1387,6 +1391,7 @@ extern SDL_DECLSPEC SDL_Window * SDLCALL SDL_CreateWindowWithProperties(SDL_Prop
 #define SDL_PROP_WINDOW_CREATE_OPENGL_BOOLEAN                      "SDL.window.create.opengl"
 #define SDL_PROP_WINDOW_CREATE_PARENT_POINTER                      "SDL.window.create.parent"
 #define SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN                   "SDL.window.create.resizable"
+#define SDL_PROP_WINDOW_CREATE_ID_STRING                           "SDL.window.create.id_string"
 #define SDL_PROP_WINDOW_CREATE_TITLE_STRING                        "SDL.window.create.title"
 #define SDL_PROP_WINDOW_CREATE_TRANSPARENT_BOOLEAN                 "SDL.window.create.transparent"
 #define SDL_PROP_WINDOW_CREATE_TOOLTIP_BOOLEAN                     "SDL.window.create.tooltip"

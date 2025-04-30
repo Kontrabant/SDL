@@ -47,6 +47,7 @@
 #include "frog-color-management-v1-client-protocol.h"
 #include "xdg-toplevel-icon-v1-client-protocol.h"
 #include "color-management-v1-client-protocol.h"
+#include "xdg-toplevel-tag-v1-client-protocol.h"
 
 #ifdef HAVE_LIBDECOR_H
 #include <libdecor.h>
@@ -1884,6 +1885,12 @@ void Wayland_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
                                                       data->xdg_toplevel_icon_v1);
             }
 
+            if (c->xdg_toplevel_tag_manager_v1 && data->toplevel_tag) {
+                xdg_toplevel_tag_manager_v1_set_toplevel_tag(c->xdg_toplevel_tag_manager_v1,
+                                                             libdecor_frame_get_xdg_toplevel(data->shell_surface.libdecor.frame),
+                                                             data->toplevel_tag);
+            }
+
             SDL_SetPointerProperty(props, SDL_PROP_WINDOW_WAYLAND_XDG_SURFACE_POINTER, libdecor_frame_get_xdg_surface(data->shell_surface.libdecor.frame));
             SDL_SetPointerProperty(props, SDL_PROP_WINDOW_WAYLAND_XDG_TOPLEVEL_POINTER, libdecor_frame_get_xdg_toplevel(data->shell_surface.libdecor.frame));
         }
@@ -1975,6 +1982,12 @@ void Wayland_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
                 xdg_toplevel_icon_manager_v1_set_icon(_this->internal->xdg_toplevel_icon_manager_v1,
                                                       data->shell_surface.xdg.toplevel.xdg_toplevel,
                                                       data->xdg_toplevel_icon_v1);
+            }
+
+            if (c->xdg_toplevel_tag_manager_v1 && data->toplevel_tag) {
+                xdg_toplevel_tag_manager_v1_set_toplevel_tag(c->xdg_toplevel_tag_manager_v1,
+                                                             data->shell_surface.xdg.toplevel.xdg_toplevel,
+                                                             data->toplevel_tag);
             }
 
             SDL_SetPointerProperty(props, SDL_PROP_WINDOW_WAYLAND_XDG_TOPLEVEL_POINTER, data->shell_surface.xdg.toplevel.xdg_toplevel);
@@ -2615,6 +2628,13 @@ bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
         Wayland_AddWindowDataToExternalList(data);
     }
 
+    if (c->xdg_toplevel_tag_manager_v1 && !SDL_WINDOW_IS_POPUP(window)) {
+        const char *tag = SDL_GetStringProperty(create_props, SDL_PROP_WINDOW_CREATE_ID_STRING, NULL);
+        if (tag) {
+            data->toplevel_tag = SDL_strdup(tag);
+        }
+    }
+
     /* Always attach a viewport and fractional scale manager if available and the surface is not custom/external,
      * or the custom/external surface was explicitly flagged as high pixel density aware, which signals that the
      * application wants SDL to handle scaling.
@@ -3133,6 +3153,7 @@ void Wayland_DestroyWindow(SDL_VideoDevice *_this, SDL_Window *window)
 
         SDL_free(wind->outputs);
         SDL_free(wind->app_id);
+        SDL_free(wind->toplevel_tag);
 
         if (wind->gles_swap_frame_callback) {
             wl_callback_destroy(wind->gles_swap_frame_callback);

@@ -548,6 +548,7 @@ bool X11_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Properties
     XClassHint *classhints;
     Atom _NET_WM_BYPASS_COMPOSITOR;
     Atom _NET_WM_WINDOW_TYPE;
+    Atom _NET_WM_TOPLEVEL_TAG;
     Atom wintype;
     const char *wintype_name = NULL;
     long compositor = 1;
@@ -795,6 +796,12 @@ bool X11_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Properties
         X11_XChangeProperty(display, w, _NET_WM_BYPASS_COMPOSITOR, XA_CARDINAL, 32,
                             PropModeReplace,
                             (unsigned char *)&compositor, 1);
+    }
+    const char *tag = SDL_GetStringProperty(create_props, SDL_PROP_WINDOW_CREATE_ID_STRING, NULL);
+    if (tag) {
+        _NET_WM_TOPLEVEL_TAG = X11_XInternAtom(display, "_NET_WM_TOPLEVEL_TAG", False);
+        X11_XChangeProperty(display, w, _NET_WM_TOPLEVEL_TAG, XA_STRING, 8,
+                            PropModeReplace, (unsigned char *)tag, 1);
     }
 
     {

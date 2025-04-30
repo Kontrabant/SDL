@@ -116,6 +116,7 @@ struct SDL_WindowData
     struct xdg_dialog_v1 *xdg_dialog_v1;
     struct wp_alpha_modifier_surface_v1 *wp_alpha_modifier_surface_v1;
     struct xdg_toplevel_icon_v1 *xdg_toplevel_icon_v1;
+    struct xdg_toplevel_tag_v1 *xdg_toplevel_tag_v1;
     struct frog_color_managed_surface *frog_color_managed_surface;
     struct wp_color_management_surface_feedback_v1 *wp_color_management_surface_feedback;
 
@@ -127,6 +128,7 @@ struct SDL_WindowData
     int num_outputs;
 
     char *app_id;
+    char *toplevel_tag;
     double scale_factor;
 
     struct Wayland_SHMBuffer *icon_buffers;
