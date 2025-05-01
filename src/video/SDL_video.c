@@ -1709,6 +1709,10 @@ SDL_VideoDisplay *SDL_GetVideoDisplayForFullscreenWindow(SDL_Window *window)
         displayID = window->current_fullscreen_mode.displayID;
     }
 
+    if (!displayID && !window->last_position_pending && _this->GetDisplayForWindow) {
+        displayID = _this->GetDisplayForWindow(_this, window);
+    }
+
     /* This is used to handle the very common pattern of SDL_SetWindowPosition()
      * followed immediately by SDL_SetWindowFullscreen() to make the window fullscreen
      * desktop on a specific display. If the backend doesn't support changing the
