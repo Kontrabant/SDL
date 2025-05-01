@@ -1554,38 +1554,55 @@ static void SDL_GetClosestPointOnRect(const SDL_Rect *rect, SDL_Point *point)
 
 static SDL_DisplayID GetDisplayForRect(int x, int y, int w, int h)
 {
-    int i, dist;
     SDL_DisplayID closest = 0;
-    int closest_dist = 0x7FFFFFFF;
+    SDL_DisplayID last_enclosing = 0;
+    SDL_Rect last_enclosing_rect = { 0 };
+    int closest_dist = INT32_MAX;
     SDL_Point closest_point_on_display;
-    SDL_Point delta;
-    SDL_Point center;
-    center.x = x + w / 2;
-    center.y = y + h / 2;
+    const SDL_Point center = {
+        x + w / 2,
+        y + h / 2
+    };
 
     if (_this) {
-        for (i = 0; i < _this->num_displays; ++i) {
+        for (int i = 0; i < _this->num_displays; ++i) {
             SDL_VideoDisplay *display = _this->displays[i];
             SDL_Rect display_rect;
             SDL_GetDisplayBounds(display->id, &display_rect);
 
-            // Check if the window is fully enclosed
+            /* Check if the window is fully enclosed. In the case of overlapping displays due to odd
+             * scaled desktop configurations, favor the bottommost/rightmost enclosing display.
+             */
             if (SDL_GetRectEnclosingPoints(&center, 1, &display_rect, NULL)) {
-                return display->id;
+                if (last_enclosing) {
+                    if (display_rect.x > last_enclosing_rect.x || display_rect.y > last_enclosing_rect.y) {
+                        SDL_copyp(&last_enclosing_rect, &display_rect);
+                    }
+                } else {
+                    SDL_copyp(&last_enclosing_rect, &display_rect);
+                }
+
+                last_enclosing = display->id;
             }
 
             // Snap window center to the display rect
             closest_point_on_display = center;
             SDL_GetClosestPointOnRect(&display_rect, &closest_point_on_display);
 
-            delta.x = center.x - closest_point_on_display.x;
-            delta.y = center.y - closest_point_on_display.y;
-            dist = (delta.x * delta.x + delta.y * delta.y);
+            const SDL_Point delta = {
+                center.x - closest_point_on_display.x,
+                center.y - closest_point_on_display.y
+            };
+            const int dist = delta.x * delta.x + delta.y * delta.y;
             if (dist < closest_dist) {
                 closest = display->id;
                 closest_dist = dist;
             }
         }
+    }
+
+    if (last_enclosing) {
+        return last_enclosing;
     }
 
     if (closest == 0) {
