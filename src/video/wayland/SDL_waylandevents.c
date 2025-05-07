@@ -901,7 +901,7 @@ static void pointer_handle_button_common(SDL_WaylandSeat *seat, uint32_t serial,
          *
          * The mouse is not captured in relative mode.
          */
-        if (!seat->display->relative_mode_enabled || !Wayland_SeatHasRelativePointerFocus(seat)) {
+        if (!Wayland_SeatRelativePointerEnabled(seat)) {
             if (seat->pointer.buttons_pressed != 0) {
                 window->sdlwindow->flags |= SDL_WINDOW_MOUSE_CAPTURE;
             } else {
@@ -1154,28 +1154,24 @@ static void relative_pointer_handle_relative_motion(void *data,
 {
     SDL_WaylandSeat *seat = data;
 
-    if (seat->display->relative_mode_enabled) {
+    if (Wayland_SeatRelativePointerEnabled(seat)) {
         SDL_WindowData *window = seat->pointer.focus;
+        SDL_Mouse *mouse = SDL_GetMouse();
 
-        // Relative motion follows keyboard focus.
-        if (Wayland_SeatHasRelativePointerFocus(seat)) {
-            SDL_Mouse *mouse = SDL_GetMouse();
+        // Relative pointer event times are in microsecond granularity.
+        const Uint64 timestamp = Wayland_AdjustEventTimestampBase(SDL_US_TO_NS(((Uint64)time_hi << 32) | (Uint64)time_lo));
 
-            // Relative pointer event times are in microsecond granularity.
-            const Uint64 timestamp = Wayland_AdjustEventTimestampBase(SDL_US_TO_NS(((Uint64)time_hi << 32) | (Uint64)time_lo));
-
-            double dx;
-            double dy;
-            if (mouse->InputTransform || !mouse->enable_relative_system_scale) {
-                dx = wl_fixed_to_double(dx_unaccel_w);
-                dy = wl_fixed_to_double(dy_unaccel_w);
-            } else {
-                dx = wl_fixed_to_double(dx_w) * window->pointer_scale.x;
-                dy = wl_fixed_to_double(dy_w) * window->pointer_scale.y;
-            }
-
-            SDL_SendMouseMotion(timestamp, window->sdlwindow, seat->pointer.sdl_id, true, (float)dx, (float)dy);
+        double dx;
+        double dy;
+        if (mouse->InputTransform || !mouse->enable_relative_system_scale) {
+            dx = wl_fixed_to_double(dx_unaccel_w);
+            dy = wl_fixed_to_double(dy_unaccel_w);
+        } else {
+            dx = wl_fixed_to_double(dx_w) * window->pointer_scale.x;
+            dy = wl_fixed_to_double(dy_w) * window->pointer_scale.y;
         }
+
+        SDL_SendMouseMotion(timestamp, window->sdlwindow, seat->pointer.sdl_id, true, (float)dx, (float)dy);
     }
 }
 
@@ -3475,17 +3471,27 @@ void Wayland_SeatDestroy(SDL_WaylandSeat *seat, bool send_events)
     SDL_free(seat);
 }
 
-bool Wayland_SeatHasRelativePointerFocus(SDL_WaylandSeat *seat)
+bool Wayland_SeatRelativePointerEnabled(SDL_WaylandSeat *seat)
 {
-    /* If a seat has both keyboard and pointer capabilities, relative focus will follow the keyboard
-     * attached to that seat. Otherwise, relative focus will be gained if any other seat has keyboard
-     * focus on the window with pointer focus.
-     */
-    if (seat->keyboard.wl_keyboard) {
-        return seat->keyboard.focus && seat->keyboard.focus == seat->pointer.focus;
-    } else {
-        return seat->pointer.focus && seat->pointer.focus->keyboard_focus_count != 0;
+    bool result = false;
+
+    if (seat->pointer.focus) {
+        if (seat->pointer.focus->sdlwindow->flags & SDL_WINDOW_MOUSE_RELATIVE_MODE) {
+            /* If a seat has both keyboard and pointer capabilities, relative focus will follow the keyboard
+             * attached to that seat. Otherwise, relative focus will be gained if any other seat has keyboard
+             * focus on the window with pointer focus.
+             */
+            if (seat->keyboard.wl_keyboard) {
+                result = seat->keyboard.focus == seat->pointer.focus;
+            } else {
+                result = seat->pointer.focus->keyboard_focus_count != 0;
+            }
+        } else {
+            result = SDL_GetMouse()->warp_emulation_active;
+        }
     }
+
+    return result;
 }
 
 static void Wayland_SeatUpdateKeyboardGrab(SDL_WaylandSeat *seat)
@@ -3519,9 +3525,9 @@ void Wayland_SeatUpdatePointerGrab(SDL_WaylandSeat *seat)
     SDL_VideoData *display = seat->display;
 
     if (display->pointer_constraints) {
-        const bool has_relative_focus = Wayland_SeatHasRelativePointerFocus(seat);
+        const bool has_relative_focus = Wayland_SeatRelativePointerEnabled(seat);
 
-        if (seat->pointer.locked_pointer && (!display->relative_mode_enabled || !has_relative_focus)) {
+        if (seat->pointer.locked_pointer && !has_relative_focus) {
             zwp_locked_pointer_v1_destroy(seat->pointer.locked_pointer);
             seat->pointer.locked_pointer = NULL;
 
@@ -3531,7 +3537,7 @@ void Wayland_SeatUpdatePointerGrab(SDL_WaylandSeat *seat)
 
         if (seat->pointer.wl_pointer) {
             // If relative mode is active, and the pointer focus matches the keyboard focus, lock it.
-            if (seat->display->relative_mode_enabled && has_relative_focus) {
+            if (has_relative_focus) {
                 if (!seat->pointer.locked_pointer) {
                     // Creating a lock on a surface with an active confinement region on the same seat is a protocol error.
                     if (seat->pointer.confined_pointer) {
