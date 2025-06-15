@@ -790,26 +790,25 @@ static void DragCleanupCallback(SDL_WaylandUserdata *userdata)
 
     if (window_data->toplevel_drag_v1) {
         xdg_toplevel_drag_v1_destroy(window_data->toplevel_drag_v1);
+        window_data->toplevel_drag_v1 = NULL;
     }
 }
 
 bool BeginWindowDrag(SDL_WindowData *window_data, uint32_t serial)
 {
     SDL_VideoData *vid = window_data->waylandData;
-    struct SDL_WaylandInput *input = vid->input;
+    SDL_WaylandSeat *seat = vid->last_implicit_grab_seat;
     struct xdg_toplevel *toplevel = GetToplevelForWindow(window_data);
-    struct wl_surface *origin = input->pointer_focus ? input->pointer_focus->surface : NULL;
+    struct wl_surface *origin = seat->pointer.focus ? seat->pointer.focus->surface : NULL;
 
     if (vid->xdg_toplevel_drag_manager_v1 && toplevel) {
-        const int offset_x = (wl_fixed_to_int(input->sx_w) + input->pointer_focus->sdlwindow->x) - window_data->sdlwindow->x;
-        const int offset_y = (wl_fixed_to_int(input->sy_w) + input->pointer_focus->sdlwindow->y) - window_data->sdlwindow->y;
-
         SDL_WaylandDataSource *drag_source = Wayland_data_source_create(SDL_GetVideoDevice());
         Wayland_data_source_set_callback(drag_source, DragWindowCallback, DragCleanupCallback, window_data, 0);
         wl_data_source_offer(drag_source->source, DOCKABLE_WINDOW_MIME);
+        wl_data_source_set_actions(drag_source->source, WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE);
         window_data->toplevel_drag_v1 = xdg_toplevel_drag_manager_v1_get_xdg_toplevel_drag(vid->xdg_toplevel_drag_manager_v1, drag_source->source);
-        xdg_toplevel_drag_v1_attach(window_data->toplevel_drag_v1, toplevel, offset_x, offset_y);
-        wl_data_device_start_drag(input->data_device->data_device, drag_source->source, origin, NULL, serial);
+        xdg_toplevel_drag_v1_attach(window_data->toplevel_drag_v1, toplevel, 50, 50);
+        wl_data_device_start_drag(seat->data_device->data_device, drag_source->source, origin, NULL, serial);
 
         return true;
     }
@@ -2583,12 +2582,15 @@ static void data_device_handle_enter(void *data, struct wl_data_device *wl_data_
 
         if (Wayland_data_offer_has_mime(data_device->drag_offer, DOCKABLE_WINDOW_MIME)) {
             data_device->has_mime_window = true;
+            data_device->mime_type = DOCKABLE_WINDOW_MIME;
             wl_data_offer_accept(id, serial, DOCKABLE_WINDOW_MIME);
         }
 
         // SDL only supports "copy" style drag and drop
-        if (data_device->has_mime_file || data_device->has_mime_text || data_device->has_mime_window) {
+        if (data_device->has_mime_file || data_device->has_mime_text) {
             dnd_action = WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY;
+        } else if (data_device->has_mime_window) {
+            dnd_action = WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE;
         } else {
             // drag_mime is NULL this will decline the offer
             wl_data_offer_accept(id, serial, NULL);
@@ -2607,6 +2609,7 @@ static void data_device_handle_enter(void *data, struct wl_data_device *wl_data_
                 SDL_assert(length == sizeof(SDL_Window *));
                 SDL_memcpy(&dragWindow, buffer, length);
                 Wayland_data_offer_set_mime_data(data_device->drag_offer, DOCKABLE_WINDOW_MIME, buffer, length);
+                SDL_Log("Got window data");
                 SDL_free(buffer);
             }
         }
@@ -2794,7 +2797,7 @@ static void data_device_handle_drop(void *data, struct wl_data_device *wl_data_d
             }
         }
 
-        if (drop_handled && wl_data_offer_get_version(data_device->drag_offer->offer) >= WL_DATA_OFFER_FINISH_SINCE_VERSION) {
+        if (drop_handled && data_device->drag_offer && (data_device->drag_offer->offer) >= WL_DATA_OFFER_FINISH_SINCE_VERSION) {
             wl_data_offer_finish(data_device->drag_offer->offer);
         }
     } else {

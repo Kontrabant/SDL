@@ -488,7 +488,8 @@ void *Wayland_data_offer_receive(SDL_WaylandDataOffer *offer,
         wl_data_offer_receive(offer->offer, mime_type, pipefd[1]);
         close(pipefd[1]);
 
-        WAYLAND_wl_display_flush(data_device->seat->display->display);
+        //WAYLAND_wl_display_flush(data_device->seat->display->display);
+        WAYLAND_wl_display_roundtrip(data_device->seat->display->display);
 
         while (read_pipe(pipefd[0], &buffer, length) > 0) {
         }

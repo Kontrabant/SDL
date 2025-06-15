@@ -36,17 +36,19 @@
 #include "SDL_waylandcolor.h"
 
 #include "alpha-modifier-v1-client-protocol.h"
-#include "xdg-shell-client-protocol.h"
-#include "xdg-decoration-unstable-v1-client-protocol.h"
-#include "idle-inhibit-unstable-v1-client-protocol.h"
-#include "xdg-activation-v1-client-protocol.h"
-#include "viewporter-client-protocol.h"
-#include "fractional-scale-v1-client-protocol.h"
-#include "xdg-foreign-unstable-v2-client-protocol.h"
-#include "xdg-dialog-v1-client-protocol.h"
-#include "frog-color-management-v1-client-protocol.h"
-#include "xdg-toplevel-icon-v1-client-protocol.h"
 #include "color-management-v1-client-protocol.h"
+#include "fractional-scale-v1-client-protocol.h"
+#include "frog-color-management-v1-client-protocol.h"
+#include "idle-inhibit-unstable-v1-client-protocol.h"
+#include "viewporter-client-protocol.h"
+#include "xdg-activation-v1-client-protocol.h"
+#include "xdg-decoration-unstable-v1-client-protocol.h"
+#include "xdg-dialog-v1-client-protocol.h"
+#include "xdg-foreign-unstable-v2-client-protocol.h"
+#include "xdg-shell-client-protocol.h"
+#include "xdg-toplevel-icon-v1-client-protocol.h"
+
+#include <xdg-toplevel-drag-v1-client-protocol.h>
 
 #ifdef HAVE_LIBDECOR_H
 #include <libdecor.h>
@@ -1978,10 +1980,11 @@ void Wayland_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
             }
 
             if (window->dockable) {
-                BeginWindowDrag(data, c->input->last_implicit_grab_serial);
+                WAYLAND_wl_display_roundtrip(c->display);
+                BeginWindowDrag(data, c->last_implicit_grab_seat->last_implicit_grab_serial);
             }
 
-            SDL_SetPointerProperty(props, SDL_PROP_WINDOW_WAYLAND_XDG_TOPLEVEL_POINTER, data->shell_surface.xdg.roleobj.toplevel);
+            SDL_SetPointerProperty(props, SDL_PROP_WINDOW_WAYLAND_XDG_TOPLEVEL_POINTER, data->shell_surface.xdg.toplevel.xdg_toplevel);
         }
     }
 
@@ -3158,6 +3161,10 @@ void Wayland_DestroyWindow(SDL_VideoDevice *_this, SDL_Window *window)
             wl_surface_destroy(wind->surface);
         } else {
             Wayland_RemoveWindowDataFromExternalList(wind);
+        }
+
+        if (wind->toplevel_drag_v1) {
+            xdg_toplevel_drag_v1_destroy(wind->toplevel_drag_v1);
         }
 
         if (wind->xdg_toplevel_icon_v1) {

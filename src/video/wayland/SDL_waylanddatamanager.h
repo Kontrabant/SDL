@@ -56,7 +56,7 @@ typedef void (*Wayland_UserdataCleanupCallback)(SDL_WaylandUserdata *userdata);
 typedef struct
 {
     struct wl_data_source *source;
-    SDL_WaylandDataDevice *data_dev
+    SDL_WaylandDataDevice *data_device;
     SDL_WindowData *window;
     SDL_ClipboardDataCallback callback;
     SDL_WaylandUserdata userdata;
@@ -158,7 +158,6 @@ extern bool Wayland_primary_selection_offer_has_mime(SDL_WaylandPrimarySelection
                                                      const char *mime_type);
 extern bool Wayland_data_offer_add_mime(SDL_WaylandDataOffer *offer,
                                         const char *mime_type);
-                                       const char *mime_type);
 extern bool Wayland_data_offer_set_mime_data(SDL_WaylandDataOffer *offer,
                                              const char *mime_type,
                                              void *buffer,

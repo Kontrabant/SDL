@@ -67,7 +67,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char **argv)
         return SDL_APP_FAILURE;
     }
 
-    if (!SDL_CreateWindowAndRenderer("Main Window", 640, 480, 0, &mainWindow, &mainRenderer)) {
+    if (!SDL_CreateWindowAndRenderer("Main Window", 640, 480, SDL_WINDOW_OPENGL, &mainWindow, &mainRenderer)) {
         SDL_Log("Failed to create main window and/or renderer: %s\n", SDL_GetError());
         exit_code = 1;
     }
@@ -141,6 +141,7 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
             SDL_PropertiesID props = SDL_CreateProperties();
             SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_BORDERLESS_BOOLEAN, true);
             SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_DOCKABLE_BOOLEAN, true);
+            SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_OPENGL_BOOLEAN, true);
             //SDL_SetPointerProperty(props, SDL_PROP_WINDOW_CREATE_PARENT_POINTER, mainWindow);
             SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, 320);
             SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, 240);
