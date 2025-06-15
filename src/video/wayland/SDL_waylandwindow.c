@@ -1978,10 +1978,10 @@ void Wayland_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
             }
 
             if (window->dockable) {
-                BeginWindowDrag(data, c->input->last_implicit_grab_serial);
+                BeginWindowDrag(data, c->last_implicit_grab_seat->last_implicit_grab_serial);
             }
 
-            SDL_SetPointerProperty(props, SDL_PROP_WINDOW_WAYLAND_XDG_TOPLEVEL_POINTER, data->shell_surface.xdg.roleobj.toplevel);
+            SDL_SetPointerProperty(props, SDL_PROP_WINDOW_WAYLAND_XDG_TOPLEVEL_POINTER, data->shell_surface.xdg.toplevel.xdg_toplevel);
         }
     }
 
