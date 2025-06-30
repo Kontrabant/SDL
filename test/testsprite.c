@@ -555,11 +555,20 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
     return SDL_APP_CONTINUE;
 }
 
+static SDL_Window *show_window = NULL;
+static Uint64 show_timer = 0;
 
 SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
 {
     if (event->type == SDL_EVENT_RENDER_DEVICE_RESET) {
         LoadSprite(icon);
+    } else if (event->type == SDL_EVENT_KEY_DOWN) {
+        SDL_Window *window = SDL_GetWindowFromEvent(event);
+        if (window) {
+            SDL_HideWindow(window);
+            show_window = window;
+            show_timer = SDL_GetTicks() + 1000;
+        }
     }
     return SDLTest_CommonEventMainCallbacks(state, event);
 }
@@ -569,6 +578,21 @@ SDL_AppResult SDL_AppIterate(void *appstate)
     Uint64 now;
     int i;
     int active_windows = 0;
+
+    if (!show_timer) {
+        show_timer = SDL_GetTicks() + 1000;
+    }
+
+    if (show_window && SDL_GetTicks() > show_timer) {
+        SDL_ShowWindow(show_window);
+        show_window = NULL;
+        show_timer = SDL_GetTicks() + 500;
+    }
+    if (!show_window && SDL_GetTicks() > show_timer) {
+        SDL_HideWindow(state->windows[0]);
+        show_window = state->windows[0];
+        show_timer = SDL_GetTicks() + 500;
+    }
 
     for (i = 0; i < state->num_windows; ++i) {
         if (state->windows[i] == NULL ||
