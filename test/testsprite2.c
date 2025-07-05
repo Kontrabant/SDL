@@ -404,10 +404,28 @@ static void MoveAllSprites(void)
     }
 }
 
+static SDL_Window *show_window = NULL;
+static Uint64 show_timer = 0;
+
 void loop(void)
 {
     Uint32 now;
     SDL_Event event;
+
+    if (!show_timer) {
+        show_timer = SDL_GetTicks() + 1000;
+    }
+
+    if (show_window && SDL_GetTicks() > show_timer) {
+        SDL_ShowWindow(show_window);
+        show_window = NULL;
+        show_timer = SDL_GetTicks() + 500;
+    }
+    if (!show_window && SDL_GetTicks() > show_timer) {
+        SDL_HideWindow(state->windows[0]);
+        show_window = state->windows[0];
+        show_timer = SDL_GetTicks() + 500;
+    }
 
     /* Check for events */
     while (SDL_PollEvent(&event)) {
