@@ -1272,6 +1272,9 @@ void Wayland_ShowWindow(_THIS, SDL_Window *window)
     SDL_VideoData *c = _this->driverdata;
     SDL_WindowData *data = window->driverdata;
 
+    // Always roundtrip to ensure there are no pending buffer attachments.
+    WAYLAND_wl_display_roundtrip(c->display);
+
     /* Detach any previous buffers before resetting everything, otherwise when
      * calling this a second time you'll get an annoying protocol error!
      *
@@ -1518,6 +1521,7 @@ void Wayland_HideWindow(_THIS, SDL_Window *window)
         if (wind->shell_surface.libdecor.frame) {
             libdecor_frame_unref(wind->shell_surface.libdecor.frame);
             wind->shell_surface.libdecor.frame = NULL;
+            wind->shell_surface.libdecor.initial_configure_seen = false;
         }
     } else
 #endif
@@ -1531,6 +1535,7 @@ void Wayland_HideWindow(_THIS, SDL_Window *window)
         if (wind->shell_surface.xdg.surface) {
             xdg_surface_destroy(wind->shell_surface.xdg.surface);
             wind->shell_surface.xdg.surface = NULL;
+            wind->shell_surface.xdg.initial_configure_seen = false;
         }
     }
 
