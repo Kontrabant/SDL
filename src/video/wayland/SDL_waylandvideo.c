@@ -79,6 +79,7 @@
 #define SDL_WL_COMPOSITOR_VERSION 6
 #else
 #define SDL_WL_COMPOSITOR_VERSION 4
+#define SDL_WL_SUBCOMPOSITOR_VERSION 4
 #endif
 
 #if SDL_WAYLAND_CHECK_VERSION(1, 24, 0)
@@ -1278,6 +1279,8 @@ static void display_handle_global(void *data, struct wl_registry *registry, uint
 
     if (SDL_strcmp(interface, "wl_compositor") == 0) {
         d->compositor = wl_registry_bind(d->registry, id, &wl_compositor_interface, SDL_min(SDL_WL_COMPOSITOR_VERSION, version));
+    } else if (SDL_strcmp(interface, "wl_subcompositor") == 0) {
+        d->subcompositor = wl_registry_bind(d->registry, id, &wl_subcompositor_interface, 1);
     } else if (SDL_strcmp(interface, "wl_output") == 0) {
         Wayland_add_display(d, id, SDL_min(version, SDL_WL_OUTPUT_VERSION));
     } else if (SDL_strcmp(interface, "wl_seat") == 0) {
@@ -1661,6 +1664,11 @@ static void Wayland_VideoCleanup(SDL_VideoDevice *_this)
     if (data->wp_pointer_warp_v1) {
         wp_pointer_warp_v1_destroy(data->wp_pointer_warp_v1);
         data->wp_pointer_warp_v1 = NULL;
+    }
+
+    if (data->subcompositor) {
+        wl_subcompositor_destroy(data->subcompositor);
+        data->subcompositor = NULL;
     }
 
     if (data->compositor) {

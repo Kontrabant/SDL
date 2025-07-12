@@ -53,6 +53,7 @@ struct SDL_VideoData
     int display_disconnected;
     struct wl_registry *registry;
     struct wl_compositor *compositor;
+    struct wl_subcompositor *subcompositor;
     struct wl_shm *shm;
     SDL_WaylandCursorTheme *cursor_themes;
     int num_cursor_themes;

@@ -64,12 +64,18 @@ struct SDL_WindowData
                 } popup;
             };
         } xdg;
+
+        struct
+        {
+            struct wl_subsurface *wl_subsurface;
+        } subsurface;
     } shell_surface;
     enum
     {
         WAYLAND_SHELL_SURFACE_TYPE_UNKNOWN = 0,
         WAYLAND_SHELL_SURFACE_TYPE_XDG_TOPLEVEL,
         WAYLAND_SHELL_SURFACE_TYPE_XDG_POPUP,
+        WAYLAND_SHELL_SURFACE_TYPE_SUBSURFACE,
         WAYLAND_SHELL_SURFACE_TYPE_LIBDECOR,
         WAYLAND_SHELL_SURFACE_TYPE_CUSTOM
     } shell_surface_type;
