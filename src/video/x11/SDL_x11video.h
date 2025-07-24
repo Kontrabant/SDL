@@ -24,6 +24,7 @@
 #define SDL_x11video_h_
 
 #include "../SDL_sysvideo.h"
+#include "../../events/SDL_keymap_c.h"
 
 #include "../../core/linux/SDL_dbus.h"
 #include "../../core/linux/SDL_ime.h"
@@ -143,21 +144,34 @@ struct SDL_VideoData
     int xrandr_event_base;
     struct
     {
-#ifdef SDL_VIDEO_DRIVER_X11_HAS_XKBLOOKUPKEYSYM
-        XkbDescPtr desc_ptr;
-#endif
-        int event;
-        unsigned int current_group;
-        unsigned int xkb_modifiers;
+        bool has_xkb;
 
+        union
+        {
+#ifdef SDL_VIDEO_DRIVER_X11_HAS_XKB
+            struct
+            {
+                XkbDescPtr desc_ptr;
+                SDL_Keymap *keymaps[XkbNumKbdGroups];
+                unsigned long last_map_serial;
+                int event;
+                Uint32 current_group;
+            } xkb;
+#endif
+            struct // Legacy X keyboard handling
+            {
+                KeySym *keysym_map;
+                int keysyms_per_key;
+                int min_keycode;
+                int max_keycode;
+            } x;
+        };
+        Uint32 x_modifiers;
         SDL_Keymod sdl_modifiers;
 
         Uint32 numlock_mask;
         Uint32 scrolllock_mask;
-    } xkb;
-
-    KeyCode filter_code;
-    Time filter_time;
+    } keyboard;
 
 #ifdef SDL_VIDEO_VULKAN
     // Vulkan variables only valid if _this->vulkan_config.loader_handle is not NULL
