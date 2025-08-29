@@ -75,7 +75,7 @@ static char *readSymLink(const char *path)
 static char *search_path_for_binary(const char *bin)
 {
     const char *envr_real = SDL_getenv("PATH");
-    char *envr;
+    char *envr = NULL;
     size_t alloc_size;
     char *exe = NULL;
     char *start = envr;
