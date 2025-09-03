@@ -2351,7 +2351,7 @@ static void seat_handle_capabilities(void *data, struct wl_seat *wl_seat, enum w
             SDL_snprintf(name_fmt, sizeof(name_fmt), "%s %" SDL_PRIu32, WAYLAND_DEFAULT_POINTER_NAME, seat->pointer.sdl_id);
         }
 
-        SDL_AddMouse(seat->pointer.sdl_id, name_fmt, !seat->display->initializing);
+        SDL_AddMouse(seat->pointer.sdl_id, name_fmt, true);
     } else if (!(capabilities & WL_SEAT_CAPABILITY_POINTER) && seat->pointer.wl_pointer) {
         Wayland_SeatDestroyPointer(seat, true);
     }
@@ -2385,7 +2385,7 @@ static void seat_handle_capabilities(void *data, struct wl_seat *wl_seat, enum w
             SDL_snprintf(name_fmt, sizeof(name_fmt), "%s %" SDL_PRIu32, WAYLAND_DEFAULT_KEYBOARD_NAME, seat->keyboard.sdl_id);
         }
 
-        SDL_AddKeyboard(seat->keyboard.sdl_id, name_fmt, !seat->display->initializing);
+        SDL_AddKeyboard(seat->keyboard.sdl_id, name_fmt, true);
     } else if (!(capabilities & WL_SEAT_CAPABILITY_KEYBOARD) && seat->keyboard.wl_keyboard) {
         Wayland_SeatDestroyKeyboard(seat, true);
     }
@@ -3517,7 +3517,7 @@ void Wayland_DisplayRemoveWindowReferencesFromSeats(SDL_VideoData *display, SDL_
     }
 }
 
-void Wayland_SeatDestroy(SDL_WaylandSeat *seat, bool send_events)
+void Wayland_SeatDestroy(SDL_WaylandSeat *seat)
 {
     if (!seat) {
         return;
@@ -3561,10 +3561,10 @@ void Wayland_SeatDestroy(SDL_WaylandSeat *seat, bool send_events)
         zwp_text_input_v3_destroy(seat->text_input.zwp_text_input);
     }
 
-    Wayland_SeatDestroyKeyboard(seat, send_events);
-    Wayland_SeatDestroyPointer(seat, send_events);
+    Wayland_SeatDestroyKeyboard(seat, true);
+    Wayland_SeatDestroyPointer(seat, true);
     Wayland_SeatDestroyTouch(seat);
-    Wayland_SeatDestroyTablet(seat, send_events);
+    Wayland_SeatDestroyTablet(seat, true);
 
     if (wl_seat_get_version(seat->wl_seat) >= WL_SEAT_RELEASE_SINCE_VERSION) {
         wl_seat_release(seat->wl_seat);
