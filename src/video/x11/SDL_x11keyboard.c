@@ -382,7 +382,19 @@ void X11_UpdateKeymap(SDL_VideoDevice *_this, bool send_event)
 
         for (unsigned int i = 0; i < XkbNumKbdGroups; ++i) {
             SDL_DestroyKeymap(data->keyboard.xkb.keymaps[i]);
+            data->keyboard.xkb.keymaps[i] = NULL;
+        }
+
+        for (unsigned int i = 0; i < XkbNumKbdGroups; ++i) {
             data->keyboard.xkb.keymaps[i] = SDL_CreateKeymap(false);
+            if (!data->keyboard.xkb.keymaps[i]) {
+                for (unsigned int j = 0; j < i; ++j) {
+                    SDL_DestroyKeymap(data->keyboard.xkb.keymaps[i]);
+                    data->keyboard.xkb.keymaps[j] = NULL;
+                }
+
+                return;
+            }
         }
 
         X11_XkbGetNames(data->display, XkbVirtualModNamesMask, data->keyboard.xkb.desc_ptr);
@@ -474,6 +486,9 @@ void X11_UpdateKeymap(SDL_VideoDevice *_this, bool send_event)
 #endif
     {
         SDL_Keymap *keymap = SDL_CreateKeymap(true);
+        if (!keymap) {
+            return;
+        }
 
         if (send_event) {
             if (data->keyboard.core.keysym_map) {
@@ -481,8 +496,8 @@ void X11_UpdateKeymap(SDL_VideoDevice *_this, bool send_event)
             }
             X11_XDisplayKeycodes(data->display, &data->keyboard.core.min_keycode, &data->keyboard.core.max_keycode);
             data->keyboard.core.keysym_map = X11_XGetKeyboardMapping(data->display, data->keyboard.core.min_keycode,
-                                                                  data->keyboard.core.max_keycode - data->keyboard.core.min_keycode,
-                                                                  &data->keyboard.core.keysyms_per_key);
+                                                                     data->keyboard.core.max_keycode - data->keyboard.core.min_keycode,
+                                                                     &data->keyboard.core.keysyms_per_key);
         }
 
         for (Uint32 xkeycode = data->keyboard.core.min_keycode; xkeycode <= data->keyboard.core.max_keycode; ++xkeycode) {
