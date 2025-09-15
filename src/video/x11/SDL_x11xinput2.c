@@ -34,6 +34,7 @@
 
 #ifdef SDL_VIDEO_DRIVER_X11_XINPUT2
 static bool xinput2_initialized;
+static bool xinput2_keyboard_enabled;
 
 #ifdef SDL_VIDEO_DRIVER_X11_XINPUT2_SUPPORTS_MULTITOUCH
 static bool xinput2_multitouch_supported;
@@ -324,8 +325,13 @@ bool X11_InitXinput2(SDL_VideoDevice *_this)
     eventmask.mask_len = sizeof(mask);
     eventmask.mask = mask;
 
+    /* Key events are selected on the root window, otherwise, windows won't receive key events
+     * when the pointer is outside the window.
+     */
+    XISetMask(mask, XI_KeyPress);
+    XISetMask(mask, XI_KeyRelease);
     XISetMask(mask, XI_HierarchyChanged);
-    X11_XISelectEvents(data->display, DefaultRootWindow(data->display), &eventmask, 1);
+    xinput2_keyboard_enabled = X11_XISelectEvents(data->display, DefaultRootWindow(data->display), &eventmask, 1) == Success;
 
     X11_Xinput2UpdateDevices(_this);
 
@@ -515,35 +521,24 @@ void X11_HandleXinput2Event(SDL_VideoDevice *_this, XGenericEventCookie *cookie)
     case XI_KeyRelease:
     {
         const XIDeviceEvent *xev = (const XIDeviceEvent *)cookie->data;
-        SDL_WindowData *windowdata = X11_FindWindow(_this, xev->event);
-        XEvent xevent;
 
         if (xev->deviceid != xev->sourceid) {
             // Discard events from "Master" devices to avoid duplicates.
             break;
         }
 
-        if (cookie->evtype == XI_KeyPress) {
-            xevent.type = KeyPress;
-        } else {
-            xevent.type = KeyRelease;
+        // The event window might not be an SDL window if the pointer is outside the window.
+        SDL_WindowData *windowdata = X11_FindWindow(_this, xev->event);
+        if (!windowdata) {
+            SDL_Window *window = SDL_GetKeyboardFocus();
+            if (window) {
+                windowdata = window->internal;
+            } else {
+                break; // Not an SDL window; drop it.
+            }
         }
-        xevent.xkey.serial = xev->serial;
-        xevent.xkey.send_event = xev->send_event;
-        xevent.xkey.display = xev->display;
-        xevent.xkey.window = xev->event;
-        xevent.xkey.root = xev->root;
-        xevent.xkey.subwindow = xev->child;
-        xevent.xkey.time = xev->time;
-        xevent.xkey.x = (int)xev->event_x;
-        xevent.xkey.y = (int)xev->event_y;
-        xevent.xkey.x_root = (int)xev->root_x;
-        xevent.xkey.y_root = (int)xev->root_y;
-        xevent.xkey.state = xev->mods.effective;
-        xevent.xkey.keycode = xev->detail;
-        xevent.xkey.same_screen = 1;
 
-        X11_HandleKeyEvent(_this, windowdata, (SDL_KeyboardID)xev->sourceid, &xevent);
+        X11_DispatchKeyEvent(windowdata, xev->time, xev->sourceid, xev->detail, xev->evtype == XI_KeyPress);
     } break;
 
     case XI_RawButtonPress:
@@ -761,17 +756,11 @@ bool X11_Xinput2SelectMouseAndKeyboard(SDL_VideoDevice *_this, SDL_Window *windo
         eventmask.mask = mask;
         eventmask.deviceid = XIAllDevices;
 
-// This is not enabled by default because these events are only delivered to the window with mouse focus, not keyboard focus
-#ifdef USE_XINPUT2_KEYBOARD
-        XISetMask(mask, XI_KeyPress);
-        XISetMask(mask, XI_KeyRelease);
-        windowdata->xinput2_keyboard_enabled = true;
-#endif
-
         XISetMask(mask, XI_ButtonPress);
         XISetMask(mask, XI_ButtonRelease);
         XISetMask(mask, XI_Motion);
         windowdata->xinput2_mouse_enabled = true;
+        windowdata->xinput2_keyboard_enabled = xinput2_keyboard_enabled;
 
         XISetMask(mask, XI_Enter);
         XISetMask(mask, XI_Leave);
@@ -783,7 +772,6 @@ bool X11_Xinput2SelectMouseAndKeyboard(SDL_VideoDevice *_this, SDL_Window *windo
 
         if (X11_XISelectEvents(data->display, windowdata->xwindow, &eventmask, 1) != Success) {
             SDL_LogWarn(SDL_LOG_CATEGORY_INPUT, "Could not enable XInput2 event handling");
-            windowdata->xinput2_keyboard_enabled = false;
             windowdata->xinput2_mouse_enabled = false;
         }
     }

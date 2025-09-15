@@ -478,22 +478,22 @@ static void SetupWindowInput(SDL_VideoDevice *_this, SDL_Window *window)
     X11_Xinput2Select(_this, window);
 
     {
-        unsigned int x11_keyboard_events = KeyPressMask | KeyReleaseMask;
         unsigned int x11_pointer_events = ButtonPressMask | ButtonReleaseMask | PointerMotionMask;
 
         X11_Xinput2SelectMouseAndKeyboard(_this, window);
 
-        // If XInput2 can handle pointer and keyboard events, we don't track them here
-        if (data->xinput2_keyboard_enabled) {
-            x11_keyboard_events = 0;
-        }
+        /* If XInput2 can handle pointer events, we don't track them here.
+         *
+         * Keyboard events are still needed for the IME, even if XInput2
+         * is handling key events.
+         */
         if (data->xinput2_mouse_enabled) {
             x11_pointer_events = 0;
         }
 
         X11_XSelectInput(data->videodata->display, xwindow,
                          (FocusChangeMask | EnterWindowMask | LeaveWindowMask | ExposureMask |
-                          x11_keyboard_events | x11_pointer_events |
+                          KeyPressMask | KeyReleaseMask | x11_pointer_events |
                           PropertyChangeMask | StructureNotifyMask |
                           KeymapStateMask | fevent));
     }

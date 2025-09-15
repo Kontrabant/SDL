@@ -1033,7 +1033,22 @@ Uint64 X11_GetEventTimestamp(unsigned long time)
     return SDL_GetTicksNS();
 }
 
-void X11_HandleKeyEvent(SDL_VideoDevice *_this, SDL_WindowData *windowdata, SDL_KeyboardID keyboardID, XEvent *xevent)
+void X11_DispatchKeyEvent(SDL_WindowData *windowdata, unsigned long timestamp, SDL_KeyboardID keyboard_id, int keycode, bool pressed)
+{
+    SDL_VideoData *videodata = windowdata->videodata;
+
+    const SDL_Scancode scancode = videodata->keyboard.key_layout[keycode];
+    const Uint64 adjusted_timestamp = X11_GetEventTimestamp(timestamp);
+
+    X11_HandleModifierKeys(videodata, scancode, pressed);
+    SDL_SendKeyboardKeyIgnoreModifiers(adjusted_timestamp, keyboard_id, keycode, scancode, pressed);
+
+    if (pressed) {
+        X11_UpdateUserTime(windowdata, timestamp);
+    }
+}
+
+static void X11_HandleKeyEvent(SDL_VideoDevice *_this, SDL_WindowData *windowdata, SDL_KeyboardID keyboardID, XEvent *xevent)
 {
     SDL_VideoData *videodata = _this->internal;
     Display *display = videodata->display;
@@ -1043,9 +1058,8 @@ void X11_HandleKeyEvent(SDL_VideoDevice *_this, SDL_WindowData *windowdata, SDL_
     char text[64];
     Status status = 0;
     bool handled_by_ime = false;
-    bool pressed = (xevent->type == KeyPress);
-    SDL_Scancode scancode = videodata->keyboard.key_layout[keycode];
-    Uint64 timestamp = X11_GetEventTimestamp(xevent->xkey.time);
+    const bool pressed = (xevent->type == KeyPress);
+    const bool send_key = !windowdata->xinput2_keyboard_enabled;
 
 #ifdef DEBUG_XEVENTS
     SDL_Log("window 0x%lx %s (X11 keycode = 0x%X)", xevent->xany.window, (xevent->type == KeyPress ? "KeyPress" : "KeyRelease"), xevent->xkey.keycode);
@@ -1095,27 +1109,23 @@ void X11_HandleKeyEvent(SDL_VideoDevice *_this, SDL_WindowData *windowdata, SDL_
 
     if (!handled_by_ime) {
         if (pressed) {
-            X11_HandleModifierKeys(videodata, scancode, true);
-            SDL_SendKeyboardKeyIgnoreModifiers(timestamp, keyboardID, keycode, scancode, true);
+            if (send_key) {
+                X11_DispatchKeyEvent(windowdata, xevent->xkey.time, keyboardID, keycode, true);
+            }
 
             if (*text && !(SDL_GetModState() & (SDL_KMOD_CTRL | SDL_KMOD_ALT))) {
                 text[text_length] = '\0';
                 X11_ClearComposition(windowdata);
                 SDL_SendKeyboardText(text);
             }
-        } else {
+        } else if (send_key) {
             if (X11_KeyRepeat(display, xevent)) {
                 // We're about to get a repeated key down, ignore the key up
                 return;
             }
 
-            X11_HandleModifierKeys(videodata, scancode, false);
-            SDL_SendKeyboardKeyIgnoreModifiers(timestamp, keyboardID, keycode, scancode, false);
+            X11_DispatchKeyEvent(windowdata, xevent->xkey.time, keyboardID, keycode, false);
         }
-    }
-
-    if (pressed) {
-        X11_UpdateUserTime(windowdata, xevent->xkey.time);
     }
 }
 
@@ -1809,17 +1819,21 @@ static void X11_DispatchEvent(SDL_VideoDevice *_this, XEvent *xevent)
     } break;
 
     /* Use XInput2 instead of the xevents API if possible, for:
-       - KeyPress
-       - KeyRelease
-       - MotionNotify
-       - ButtonPress
-       - ButtonRelease
-       XInput2 has more precise information, e.g., to distinguish different input devices. */
+     *  - KeyPress
+     *  - KeyRelease
+     *  - MotionNotify
+     *  - ButtonPress
+     *  - ButtonRelease
+     *  XInput2 has more precise information, e.g., to distinguish different input devices.
+     *
+     *  XKeyEvents are still needed for the IME if text input is active, even if XInput2
+     *  is otherwise handling key events.
+     */
     case KeyPress:
     case KeyRelease:
     {
-        if (data->xinput2_keyboard_enabled) {
-            // This input is being handled by XInput2
+        if (data->xinput2_keyboard_enabled && !SDL_TextInputActive(data->window)) {
+            // This input is being handled by XInput2.
             break;
         }
 
