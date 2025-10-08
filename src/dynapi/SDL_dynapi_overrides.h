@@ -1290,3 +1290,5 @@
 #define SDL_LoadPNG SDL_LoadPNG_REAL
 #define SDL_SavePNG_IO SDL_SavePNG_IO_REAL
 #define SDL_SavePNG SDL_SavePNG_REAL
+#define SDL_ShowNotification SDL_ShowNotification_REAL
+#define SDL_ShowSimpleNotification SDL_ShowSimpleNotification_REAL

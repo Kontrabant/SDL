@@ -1339,6 +1339,8 @@ const static struct {
     SDL_SYMBOL_ITEM(SDL_LoadPNG),
     SDL_SYMBOL_ITEM(SDL_SavePNG_IO),
     SDL_SYMBOL_ITEM(SDL_SavePNG),
+    SDL_SYMBOL_ITEM(SDL_ShowNotification),
+    SDL_SYMBOL_ITEM(SDL_ShowSimpleNotification),
     /* extra symbols go here (don't modify this line) */
     { NULL, NULL }
 };
