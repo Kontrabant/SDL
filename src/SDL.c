@@ -51,6 +51,7 @@
 #include "haptic/SDL_haptic_c.h"
 #include "joystick/SDL_gamepad_c.h"
 #include "joystick/SDL_joystick_c.h"
+#include "notifications/SDL_notification_c.h"
 #include "render/SDL_sysrender.h"
 #include "sensor/SDL_sensor_c.h"
 #include "stdlib/SDL_getenv_c.h"
@@ -709,6 +710,7 @@ void SDL_Quit(void)
 #endif
     SDL_QuitSubSystem(SDL_ALL_SUBSYSTEM_FLAGS);
     SDL_CleanupTrays();
+    SDL_CleanupNotifications();
 
 #ifdef SDL_USE_LIBDBUS
     SDL_DBus_Quit();
