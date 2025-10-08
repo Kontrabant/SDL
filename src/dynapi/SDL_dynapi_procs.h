@@ -1317,3 +1317,5 @@ SDL_DYNAPI_PROC(SDL_Tray*,SDL_CreateTrayWithProperties,(SDL_PropertiesID a),(a),
 SDL_DYNAPI_PROC(bool,SDL_SetGPURenderStateSamplerBindings,(SDL_GPURenderState *a,int b,const SDL_GPUTextureSamplerBinding *c),(a,b,c),return)
 SDL_DYNAPI_PROC(bool,SDL_SetGPURenderStateStorageTextures,(SDL_GPURenderState *a,int b,SDL_GPUTexture *const*c),(a,b,c),return)
 SDL_DYNAPI_PROC(bool,SDL_SetGPURenderStateStorageBuffers,(SDL_GPURenderState *a,int b,SDL_GPUBuffer *const*c),(a,b,c),return)
+SDL_DYNAPI_PROC(SDL_NotificationID,SDL_ShowNotification,(const SDL_NotificationData *a),(a),return)
+SDL_DYNAPI_PROC(SDL_NotificationID,SDL_ShowSimpleNotification,(const char *a,const char *b),(a,b),return)

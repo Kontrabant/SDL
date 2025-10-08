@@ -265,6 +265,7 @@ define_sdl_subsystem(Power)
 define_sdl_subsystem(Sensor)
 define_sdl_subsystem(Dialog)
 define_sdl_subsystem(Tray)
+define_sdl_subsystem(Notifications)
 
 cmake_dependent_option(SDL_FRAMEWORK "Build SDL libraries as Apple Framework" OFF "APPLE" OFF)
 if(SDL_FRAMEWORK)
@@ -1282,6 +1283,8 @@ sdl_glob_sources(
   "${SDL3_SOURCE_DIR}/src/main/*.h"
   "${SDL3_SOURCE_DIR}/src/misc/*.c"
   "${SDL3_SOURCE_DIR}/src/misc/*.h"
+  "${SDL3_SOURCE_DIR}/src/notifications/*.c"
+  "${SDL3_SOURCE_DIR}/src/notifications/*.h"
   "${SDL3_SOURCE_DIR}/src/power/*.c"
   "${SDL3_SOURCE_DIR}/src/power/*.h"
   "${SDL3_SOURCE_DIR}/src/render/*.c"
@@ -2004,6 +2007,13 @@ elseif(UNIX AND NOT APPLE AND NOT RISCOS AND NOT HAIKU)
         "${SDL3_SOURCE_DIR}/src/core/linux/SDL_progressbar.c"
         "${SDL3_SOURCE_DIR}/src/core/linux/SDL_progressbar.h"
       )
+
+      if(SDL_NOTIFICATIONS)
+        sdl_sources(
+          "${SDL3_SOURCE_DIR}/src/notifications/unix/SDL_dbusnotification.c"
+        )
+        set(HAVE_SDL_NOTIFICATIONS TRUE)
+      endif()
     endif()
 
     if(SDL_USE_IME)
@@ -2490,6 +2500,7 @@ elseif(APPLE)
     set(SDL_FRAMEWORK_COCOA 1)
     set(SDL_FRAMEWORK_CARBON 1)
     set(SDL_FRAMEWORK_UTTYPES 1)
+    set(SDL_FRAMEWORK_USERNOTIFICATIONS 1)
   endif()
   set(SDL_FRAMEWORK_FOUNDATION 1)
   set(SDL_FRAMEWORK_COREVIDEO 1)
@@ -2628,6 +2639,10 @@ elseif(APPLE)
   set(SDL_FILESYSTEM_COCOA 1)
   sdl_glob_sources("${SDL3_SOURCE_DIR}/src/filesystem/cocoa/*.m")
   set(HAVE_SDL_FILESYSTEM TRUE)
+
+  set(SDL_NOTIFICATIONS_COCOA 1)
+  sdl_glob_sources("${SDL3_SOURCE_DIR}/src/notifications/cocoa/*.m")
+  set(HAVE_SDL_NOTIFICATIONS TRUE)
 
   # TODO: SDL_STORAGE_ICLOUD
   set(SDL_STORAGE_GENERIC 1)
@@ -2796,6 +2811,10 @@ elseif(APPLE)
   endif()
   if(SDL_FRAMEWORK_METAL)
     sdl_link_dependency(metal LIBS "$<LINK_LIBRARY:FRAMEWORK,Metal>" PKG_CONFIG_LINK_OPTIONS "-Wl,-framework,Metal")
+  endif()
+  if(SDL_FRAMEWORK_USERNOTIFICATIONS)
+    find_library(USERNOTIFICATIONS UserNotifications)
+    sdl_link_dependency(usernotifications LIBS "$<LINK_LIBRARY:FRAMEWORK,UserNotifications>" PKG_CONFIG_LINK_OPTIONS "-Wl,-framework,UserNotifications")
   endif()
   if(SDL_FRAMEWORK_OPENGLES)
     sdl_link_dependency(opengles LIBS "$<LINK_LIBRARY:FRAMEWORK,OpenGLES>" PKG_CONFIG_LINK_OPTIONS "-Wl,-framework,OpenGLES")
@@ -3653,6 +3672,12 @@ if(NOT HAVE_CAMERA)
   sdl_glob_sources(
     "${SDL3_SOURCE_DIR}/src/camera/dummy/*.c"
     "${SDL3_SOURCE_DIR}/src/camera/dummy/*.h"
+  )
+endif()
+if(NOT HAVE_SDL_NOTIFICATIONS)
+  sdl_glob_sources(
+     "${SDL3_SOURCE_DIR}/src/notifications/dummy/*.c"
+     "${SDL3_SOURCE_DIR}/src/notifications/dummy/*.h"
   )
 endif()
 

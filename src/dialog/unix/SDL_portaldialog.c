@@ -52,7 +52,7 @@ typedef struct {
     const char *path;
 } SignalCallback;
 
-static void DBus_AppendStringOption(SDL_DBusContext *dbus, DBusMessageIter *options, const char *key, const char *value)
+static void AppendStringOption(SDL_DBusContext *dbus, DBusMessageIter *options, const char *key, const char *value)
 {
     DBusMessageIter options_pair, options_value;
 
@@ -428,7 +428,7 @@ void SDL_Portal_ShowFileDialogWithProperties(SDL_FileDialogType type, SDL_Dialog
         goto cleanup;
     }
     SDL_snprintf(handle_str, HANDLE_LEN, "%u", ++handle_id);
-    DBus_AppendStringOption(dbus, &options, "handle_token", handle_str);
+    AppendStringOption(dbus, &options, "handle_token", handle_str);
     SDL_free(handle_str);
 
     DBus_AppendBoolOption(dbus, &options, "modal", !!window);
@@ -448,17 +448,17 @@ void SDL_Portal_ShowFileDialogWithProperties(SDL_FileDialogType type, SDL_Dialog
             /* Setting "current_name" should not be necessary however the kde-desktop-portal sets the filename without an extension.
              * An alternative would be to match the extension to a filter and set "current_filter".
              */
-            DBus_AppendStringOption(dbus, &options, "current_name", location_name);
+            AppendStringOption(dbus, &options, "current_name", location_name);
         } else if (save_file_new_named && location_folder && location_name) {
             /* Open a save dialog at a location with a suggested name */
             DBus_AppendByteArray(dbus, &options, "current_folder", location_folder);
-            DBus_AppendStringOption(dbus, &options, "current_name", location_name);
+            AppendStringOption(dbus, &options, "current_name", location_name);
         } else {
             DBus_AppendByteArray(dbus, &options, "current_folder", default_location);
         }
     }
     if (accept) {
-        DBus_AppendStringOption(dbus, &options, "accept_label", accept);
+        AppendStringOption(dbus, &options, "accept_label", accept);
     }
     dbus->message_iter_close_container(&params, &options);
 
