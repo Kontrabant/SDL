@@ -528,7 +528,7 @@ static bool Wayland_IsPreferred(struct wl_display *display)
 
 #ifdef SDL_USE_LIBDBUS
 static int Wayland_ShowNotification(SDL_VideoDevice *device, const SDL_NotificationData *notificationdata) {
-    return SDL_DBus_ShowNotification(notificationdata);
+    return SDL_ShowNotification(notificationdata);
 }
 #endif
 

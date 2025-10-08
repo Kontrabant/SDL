@@ -260,6 +260,7 @@ define_sdl_subsystem(Power)
 define_sdl_subsystem(Sensor)
 define_sdl_subsystem(Dialog)
 define_sdl_subsystem(Tray)
+define_sdl_subsystem(Notifications)
 
 cmake_dependent_option(SDL_FRAMEWORK "Build SDL libraries as Apple Framework" OFF "APPLE" OFF)
 if(SDL_FRAMEWORK)
@@ -1790,6 +1791,14 @@ elseif(UNIX AND NOT APPLE AND NOT RISCOS AND NOT HAIKU)
     CheckVivante()
     CheckVulkan()
     CheckQNXScreen()
+  endif()
+
+  if (SDL_NOTIFICATIONS)
+    sdl_glob_sources(
+            "${SDL3_SOURCE_DIR}/src/notifications/unix/*.c"
+            "${SDL3_SOURCE_DIR}/src/notifications/unix/*.h"
+    )
+    set(HAVE_SDL_NOTIFICATIONS TRUE)
   endif()
 
   if(SDL_TRAY)

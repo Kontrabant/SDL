@@ -51,9 +51,8 @@ typedef enum SDL_NotificationFlags
  */
 typedef enum SDL_IconFlags
 {
-    SDL_ICON_TYPE_SINGLE_FILE    = 0x00000010,   /**< A single icon file. */
-    SDL_ICON_TYPE_SURFACE        = 0x00000020,   /**< Icon inside an SDL surface. */
-    SDL_ICON_TYPE_WINDOW         = 0x00000040    /**< Icon is same as SDL window. */
+    SDL_ICON_TYPE_SURFACE        = 0x00000001,   /**< Icon inside an SDL surface. */
+    SDL_ICON_TYPE_WINDOW         = 0x00000002    /**< Icon is same as SDL window. */
 } SDL_IconFlags;
 
 /**
@@ -61,20 +60,10 @@ typedef enum SDL_IconFlags
  */
 typedef struct SDL_NotificationData
 {
-    Uint32 flags;                       /**< ::SDL_NotificationFlags */
-    const char *title;                  /**< UTF-8 title */
-    const char *message;                /**< UTF-8 message text */
-
-    struct
-    {
-        Uint32 flags;                       /**< ::SDL_IconFlags */
-        union {
-            const char *path;
-            SDL_Surface *surface;
-            SDL_Window *window;
-        } data;
-    } icon;
-
+    Uint32 flags;        /**< ::SDL_NotificationFlags */
+    const char *title;   /**< UTF-8 title */
+    const char *message; /**< UTF-8 message text */
+    SDL_Surface *icon;   /**< Icon data */
 } SDL_NotificationData;
 
 /**

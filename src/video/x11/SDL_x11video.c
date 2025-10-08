@@ -79,7 +79,7 @@ static bool X11_IsXWayland(Display *d)
 
 #ifdef SDL_USE_LIBDBUS
 static int X11_ShowNotification(SDL_VideoDevice *device, const SDL_NotificationData *notificationdata) {
-    return SDL_DBus_ShowNotification(notificationdata);
+    return SDL_ShowNotification(notificationdata);
 }
 #endif
 
