@@ -131,6 +131,15 @@ typedef enum SDL_MouseWheelDirection
 } SDL_MouseWheelDirection;
 
 /**
+ * Animated cursor frame info.
+ */
+typedef struct SDL_AnimatedCursorFrame
+{
+    SDL_Surface *surface; /**< The surface data for this frame */
+    Uint32 duration;      /**< The frame duration in milliseconds */
+} SDL_AnimatedCursorFrame;
+
+/**
  * A bitmask of pressed mouse buttons, as reported by SDL_GetMouseState, etc.
  *
  * - Button 1: Left mouse button
@@ -608,6 +617,41 @@ extern SDL_DECLSPEC SDL_Cursor * SDLCALL SDL_CreateCursor(const Uint8 *data,
 extern SDL_DECLSPEC SDL_Cursor * SDLCALL SDL_CreateColorCursor(SDL_Surface *surface,
                                                           int hot_x,
                                                           int hot_y);
+
+/**
+ * Create a color cursor.
+ *
+ * If this function is passed a surface with alternate representations added
+ * with SDL_AddSurfaceAlternateImage(), the surface will be interpreted as the
+ * content to be used for 100% display scale, and the alternate
+ * representations will be used for high DPI situations. For example, if the
+ * original surface is 32x32, then on a 2x macOS display or 200% display scale
+ * on Windows, a 64x64 version of the image will be used, if available. If a
+ * matching version of the image isn't available, the closest larger size
+ * image will be downscaled to the appropriate size and be used instead, if
+ * available. Otherwise, the closest smaller image will be upscaled and be
+ * used instead.
+ *
+ * \param surface an SDL_Surface structure representing the cursor image.
+ * \param hot_x the x position of the cursor hot spot.
+ * \param hot_y the y position of the cursor hot spot.
+ * \returns the new cursor on success or NULL on failure; call SDL_GetError()
+ *          for more information.
+ *
+ * \threadsafety This function should only be called on the main thread.
+ *
+ * \since This function is available since SDL 3.2.0.
+ *
+ * \sa SDL_AddSurfaceAlternateImage
+ * \sa SDL_CreateCursor
+ * \sa SDL_CreateSystemCursor
+ * \sa SDL_DestroyCursor
+ * \sa SDL_SetCursor
+ */
+extern SDL_DECLSPEC SDL_Cursor *SDLCALL SDL_CreateAnimatedCursor(SDL_AnimatedCursorFrame *frame,
+                                                                 int num_frames,
+                                                                 int hot_x,
+                                                                 int hot_y);
 
 /**
  * Create a system cursor.

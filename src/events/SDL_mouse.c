@@ -1552,6 +1552,56 @@ SDL_Cursor *SDL_CreateCursor(const Uint8 *data, const Uint8 *mask, int w, int h,
     return cursor;
 }
 
+SDL_Cursor *SDL_CreateAnimatedCursor(SDL_AnimatedCursorFrame *frames, int num_frames, int hot_x, int hot_y)
+{
+    SDL_Mouse *mouse = SDL_GetMouse();
+    SDL_Surface *temp = NULL;
+    SDL_Cursor *cursor;
+
+    CHECK_PARAM(!frames) {
+        SDL_InvalidParamError("surface");
+        return NULL;
+    }
+
+    CHECK_PARAM(!num_frames) {
+        SDL_InvalidParamError("num_frames");
+        return NULL;
+    }
+
+    // Allow specifying the hot spot via properties on the surface
+    SDL_PropertiesID props = SDL_GetSurfaceProperties(frames[0].surface);
+    hot_x = (int)SDL_GetNumberProperty(props, SDL_PROP_SURFACE_HOTSPOT_X_NUMBER, hot_x);
+    hot_y = (int)SDL_GetNumberProperty(props, SDL_PROP_SURFACE_HOTSPOT_Y_NUMBER, hot_y);
+
+    // Sanity check the hot spot
+    CHECK_PARAM((hot_x < 0) || (hot_y < 0) ||
+                (hot_x >= frames[0].surface->w) || (hot_y >= frames[0].surface->h)) {
+        SDL_SetError("Cursor hot spot doesn't lie within cursor");
+        return NULL;
+    }
+
+    for (int i = 0; i < num_frames; ++i) {
+        if (frames[i].surface->format != SDL_PIXELFORMAT_ARGB8888) {
+            frames[i].surface = SDL_ConvertSurface(frames[i].surface, SDL_PIXELFORMAT_ARGB8888);
+            // TODO: Clean up temp surfaces.
+        }
+    }
+
+    if (mouse->CreateCursor) {
+        cursor = mouse->CreateAnimatedCursor(frames, num_frames, hot_x, hot_y);
+    } else {
+        cursor = (SDL_Cursor *)SDL_calloc(1, sizeof(*cursor));
+    }
+    if (cursor) {
+        cursor->next = mouse->cursors;
+        mouse->cursors = cursor;
+    }
+
+    SDL_DestroySurface(temp);
+
+    return cursor;
+}
+
 SDL_Cursor *SDL_CreateColorCursor(SDL_Surface *surface, int hot_x, int hot_y)
 {
     SDL_Mouse *mouse = SDL_GetMouse();

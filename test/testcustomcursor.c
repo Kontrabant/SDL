@@ -217,6 +217,56 @@ static SDL_Cursor *init_system_cursor(const char *image[])
     return SDL_CreateCursor(data, mask, 32, 32, hot_x, hot_y);
 }
 
+static SDL_Cursor *init_animated_cursor(const char *image[])
+{
+    int row, col;
+    SDL_Surface *surface, *invsurface;
+    Uint32 *pixels, *invpixels;
+    SDL_AnimatedCursorFrame frames[2];
+    int hot_x = 0;
+    int hot_y = 0;
+
+    surface = SDL_CreateSurface(32, 32, SDL_PIXELFORMAT_ARGB8888);
+    if (!surface) {
+        return NULL;
+    }
+
+    invsurface = SDL_CreateSurface(32, 32, SDL_PIXELFORMAT_ARGB8888);
+    if (!invsurface) {
+        SDL_DestroySurface(surface);
+        return NULL;
+    }
+
+    for (row = 4; row < 36; ++row) {
+        pixels = (Uint32 *)((Uint8 *)surface->pixels + ((row - 4) * surface->pitch));
+        invpixels = (Uint32 *)((Uint8 *)invsurface->pixels + ((row - 4) * surface->pitch));
+        for (col = 0; col < 32; ++col) {
+            switch (image[row][col]) {
+            case 'X':
+                pixels[col] = 0xFFFFFFFF;
+                invpixels[col] = 0xFF000000;
+                break;
+            case '.':
+                pixels[col] = 0xFF000000;
+                invpixels[col] = 0xFFFFFFFF;
+                break;
+            case ' ':
+                pixels[col] = 0;
+                invpixels[col] = 0;
+                break;
+            }
+        }
+    }
+
+    frames[0].surface = surface;
+    frames[0].duration = 100;
+
+    frames[1].surface = invsurface;
+    frames[1].duration = 100;
+
+    return SDL_CreateAnimatedCursor(frames, 2, hot_x, hot_y);
+}
+
 static SDLTest_CommonState *state;
 static int done;
 static SDL_Cursor *cursors[3 + SDL_SYSTEM_CURSOR_COUNT];
@@ -429,6 +479,13 @@ int main(int argc, char *argv[])
     }
 
     cursor = init_system_cursor(cross);
+    if (cursor) {
+        cursors[num_cursors] = cursor;
+        cursor_types[num_cursors] = (SDL_SystemCursor)-1;
+        num_cursors++;
+    }
+
+    cursor = init_animated_cursor(arrow);
     if (cursor) {
         cursors[num_cursors] = cursor;
         cursor_types[num_cursors] = (SDL_SystemCursor)-1;

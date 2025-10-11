@@ -588,32 +588,47 @@ static bool Wayland_GetCustomCursor(SDL_CursorData *cursor, SDL_WaylandSeat *sea
     return true;
 }
 
-static SDL_Cursor *Wayland_CreateCursor(SDL_Surface *surface, int hot_x, int hot_y)
+static SDL_Cursor *Wayland_CreateAnimatedCursor(SDL_AnimatedCursorFrame *frames, int num_frames, int hot_x, int hot_y)
 {
     SDL_Cursor *cursor = SDL_calloc(1, sizeof(*cursor));
 
     if (cursor) {
-        SDL_CursorData *data = SDL_calloc(1, sizeof(*data) + sizeof(SDL_Surface *));
+        SDL_CursorData *data = SDL_calloc(1, sizeof(*data) + (sizeof(SDL_Surface *) * num_frames));
         if (!data) {
             SDL_free(cursor);
             return NULL;
         }
         cursor->internal = data;
         WAYLAND_wl_list_init(&data->cursor_data.custom.scaled_cursor_cache);
-        data->num_frames = 1;
         data->cursor_data.custom.hot_x = hot_x;
         data->cursor_data.custom.hot_y = hot_y;
+        data->num_frames = num_frames;
 
-        data->cursor_data.custom.sdl_cursor_surfaces[0] = surface;
-        ++surface->refcount;
+        data->frame_durations_ms = SDL_calloc(num_frames, sizeof(Uint32));
+
+        for (int i = 0; i < num_frames; ++i) {
+            data->frame_durations_ms[i] = frames[i].duration;
+            data->total_duration_ms += frames[i].duration;
+            data->cursor_data.custom.sdl_cursor_surfaces[i] = frames[i].surface;
+            ++frames[i].surface->refcount;
+        }
 
         // If the cursor has only one size, just prepare it now.
-        if (!SDL_SurfaceHasAlternateImages(surface)) {
+        if (!SDL_SurfaceHasAlternateImages(frames[0].surface)) {
             Wayland_CacheScaledCustomCursor(data, 1.0);
         }
     }
 
     return cursor;
+}
+
+static SDL_Cursor *Wayland_CreateCursor(SDL_Surface *surface, int hot_x, int hot_y)
+{
+    SDL_AnimatedCursorFrame frame = {
+        surface, 0
+    };
+
+    return Wayland_CreateAnimatedCursor(&frame, 1, hot_x, hot_y);
 }
 
 static SDL_Cursor *Wayland_CreateSystemCursor(SDL_SystemCursor id)
@@ -659,7 +674,6 @@ static void Wayland_FreeCursorData(SDL_CursorData *d)
             if (seat->pointer.cursor_state.surface) {
                 wl_surface_attach(seat->pointer.cursor_state.surface, NULL, 0, 0);
             }
-
 
             seat->pointer.current_cursor = NULL;
         }
@@ -1120,6 +1134,7 @@ void Wayland_InitMouse(void)
     SDL_Mouse *mouse = SDL_GetMouse();
 
     mouse->CreateCursor = Wayland_CreateCursor;
+    mouse->CreateAnimatedCursor = Wayland_CreateAnimatedCursor;
     mouse->CreateSystemCursor = Wayland_CreateSystemCursor;
     mouse->ShowCursor = Wayland_ShowCursor;
     mouse->FreeCursor = Wayland_FreeCursor;

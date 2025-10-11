@@ -60,6 +60,9 @@ typedef struct
     // Create a cursor from a surface
     SDL_Cursor *(*CreateCursor)(SDL_Surface *surface, int hot_x, int hot_y);
 
+    // Create a cursor from a surface
+    SDL_Cursor *(*CreateAnimatedCursor)(SDL_AnimatedCursorFrame *frames, int num_frames, int hot_x, int hot_y);
+
     // Create a system cursor
     SDL_Cursor *(*CreateSystemCursor)(SDL_SystemCursor id);
 
