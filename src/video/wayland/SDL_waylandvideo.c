@@ -1453,7 +1453,7 @@ bool Wayland_VideoInit(SDL_VideoDevice *_this)
 
     Wayland_FinalizeDisplays(data);
 
-    Wayland_InitMouse();
+    Wayland_InitMouse(data);
 
     WAYLAND_wl_display_flush(data->display);
 
