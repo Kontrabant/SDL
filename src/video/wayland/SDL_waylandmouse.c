@@ -995,10 +995,9 @@ void Wayland_SeatWarpMouse(SDL_WaylandSeat *seat, SDL_WindowData *window, float 
                 Wayland_SeatUpdatePointerGrab(seat);
             }
 
-            /* NOTE: There is a pending warp event under discussion that should replace this when available.
-             * https://gitlab.freedesktop.org/wayland/wayland/-/merge_requests/340
-             */
-            SDL_SendMouseMotion(0, window->sdlwindow, seat->pointer.sdl_id, false, x, y);
+            if (wl_seat_get_version(seat->wl_seat) < WL_POINTER_WARP_SINCE_VERSION) {
+                SDL_SendMouseMotion(0, window->sdlwindow, seat->pointer.sdl_id, false, x, y);
+            }
         }
     }
 }
