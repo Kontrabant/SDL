@@ -382,7 +382,7 @@ static SDLCALL int Wayland_CursorAnimationThreadFunc(void *data)
 static bool Wayland_StartCursorAnimationThread(SDL_VideoData *data)
 {
     if (!cursor_thread_context.thread) {
-        cursor_thread_context.queue = WAYLAND_wl_display_create_queue(data->display);
+        cursor_thread_context.queue = Wayland_DisplayCreateQueue(data->display, "SDL Cursor Animation Queue");
         if (!cursor_thread_context.queue) {
             goto cleanup;
         }
