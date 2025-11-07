@@ -222,6 +222,7 @@ struct SDL_WindowData
     bool suspended;
     bool resizing;
     bool active;
+    bool corner_resize;
     bool pending_config_ack;
     bool pending_state_commit;
     bool limits_changed;

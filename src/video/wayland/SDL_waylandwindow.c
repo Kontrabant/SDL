@@ -925,7 +925,9 @@ static void handle_xdg_toplevel_configure(void *data,
     }
 
     // When resizing, dimensions other than 0 are a maximum.
-    const bool new_configure_size = width != wind->last_configure.width || height != wind->last_configure.height;
+    bool new_configure_width = width != wind->last_configure.width;
+    bool new_configure_height = height != wind->last_configure.height;
+    SDL_Log("Initial: %ix%i", width, height);
 
     UpdateWindowFullscreen(window, fullscreen);
 
@@ -967,13 +969,15 @@ static void handle_xdg_toplevel_configure(void *data,
                     width = window->windowed.w;
                 }
 
+                new_configure_width = width != wind->last_configure.width;
+
                 if (!wind->scale_to_display) {
                     wind->requested.logical_width = width;
                 } else {
                     wind->requested.pixel_width = width;
                     width = wind->requested.logical_width = PixelToPoint(window, width);
                 }
-            } else if (new_configure_size) {
+            } else if (new_configure_width) {
                 /* Don't apply the supplied dimensions if they haven't changed from the last configuration
                  * event, or a newer size set programmatically can be overwritten by old data.
                  */
@@ -999,13 +1003,15 @@ static void handle_xdg_toplevel_configure(void *data,
                     height = window->windowed.h;
                 }
 
+                new_configure_height = height != wind->last_configure.height;
+
                 if (!wind->scale_to_display) {
                     wind->requested.logical_height = height;
                 } else {
                     wind->requested.pixel_height = height;
                     height = wind->requested.logical_height = PixelToPoint(window, height);
                 }
-            } else if (new_configure_size) {
+            } else if (new_configure_height) {
                 /* Don't apply the supplied dimensions if they haven't changed from the last configuration
                  * event, or a newer size set programmatically can be overwritten by old data.
                  */
@@ -1047,8 +1053,29 @@ static void handle_xdg_toplevel_configure(void *data,
          *   can occur. However, in practice, nothing seems to kill clients that do this, but
          *   doing so can cause certain compositors to glitch out.
          */
+        bool resize_h = false;
+        bool resize_v = false;
+
+        if (resizing) {
+            if (new_configure_width && width != wind->current.logical_width) {
+                resize_h = true;
+            }
+            if (new_configure_height && height != wind->current.logical_height) {
+                resize_v = true;
+            }
+        } else {
+            resize_h = false;
+            resize_v = false;
+            wind->corner_resize = false;
+        }
+
+        if (resize_h && resize_v) {
+            wind->corner_resize = true;
+        }
+        
         if (floating) {
             if (!wind->scale_to_display) {
+
                 if (window->max_w > 0) {
                     wind->requested.logical_width = SDL_min(wind->requested.logical_width, window->max_w);
                 }
@@ -1062,10 +1089,24 @@ static void handle_xdg_toplevel_configure(void *data,
                 // Aspect correction.
                 const float aspect = (float)wind->requested.logical_width / (float)wind->requested.logical_height;
 
-                if (window->min_aspect != 0.f && aspect < window->min_aspect) {
-                    wind->requested.logical_height = SDL_lroundf((float)wind->requested.logical_width / window->min_aspect);
-                } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
-                    wind->requested.logical_width = SDL_lroundf((float)wind->requested.logical_height * window->max_aspect);
+                if (wind->corner_resize) {
+                    if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+                        wind->requested.logical_height = SDL_lroundf((float)wind->requested.logical_width / window->min_aspect);
+                    } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+                        wind->requested.logical_width = SDL_lroundf((float)wind->requested.logical_height * window->max_aspect);
+                    }
+                } else if (resize_h) {
+                    if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+                        wind->requested.logical_height = SDL_lroundf((float)wind->requested.logical_width / window->min_aspect);
+                    } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+                        wind->requested.logical_height = SDL_lroundf((float)wind->requested.logical_width / window->max_aspect);
+                    }
+                } else if (resize_v) {
+                    if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+                        wind->requested.logical_width = SDL_lroundf((float)wind->requested.logical_height * window->min_aspect);
+                    } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+                        wind->requested.logical_width = SDL_lroundf((float)wind->requested.logical_height * window->max_aspect);
+                    }
                 }
             } else {
                 if (window->max_w > 0) {
@@ -1081,10 +1122,24 @@ static void handle_xdg_toplevel_configure(void *data,
                 // Aspect correction.
                 const float aspect = (float)wind->requested.pixel_width / (float)wind->requested.pixel_height;
 
-                if (window->min_aspect != 0.f && aspect < window->min_aspect) {
-                    wind->requested.pixel_height = SDL_lroundf((float)wind->requested.pixel_width / window->min_aspect);
-                } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
-                    wind->requested.pixel_width = SDL_lroundf((float)wind->requested.pixel_height * window->max_aspect);
+                if (wind->corner_resize) {
+                    if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+                        wind->requested.pixel_height = SDL_lroundf((float)wind->requested.pixel_width / window->min_aspect);
+                    } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+                        wind->requested.pixel_width = SDL_lroundf((float)wind->requested.pixel_height * window->max_aspect);
+                    }
+                } else if (resize_h) {
+                    if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+                        wind->requested.pixel_height = SDL_lroundf((float)wind->requested.pixel_width / window->min_aspect);
+                    } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+                        wind->requested.pixel_height = SDL_lroundf((float)wind->requested.pixel_width / window->max_aspect);
+                    }
+                } else if (resize_v) {
+                    if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+                        wind->requested.pixel_width = SDL_lroundf((float)wind->requested.pixel_height * window->min_aspect);
+                    } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+                        wind->requested.pixel_width = SDL_lroundf((float)wind->requested.pixel_height * window->max_aspect);
+                    }
                 }
 
                 wind->requested.logical_width = PixelToPoint(window, wind->requested.pixel_width);
@@ -1107,6 +1162,7 @@ static void handle_xdg_toplevel_configure(void *data,
         }
     }
 
+    SDL_Log("Wrote last conf: %ix%i", width, height);
     wind->last_configure.width = width;
     wind->last_configure.height = height;
     wind->floating = floating;
