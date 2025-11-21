@@ -64,6 +64,7 @@
 #include "xdg-foreign-unstable-v2-client-protocol.h"
 #include "xdg-output-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
+#include "xdg-toplevel-drag-v1-client-protocol.h"
 #include "xdg-toplevel-icon-v1-client-protocol.h"
 #include "color-management-v1-client-protocol.h"
 #include "pointer-warp-v1-client-protocol.h"
@@ -1337,6 +1338,8 @@ static void handle_registry_global(void *data, struct wl_registry *registry, uin
     } else if (SDL_strcmp(interface, "zwp_pointer_gestures_v1") == 0) {
         d->zwp_pointer_gestures = wl_registry_bind(d->registry, id, &zwp_pointer_gestures_v1_interface, SDL_min(version, 3));
         Wayland_DisplayInitPointerGestureManager(d);
+    } else if (SDL_strcmp(interface, "xdg_toplevel_drag_manager_v1") == 0) {
+        d->xdg_toplevel_drag_manager_v1 = wl_registry_bind(d->registry, id, &xdg_toplevel_drag_manager_v1_interface, 1);
     }
 #ifdef SDL_WL_FIXES_VERSION
     else if (SDL_strcmp(interface, "wl_fixes") == 0) {
@@ -1364,7 +1367,7 @@ static void handle_registry_remove_global(void *data, struct wl_registry *regist
         }
     }
 
-    struct SDL_WaylandSeat *seat, *temp;
+    SDL_WaylandSeat *seat, *temp;
     wl_list_for_each_safe (seat, temp, &d->seat_list, link)
     {
         if (seat->registry_id == id) {
@@ -1634,6 +1637,11 @@ static void Wayland_VideoCleanup(SDL_VideoDevice *_this)
     if (data->wp_alpha_modifier_v1) {
         wp_alpha_modifier_v1_destroy(data->wp_alpha_modifier_v1);
         data->wp_alpha_modifier_v1 = NULL;
+    }
+
+    if (data->xdg_toplevel_drag_manager_v1) {
+        xdg_toplevel_drag_manager_v1_destroy(data->xdg_toplevel_drag_manager_v1);
+        data->xdg_toplevel_drag_manager_v1 = NULL;
     }
 
     if (data->xdg_toplevel_icon_manager_v1) {

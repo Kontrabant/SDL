@@ -116,7 +116,7 @@ typedef struct SDL_WaylandPenTool  // a stylus, etc, on a tablet.
     struct wl_list link;
 } SDL_WaylandPenTool;
 
-typedef struct SDL_WaylandSeat
+struct SDL_WaylandSeat
 {
     SDL_VideoData *display;
     struct wl_seat *wl_seat;
@@ -260,10 +260,10 @@ typedef struct SDL_WaylandSeat
         struct zwp_tablet_seat_v2 *wl_tablet_seat;
         struct wl_list tool_list;
     } tablet;
-} SDL_WaylandSeat;
+};
 
 
-extern Uint64 Wayland_GetTouchTimestamp(struct SDL_WaylandSeat *seat, Uint32 wl_timestamp_ms);
+extern Uint64 Wayland_GetTouchTimestamp(SDL_WaylandSeat *seat, Uint32 wl_timestamp_ms);
 
 extern void Wayland_PumpEvents(SDL_VideoDevice *_this);
 extern void Wayland_SendWakeupEvent(SDL_VideoDevice *_this, SDL_Window *window);
@@ -286,6 +286,8 @@ extern void Wayland_DisplayUpdatePointerGrabs(SDL_VideoData *display, SDL_Window
 extern void Wayland_DisplayUpdateKeyboardGrabs(SDL_VideoData *display, SDL_WindowData *window);
 extern void Wayland_DisplayRemoveWindowReferencesFromSeats(SDL_VideoData *display, SDL_WindowData *window);
 
+extern bool BeginWindowDrag(SDL_WindowData *window_data, uint32_t serial);
+
 /* The implicit grab serial needs to be updated on:
  * - Keyboard key down/up
  * - Mouse button down
@@ -293,6 +295,6 @@ extern void Wayland_DisplayRemoveWindowReferencesFromSeats(SDL_VideoData *displa
  * - Tablet tool down
  * - Tablet tool button down/up
  */
-extern void Wayland_UpdateImplicitGrabSerial(struct SDL_WaylandSeat *seat, Uint32 serial);
+extern void Wayland_UpdateImplicitGrabSerial(SDL_WaylandSeat *seat, Uint32 serial);
 
 #endif // SDL_waylandevents_h_

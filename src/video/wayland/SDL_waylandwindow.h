@@ -118,6 +118,7 @@ struct SDL_WindowData
     struct xdg_toplevel_icon_v1 *xdg_toplevel_icon_v1;
     struct frog_color_managed_surface *frog_color_managed_surface;
     struct wp_color_management_surface_feedback_v1 *wp_color_management_surface_feedback;
+    struct xdg_toplevel_drag_v1 *toplevel_drag_v1;
 
     struct Wayland_ColorInfoState *color_info_state;
 
@@ -215,6 +216,8 @@ struct SDL_WindowData
     bool scale_to_display;
     bool reparenting_required;
     bool double_buffer;
+    bool dockable;
+    bool track_pointer;
 
     SDL_HitTestResult hit_test_result;
 

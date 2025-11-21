@@ -32,7 +32,7 @@
 #include "../../core/linux/SDL_ime.h"
 
 struct xkb_context;
-struct SDL_WaylandSeat;
+typedef struct SDL_WaylandSeat SDL_WaylandSeat;
 
 typedef struct
 {
@@ -85,13 +85,14 @@ struct SDL_VideoData
     struct zwp_tablet_manager_v2 *tablet_manager;
     struct wl_fixes *wl_fixes;
     struct zwp_pointer_gestures_v1 *zwp_pointer_gestures;
+    struct xdg_toplevel_drag_manager_v1 *xdg_toplevel_drag_manager_v1;
 
     struct xkb_context *xkb_context;
 
     struct wl_list seat_list;
-    struct SDL_WaylandSeat *last_implicit_grab_seat;
-    struct SDL_WaylandSeat *last_incoming_data_offer_seat;
-    struct SDL_WaylandSeat *last_incoming_primary_selection_seat;
+    SDL_WaylandSeat *last_implicit_grab_seat;
+    SDL_WaylandSeat *last_incoming_data_offer_seat;
+    SDL_WaylandSeat *last_incoming_primary_selection_seat;
 
     SDL_DisplayData **output_list;
     int output_count;
