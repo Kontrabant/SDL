@@ -1555,7 +1555,14 @@ void X11_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
         X11_PumpEvents(_this);
     }
 
-    if (SDL_WINDOW_IS_POPUP(window)) {
+    if (window->dockable) {
+        float x, y;
+        SDL_GetGlobalMouseState(&x, &y);
+        window->pending.x = (int)SDL_floorf(x) - window->x;
+        window->pending.y = (int)SDL_floorf(y) - window->y;
+        data->pending_position = true;
+        set_position = true;
+    } else if (SDL_WINDOW_IS_POPUP(window)) {
         // Update the position in case the parent moved while we were hidden
         X11_ConstrainPopup(window, true);
         data->pending_position = true;
@@ -1637,6 +1644,14 @@ void X11_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
         SDL_GlobalToRelativeForWindow(data->window, data->last_xconfigure.x, data->last_xconfigure.y, &x, &y);
         SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_RESIZED, data->last_xconfigure.width, data->last_xconfigure.height);
         SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_MOVED, x, y);
+    }
+
+    if (window->dockable) {
+        SDL_Mouse *m = SDL_GetMouse();
+
+        data->videodata->implicit_drag = window;
+        data->drop_offset_x = window->x - (int)SDL_floorf(m->x);
+        data->drop_offset_y = window->y - (int)SDL_floorf(m->y);
     }
 }
 

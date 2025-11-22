@@ -2556,6 +2556,7 @@ SDL_Window *SDL_CreateWindowWithProperties(SDL_PropertiesID props)
     window->displayID = SDL_GetDisplayForWindow(window);
     window->external_graphics_context = external_graphics_context;
     window->constrain_popup = SDL_GetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_CONSTRAIN_POPUP_BOOLEAN, true);
+    window->dockable = SDL_GetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_DOCKABLE_BOOLEAN, false);
 
     if (_this->windows) {
         _this->windows->prev = window;
