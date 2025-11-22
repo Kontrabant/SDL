@@ -188,6 +188,8 @@ struct SDL_VideoData
     PFN_XGetXCBConnection vulkan_XGetXCBConnection;
 #endif
 
+    SDL_Window *implicit_drag;
+
     // Used to interact with the on-screen keyboard
     bool is_steam_deck;
 
