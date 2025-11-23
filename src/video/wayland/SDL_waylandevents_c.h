@@ -286,7 +286,7 @@ extern void Wayland_DisplayUpdatePointerGrabs(SDL_VideoData *display, SDL_Window
 extern void Wayland_DisplayUpdateKeyboardGrabs(SDL_VideoData *display, SDL_WindowData *window);
 extern void Wayland_DisplayRemoveWindowReferencesFromSeats(SDL_VideoData *display, SDL_WindowData *window);
 
-extern bool BeginWindowDrag(SDL_WindowData *window_data, uint32_t serial);
+extern bool Wayland_BeginWindowDrag(SDL_WindowData *window_data, uint32_t serial);
 
 /* The implicit grab serial needs to be updated on:
  * - Keyboard key down/up

@@ -1061,6 +1061,20 @@ void WIN_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
     if (window->flags & SDL_WINDOW_MODAL) {
         WIN_SetWindowModal(_this, window, true);
     }
+    if (window->dockable && (SDL_GetMouseState(NULL, NULL) & SDL_BUTTON_MASK(SDL_BUTTON_LEFT))) {
+        POINT pt;
+        SDL_zero(pt);
+        GetCursorPos(&pt);
+        if (window->hit_test) {
+            SDL_Point sdl_pt = { pt.x, pt.y };
+            SDL_HitTestResult rc = window->hit_test(window, &sdl_pt, window->hit_test_data);
+            if (rc == SDL_HITTEST_DRAGGABLE) {
+                window->internal->drag_offset.x = window->x - pt.x;
+                window->internal->drag_offset.y = window->y - pt.y;
+                window->internal->videodata->implicit_drag = window;
+            }
+        }
+    }
 }
 
 void WIN_HideWindow(SDL_VideoDevice *_this, SDL_Window *window)
@@ -1760,7 +1774,7 @@ static STDMETHODIMP SDLDropTarget_DragEnter(SDLDropTarget *target,
     if (ScreenToClient(target->hwnd, &pnt)) {
         SDL_LogTrace(SDL_LOG_CATEGORY_INPUT,
                      ". In DragEnter at %ld, %ld => window %u at %ld, %ld", pt.x, pt.y, target->window->id, pnt.x, pnt.y);
-        SDL_SendDropPosition(target->window, pnt.x, pnt.y);
+        SDL_SendDropPosition(target->window, pnt.x, pnt.y, NULL);
     } else {
         SDL_LogTrace(SDL_LOG_CATEGORY_INPUT,
                      ". In DragEnter at %ld, %ld => nil, nil", pt.x, pt.y);
@@ -1779,7 +1793,7 @@ static STDMETHODIMP SDLDropTarget_DragOver(SDLDropTarget *target,
     if (ScreenToClient(target->hwnd, &pnt)) {
         SDL_LogTrace(SDL_LOG_CATEGORY_INPUT,
                      ". In DragOver at %ld, %ld => window %u at %ld, %ld", pt.x, pt.y, target->window->id, pnt.x, pnt.y);
-        SDL_SendDropPosition(target->window, pnt.x, pnt.y);
+        SDL_SendDropPosition(target->window, pnt.x, pnt.y, NULL);
     } else {
         SDL_LogTrace(SDL_LOG_CATEGORY_INPUT,
                      ". In DragOver at %ld, %ld => nil, nil", pt.x, pt.y);
@@ -1804,7 +1818,7 @@ static STDMETHODIMP SDLDropTarget_Drop(SDLDropTarget *target,
     if (ScreenToClient(target->hwnd, &pnt)) {
         SDL_LogTrace(SDL_LOG_CATEGORY_INPUT,
                      ". In Drop at %ld, %ld => window %u at %ld, %ld", pt.x, pt.y, target->window->id, pnt.x, pnt.y);
-        SDL_SendDropPosition(target->window, pnt.x, pnt.y);
+        SDL_SendDropPosition(target->window, pnt.x, pnt.y, NULL);
     } else {
         SDL_LogTrace(SDL_LOG_CATEGORY_INPUT,
                      ". In Drop at %ld, %ld => nil, nil", pt.x, pt.y);

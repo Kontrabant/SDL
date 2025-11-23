@@ -914,14 +914,14 @@ static void DragCleanupCallback(SDL_WaylandUserdata *userdata)
     }
 }
 
-bool BeginWindowDrag(SDL_WindowData *window_data, uint32_t serial)
+bool Wayland_BeginWindowDrag(SDL_WindowData *window_data, uint32_t serial)
 {
     SDL_VideoData *vid = window_data->waylandData;
     SDL_WaylandSeat *seat = vid->last_implicit_grab_seat;
 
     if (vid->xdg_toplevel_drag_manager_v1) {
-        const int offset_x = window_data->track_pointer ? window_data->sdlwindow->x : seat->pointer.last_motion.x;
-        const int offset_y = window_data->track_pointer ? window_data->sdlwindow->y :seat->pointer.last_motion.y;
+        const int offset_x = seat->pointer.last_motion.x - window_data->sdlwindow->x;
+        const int offset_y = seat->pointer.last_motion.y - window_data->sdlwindow->y;
 
         SDL_WaylandDataSource *drag_source = Wayland_data_source_create(seat);
         Wayland_data_source_set_callback(drag_source, DragWindowCallback, DragCleanupCallback, window_data, 0);
@@ -980,7 +980,7 @@ static bool Wayland_ProcessHitTest(SDL_WaylandSeat *seat, Uint32 serial)
 #endif
                 if (window_data->shell_surface_type == WAYLAND_SHELL_SURFACE_TYPE_XDG_TOPLEVEL) {
                 if (window_data->shell_surface.xdg.toplevel.xdg_toplevel) {
-                    if (!BeginWindowDrag(window_data, serial)) {
+                    if (!Wayland_BeginWindowDrag(window_data, serial)) {
                         xdg_toplevel_move(window_data->shell_surface.xdg.toplevel.xdg_toplevel, seat->wl_seat, serial);
                     }
                 }

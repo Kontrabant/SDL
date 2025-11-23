@@ -1560,8 +1560,6 @@ static void X11_DispatchEvent(SDL_VideoDevice *_this, XEvent *xevent)
         if (!(data->window->flags & SDL_WINDOW_MOUSE_CAPTURE)) {
             SDL_UpdateWindowGrab(data->window);
         }
-
-        X11_ProcessHitTest(_this, data, mouse->last_x, mouse->last_y, true);
     } break;
         // Losing mouse coverage?
     case LeaveNotify:
@@ -1746,16 +1744,14 @@ static void X11_DispatchEvent(SDL_VideoDevice *_this, XEvent *xevent)
          */
         if (data->window->dockable) {
             int x, y;
-            if (_this->internal->implicit_drag == data->window) {
+            if (videodata->implicit_drag) {
                 x = data->window->x + data->drop_offset_x;
                 y = data->window->y + data->drop_offset_y;
             } else {
-                float mx, my;
-                SDL_GetMouseState(&mx, &my);
-                x = data->window->x + (int)SDL_floorf(mx);
-                y = data->window->y + (int)SDL_floorf(my);
+                SDL_Mouse *mouse = SDL_GetMouse();
+                x = data->window->x + (int)SDL_floorf(mouse->x);
+                y = data->window->y + (int)SDL_floorf(mouse->y);
             }
-
             SDL_WindowData *topmost = X11_FindTopmostForPoint(_this, x, y, data);
             if (topmost) {
                 SDL_SendDropPosition(topmost->window, x - topmost->window->x, y - topmost->window->y, data->window);
