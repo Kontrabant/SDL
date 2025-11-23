@@ -920,8 +920,8 @@ bool BeginWindowDrag(SDL_WindowData *window_data, uint32_t serial)
     SDL_WaylandSeat *seat = vid->last_implicit_grab_seat;
 
     if (vid->xdg_toplevel_drag_manager_v1) {
-        const int offset_x = window_data->track_pointer ? window_data->sdlwindow->x : seat->pointer.last_motion.x;
-        const int offset_y = window_data->track_pointer ? window_data->sdlwindow->y :seat->pointer.last_motion.y;
+        const int offset_x = seat->pointer.last_motion.x - window_data->sdlwindow->x;
+        const int offset_y = seat->pointer.last_motion.y - window_data->sdlwindow->y;
 
         SDL_WaylandDataSource *drag_source = Wayland_data_source_create(seat);
         Wayland_data_source_set_callback(drag_source, DragWindowCallback, DragCleanupCallback, window_data, 0);

@@ -216,8 +216,6 @@ struct SDL_WindowData
     bool scale_to_display;
     bool reparenting_required;
     bool double_buffer;
-    bool dockable;
-    bool track_pointer;
 
     SDL_HitTestResult hit_test_result;
 

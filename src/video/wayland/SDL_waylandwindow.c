@@ -2016,9 +2016,8 @@ void Wayland_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
                                                       data->xdg_toplevel_icon_v1);
             }
 
-            if (data->track_pointer) {
+            if (window->dockable) {
                 BeginWindowDrag(data, c->last_implicit_grab_seat->last_implicit_grab_serial);
-                data->track_pointer = false;
             }
 
             SDL_SetPointerProperty(props, SDL_PROP_WINDOW_WAYLAND_XDG_TOPLEVEL_POINTER, data->shell_surface.xdg.toplevel.xdg_toplevel);
@@ -2825,8 +2824,6 @@ bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
         data->shell_surface_status = WAYLAND_SHELL_SURFACE_STATUS_SHOWN;
     }
 
-    data->dockable = SDL_GetBooleanProperty(create_props, SDL_PROP_WINDOW_CREATE_DOCKABLE_BOOLEAN, false);
-    data->track_pointer = SDL_GetBooleanProperty(create_props, SDL_PROP_WINDOW_CREATE_TRACK_MOUSE_BOOLEAN, false);
     data->double_buffer = SDL_GetHintBoolean(SDL_HINT_VIDEO_DOUBLE_BUFFER, false);
 
     SDL_PropertiesID props = SDL_GetWindowProperties(window);

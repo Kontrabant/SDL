@@ -93,8 +93,6 @@ struct SDL_WindowData
     SDL_DisplayMode requested_fullscreen_mode;
 
     SDL_Window *drop_target;
-    int drop_offset_x;
-    int drop_offset_y;
 
     enum
     {
