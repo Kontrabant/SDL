@@ -1686,23 +1686,22 @@ static void Wayland_KeymapIterator(struct xkb_keymap *keymap, xkb_keycode_t key,
     }
 }
 
-static void keyboard_handle_keymap(void *data, struct wl_keyboard *keyboard,
-                                   uint32_t format, int fd, uint32_t size)
+static void keyboard_dispatch_keymap(SDL_WaylandSeat *seat)
 {
-    SDL_WaylandSeat *seat = data;
-    char *map_str;
+    const int fd = seat->keyboard.pending_frame.keymap_fd;
+    const Uint32 size = seat->keyboard.pending_frame.keymap_size;
+    enum xkb_keymap_format xkb_format;
 
-    if (!data) {
+    switch (seat->keyboard.pending_frame.keymap_format) {
+    case WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1:
+        xkb_format = XKB_KEYMAP_FORMAT_TEXT_V1;
+        break;
+    default:
         close(fd);
         return;
     }
 
-    if (format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
-        close(fd);
-        return;
-    }
-
-    map_str = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    char *map_str = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (map_str == MAP_FAILED) {
         close(fd);
         return;
@@ -1710,15 +1709,12 @@ static void keyboard_handle_keymap(void *data, struct wl_keyboard *keyboard,
 
     if (seat->keyboard.xkb.keymap != NULL) {
         /* if there's already a keymap loaded, throw it away rather than leaking it before
-         * parsing the new one
+         * parsing the new one.
          */
         WAYLAND_xkb_keymap_unref(seat->keyboard.xkb.keymap);
         seat->keyboard.xkb.keymap = NULL;
     }
-    seat->keyboard.xkb.keymap = WAYLAND_xkb_keymap_new_from_string(seat->display->xkb_context,
-                                                                   map_str,
-                                                                   XKB_KEYMAP_FORMAT_TEXT_V1,
-                                                                   0);
+    seat->keyboard.xkb.keymap = WAYLAND_xkb_keymap_new_from_string(seat->display->xkb_context, map_str, xkb_format, 0);
     munmap(map_str, size);
     close(fd);
 
@@ -1861,6 +1857,17 @@ static void keyboard_handle_keymap(void *data, struct wl_keyboard *keyboard,
     }
 }
 
+static void keyboard_handle_keymap(void *data, struct wl_keyboard *keyboard, uint32_t format, int fd, uint32_t size)
+{
+    SDL_WaylandSeat *seat = (SDL_WaylandSeat *)data;
+
+    seat->keyboard.pending_frame.keymap_fd = fd;
+    seat->keyboard.pending_frame.keymap_size = size;
+    seat->keyboard.pending_frame.keymap_format = format;
+
+    keyboard_dispatch_keymap(seat);
+}
+
 /*
  * Virtual keyboards can have arbitrary layouts, arbitrary scancodes/keycodes, etc...
  * Key presses from these devices must be looked up by their keysym value.
@@ -1885,15 +1892,17 @@ static SDL_Scancode Wayland_GetScancodeForKey(SDL_WaylandSeat *seat, uint32_t ke
     return scancode;
 }
 
-static void Wayland_ReconcileModifiers(SDL_WaylandSeat *seat, bool key_pressed)
+static void Wayland_ReconcileModifiers(SDL_WaylandSeat *seat, bool reconcile_pressed)
 {
     /* Handle explicit pressed modifier state. This will correct the modifier state
      * if common modifier keys were remapped and the modifiers presumed to be set
      * during a key press event were incorrect, or if the modifier was set to the
      * pressed state via means other than pressing the physical key.
      */
-    if (!key_pressed) {
-        if (seat->keyboard.xkb.wl_pressed_modifiers & seat->keyboard.xkb.shift_mask) {
+    if (reconcile_pressed) {
+        const xkb_mod_mask_t xkb_pressed_modifiers = seat->keyboard.xkb.wl_pressed_modifiers;
+
+        if (xkb_pressed_modifiers & seat->keyboard.xkb.shift_mask) {
             if (!(seat->keyboard.pressed_modifiers & SDL_KMOD_SHIFT)) {
                 seat->keyboard.pressed_modifiers |= SDL_KMOD_SHIFT;
             }
@@ -1901,7 +1910,7 @@ static void Wayland_ReconcileModifiers(SDL_WaylandSeat *seat, bool key_pressed)
             seat->keyboard.pressed_modifiers &= ~SDL_KMOD_SHIFT;
         }
 
-        if (seat->keyboard.xkb.wl_pressed_modifiers & seat->keyboard.xkb.ctrl_mask) {
+        if (xkb_pressed_modifiers & seat->keyboard.xkb.ctrl_mask) {
             if (!(seat->keyboard.pressed_modifiers & SDL_KMOD_CTRL)) {
                 seat->keyboard.pressed_modifiers |= SDL_KMOD_CTRL;
             }
@@ -1909,7 +1918,7 @@ static void Wayland_ReconcileModifiers(SDL_WaylandSeat *seat, bool key_pressed)
             seat->keyboard.pressed_modifiers &= ~SDL_KMOD_CTRL;
         }
 
-        if (seat->keyboard.xkb.wl_pressed_modifiers & seat->keyboard.xkb.alt_mask) {
+        if (xkb_pressed_modifiers & seat->keyboard.xkb.alt_mask) {
             if (!(seat->keyboard.pressed_modifiers & SDL_KMOD_ALT)) {
                 seat->keyboard.pressed_modifiers |= SDL_KMOD_ALT;
             }
@@ -1917,7 +1926,7 @@ static void Wayland_ReconcileModifiers(SDL_WaylandSeat *seat, bool key_pressed)
             seat->keyboard.pressed_modifiers &= ~SDL_KMOD_ALT;
         }
 
-        if (seat->keyboard.xkb.wl_pressed_modifiers & seat->keyboard.xkb.gui_mask) {
+        if (xkb_pressed_modifiers & seat->keyboard.xkb.gui_mask) {
             if (!(seat->keyboard.pressed_modifiers & SDL_KMOD_GUI)) {
                 seat->keyboard.pressed_modifiers |= SDL_KMOD_GUI;
             }
@@ -1925,7 +1934,7 @@ static void Wayland_ReconcileModifiers(SDL_WaylandSeat *seat, bool key_pressed)
             seat->keyboard.pressed_modifiers &= ~SDL_KMOD_GUI;
         }
 
-        if (seat->keyboard.xkb.wl_pressed_modifiers & seat->keyboard.xkb.level3_mask) {
+        if (xkb_pressed_modifiers & seat->keyboard.xkb.level3_mask) {
             if (!(seat->keyboard.pressed_modifiers & SDL_KMOD_MODE)) {
                 seat->keyboard.pressed_modifiers |= SDL_KMOD_MODE;
             }
@@ -1933,7 +1942,7 @@ static void Wayland_ReconcileModifiers(SDL_WaylandSeat *seat, bool key_pressed)
             seat->keyboard.pressed_modifiers &= ~SDL_KMOD_MODE;
         }
 
-        if (seat->keyboard.xkb.wl_pressed_modifiers & seat->keyboard.xkb.level5_mask) {
+        if (xkb_pressed_modifiers & seat->keyboard.xkb.level5_mask) {
             if (!(seat->keyboard.pressed_modifiers & SDL_KMOD_LEVEL5)) {
                 seat->keyboard.pressed_modifiers |= SDL_KMOD_LEVEL5;
             }
@@ -2023,7 +2032,7 @@ static void Wayland_ReconcileModifiers(SDL_WaylandSeat *seat, bool key_pressed)
     SDL_SetModState(seat->keyboard.pressed_modifiers | seat->keyboard.locked_modifiers);
 }
 
-static void Wayland_HandleModifierKeys(SDL_WaylandSeat *seat, SDL_Scancode scancode, bool pressed)
+static void Wayland_HandleModifierKeys(SDL_WaylandSeat *seat, SDL_Scancode scancode, bool pressed, bool reconcile)
 {
     const SDL_Keycode keycode = SDL_GetKeyFromScancode(scancode, SDL_KMOD_NONE, false);
     SDL_Keymod mod;
@@ -2075,26 +2084,14 @@ static void Wayland_HandleModifierKeys(SDL_WaylandSeat *seat, SDL_Scancode scanc
         seat->keyboard.pressed_modifiers &= ~mod;
     }
 
-    Wayland_ReconcileModifiers(seat, true);
+    if (reconcile) {
+        Wayland_ReconcileModifiers(seat, false);
+    }
 }
 
-static void keyboard_handle_enter(void *data, struct wl_keyboard *keyboard,
-                                  uint32_t serial, struct wl_surface *surface,
-                                  struct wl_array *keys)
+static void keyboard_dispatch_enter(SDL_WaylandSeat *seat)
 {
-    SDL_WaylandSeat *seat = data;
-    uint32_t *key;
-
-    if (!surface) {
-        // Enter event for a destroyed surface.
-        return;
-    }
-
-    SDL_WindowData *window = Wayland_GetWindowDataForOwnedSurface(surface);
-    if (!window) {
-        // Not a surface owned by SDL.
-        return;
-    }
+    SDL_WindowData *window = seat->keyboard.pending_frame.enter_window;
 
     ++window->keyboard_focus_count;
     seat->keyboard.focus = window;
@@ -2117,6 +2114,26 @@ static void keyboard_handle_enter(void *data, struct wl_keyboard *keyboard,
 
     Uint64 timestamp = SDL_GetTicksNS();
     window->last_focus_event_time_ns = timestamp;
+}
+
+static void keyboard_handle_enter(void *data, struct wl_keyboard *keyboard, uint32_t serial, struct wl_surface *surface, struct wl_array *keys)
+{
+    SDL_WaylandSeat *seat = (SDL_WaylandSeat *)data;
+    uint32_t *key;
+
+    if (!surface) {
+        // Enter event for a destroyed surface.
+        return;
+    }
+
+    SDL_WindowData *window = Wayland_GetWindowDataForOwnedSurface(surface);
+    if (!window) {
+        // Not a surface owned by SDL.
+        return;
+    }
+
+    seat->keyboard.pending_frame.enter_window = window;
+    keyboard_dispatch_enter(seat);
 
     Wayland_SeatSetKeymap(seat);
 
@@ -2136,8 +2153,8 @@ static void keyboard_handle_enter(void *data, struct wl_keyboard *keyboard,
             case SDLK_RGUI:
             case SDLK_MODE:
             case SDLK_LEVEL5_SHIFT:
-                Wayland_HandleModifierKeys(seat, scancode, true);
-                SDL_SendKeyboardKeyIgnoreModifiers(timestamp, seat->keyboard.sdl_id, *key, scancode, true);
+                Wayland_HandleModifierKeys(seat, scancode, true, true);
+                SDL_SendKeyboardKeyIgnoreModifiers(0, seat->keyboard.sdl_id, *key, scancode, true);
                 break;
             default:
                 break;
@@ -2146,8 +2163,56 @@ static void keyboard_handle_enter(void *data, struct wl_keyboard *keyboard,
     }
 }
 
-static void keyboard_handle_leave(void *data, struct wl_keyboard *keyboard,
-                                  uint32_t serial, struct wl_surface *surface)
+static void keyboard_dispatch_leave(SDL_WaylandSeat *seat)
+{
+    SDL_WindowData *window = seat->keyboard.pending_frame.leave_window;
+
+    if (window) {
+        // Stop key repeat before clearing keyboard focus
+        keyboard_repeat_clear(&seat->keyboard.repeat);
+
+        SDL_Window *keyboard_focus = SDL_GetKeyboardFocus();
+
+        // The keyboard focus may be a child popup
+        while (keyboard_focus && SDL_WINDOW_IS_POPUP(keyboard_focus)) {
+            keyboard_focus = keyboard_focus->parent;
+        }
+
+        const bool had_focus = keyboard_focus && window->sdlwindow == keyboard_focus;
+        seat->keyboard.focus = NULL;
+        --window->keyboard_focus_count;
+
+        // Only relinquish focus if this window has the active focus, and no other keyboards have focus on the window.
+        if (!window->keyboard_focus_count && had_focus) {
+            SDL_SetKeyboardFocus(NULL);
+        }
+
+        // Release the keyboard grab and any relative pointer grabs related to this keyboard focus.
+        Wayland_SeatUpdateKeyboardGrab(seat);
+        Wayland_DisplayUpdatePointerGrabs(seat->display, window);
+
+        // Clear the pressed modifiers.
+        seat->keyboard.pressed_modifiers = SDL_KMOD_NONE;
+
+        // Update text input and IME focus.
+        Wayland_SeatUpdateTextInput(seat);
+
+#ifdef SDL_USE_IME
+        if (!seat->text_input.zwp_text_input && !window->keyboard_focus_count) {
+            SDL_IME_SetFocus(false);
+        }
+#endif
+
+        /* If the window has mouse focus, has no pointers within it, and no active touches, consider
+         * mouse focus to be lost.
+         */
+        if (SDL_GetMouseFocus() == window->sdlwindow && !window->pointer_focus_count && !window->active_touch_count) {
+            SDL_SetMouseFocus(NULL);
+        }
+    }
+}
+
+static void keyboard_handle_leave(void *data, struct wl_keyboard *keyboard, uint32_t serial, struct wl_surface *surface)
 {
     SDL_WaylandSeat *seat = (SDL_WaylandSeat *)data;
 
@@ -2162,46 +2227,9 @@ static void keyboard_handle_leave(void *data, struct wl_keyboard *keyboard,
         return;
     }
 
-    // Stop key repeat before clearing keyboard focus
-    keyboard_repeat_clear(&seat->keyboard.repeat);
-
-    SDL_Window *keyboard_focus = SDL_GetKeyboardFocus();
-
-    // The keyboard focus may be a child popup
-    while (keyboard_focus && SDL_WINDOW_IS_POPUP(keyboard_focus)) {
-        keyboard_focus = keyboard_focus->parent;
-    }
-
-    const bool had_focus = keyboard_focus && window->sdlwindow == keyboard_focus;
-    seat->keyboard.focus = NULL;
-    --window->keyboard_focus_count;
-
-    // Only relinquish focus if this window has the active focus, and no other keyboards have focus on the window.
-    if (!window->keyboard_focus_count && had_focus) {
-        SDL_SetKeyboardFocus(NULL);
-    }
-
-    // Release the keyboard grab and any relative pointer grabs related to this keyboard focus.
-    Wayland_SeatUpdateKeyboardGrab(seat);
-    Wayland_DisplayUpdatePointerGrabs(seat->display, window);
-
-    // Clear the pressed modifiers.
-    seat->keyboard.pressed_modifiers = SDL_KMOD_NONE;
-
-    // Update text input and IME focus.
-    Wayland_SeatUpdateTextInput(seat);
-
-#ifdef SDL_USE_IME
-    if (!seat->text_input.zwp_text_input && !window->keyboard_focus_count) {
-        SDL_IME_SetFocus(false);
-    }
-#endif
-
-    /* If the window has mouse focus, has no pointers within it, and no active touches, consider
-     * mouse focus to be lost.
-     */
-    if (SDL_GetMouseFocus() == window->sdlwindow && !window->pointer_focus_count && !window->active_touch_count) {
-        SDL_SetMouseFocus(NULL);
+    if (window == seat->keyboard.focus) {
+        seat->keyboard.pending_frame.leave_window = window;
+        keyboard_dispatch_leave(seat);
     }
 }
 
@@ -2255,99 +2283,133 @@ static bool keyboard_input_get_text(char text[8], const SDL_WaylandSeat *seat, u
     return WAYLAND_xkb_keysym_to_utf8(sym, text, 8) > 0;
 }
 
-static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard,
-                                uint32_t serial, uint32_t time, uint32_t key,
-                                uint32_t state_w)
+static void keyboard_dispatch_keys(SDL_WaylandSeat *seat, bool handle_modifiers)
 {
-    SDL_WaylandSeat *seat = data;
-    enum wl_keyboard_key_state state = state_w;
-    char text[8];
-    bool has_text = false;
-    bool handled_by_ime = false;
-    const Uint64 timestamp_ns = Wayland_GetKeyboardTimestamp(seat, time);
+    SDL_Log("Dispatch key");
+    for (int i = 0; i < seat->keyboard.pending_frame.key_event_count; ++i) {
+        const Uint32 key = seat->keyboard.pending_frame.keys[i].keycode;
+        const Uint32 time = seat->keyboard.pending_frame.raw_time_ms;
+        enum wl_keyboard_key_state state = seat->keyboard.pending_frame.keys[i].state;
+        const Uint64 timestamp_ns = seat->keyboard.pending_frame.timestamp_ns;
+        char text[8];
+        bool has_text = false;
+        bool handled_by_ime = false;
 
-    Wayland_UpdateImplicitGrabSerial(seat, serial);
+        if (state == WL_KEYBOARD_KEY_STATE_REPEATED) {
+            // If this key shouldn't be repeated, just return.
+            if (seat->keyboard.xkb.keymap && !WAYLAND_xkb_keymap_key_repeats(seat->keyboard.xkb.keymap, key + 8)) {
+                return;
+            }
 
-    if (state == WL_KEYBOARD_KEY_STATE_REPEATED) {
-        // If this key shouldn't be repeated, just return.
-        if (seat->keyboard.xkb.keymap && !WAYLAND_xkb_keymap_key_repeats(seat->keyboard.xkb.keymap, key + 8)) {
-            return;
+            // SDL automatically handles key tracking and repeat status, so just map 'repeated' to 'pressed'.
+            state = WL_KEYBOARD_KEY_STATE_PRESSED;
         }
 
-        // SDL automatically handles key tracking and repeat status, so just map 'repeated' to 'pressed'.
-        state = WL_KEYBOARD_KEY_STATE_PRESSED;
-    }
+        Wayland_SeatSetKeymap(seat);
 
-    Wayland_SeatSetKeymap(seat);
-
-    if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-        SDL_Window *keyboard_focus = SDL_GetKeyboardFocus();
-        if (keyboard_focus && SDL_TextInputActive(keyboard_focus)) {
-            has_text = keyboard_input_get_text(text, seat, key, true, &handled_by_ime);
+        if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+            SDL_Window *keyboard_focus = SDL_GetKeyboardFocus();
+            if (keyboard_focus && SDL_TextInputActive(keyboard_focus)) {
+                has_text = keyboard_input_get_text(text, seat, key, true, &handled_by_ime);
+            }
+        } else {
+            if (keyboard_repeat_key_is_set(&seat->keyboard.repeat, key)) {
+                /* Send any due key repeat events before stopping the repeat and generating the key up event.
+                 * Compute time based on the Wayland time, as it reports when the release event happened.
+                 * Using SDL_GetTicks would be wrong, as it would report when the release event is processed,
+                 * which may be off if the application hasn't pumped events for a while.
+                 */
+                const Uint64 elapsed = SDL_MS_TO_NS(time - seat->keyboard.repeat.wl_press_time_ms);
+                keyboard_repeat_handle(&seat->keyboard.repeat, elapsed);
+                keyboard_repeat_clear(&seat->keyboard.repeat);
+            }
+            keyboard_input_get_text(text, seat, key, false, &handled_by_ime);
         }
-    } else {
-        if (keyboard_repeat_key_is_set(&seat->keyboard.repeat, key)) {
-            /* Send any due key repeat events before stopping the repeat and generating the key up event.
-             * Compute time based on the Wayland time, as it reports when the release event happened.
-             * Using SDL_GetTicks would be wrong, as it would report when the release event is processed,
-             * which may be off if the application hasn't pumped events for a while.
-             */
-            const Uint64 elapsed = SDL_MS_TO_NS(time - seat->keyboard.repeat.wl_press_time_ms);
-            keyboard_repeat_handle(&seat->keyboard.repeat, elapsed);
-            keyboard_repeat_clear(&seat->keyboard.repeat);
+
+        const xkb_keysym_t *syms = NULL;
+        SDL_Scancode scancode = Wayland_GetScancodeForKey(seat, key, &syms);
+
+        if (handle_modifiers) {
+            Wayland_HandleModifierKeys(seat, scancode, state == WL_KEYBOARD_KEY_STATE_PRESSED, true);
         }
-        keyboard_input_get_text(text, seat, key, false, &handled_by_ime);
-    }
 
-    const xkb_keysym_t *syms = NULL;
-    SDL_Scancode scancode = Wayland_GetScancodeForKey(seat, key, &syms);
-    Wayland_HandleModifierKeys(seat, scancode, state == WL_KEYBOARD_KEY_STATE_PRESSED);
+        // If we have a key with unknown scancode, check if the keysym corresponds to a valid Unicode value, and assign it a reserved scancode.
+        if (scancode == SDL_SCANCODE_UNKNOWN && syms && seat->keyboard.sdl_keymap) {
+            const SDL_Keycode keycode = (SDL_Keycode)SDL_KeySymToUcs4(syms[0]);
+            if (keycode != SDLK_UNKNOWN) {
+                SDL_Keymod modstate = SDL_KMOD_NONE;
 
-    // If we have a key with unknown scancode, check if the keysym corresponds to a valid Unicode value, and assign it a reserved scancode.
-    if (scancode == SDL_SCANCODE_UNKNOWN && syms && seat->keyboard.sdl_keymap) {
-        const SDL_Keycode keycode = (SDL_Keycode)SDL_KeySymToUcs4(syms[0]);
-        if (keycode != SDLK_UNKNOWN) {
-            SDL_Keymod modstate = SDL_KMOD_NONE;
+                // Check if this keycode already exists in the keymap.
+                scancode = SDL_GetKeymapScancode(seat->keyboard.sdl_keymap[seat->keyboard.xkb.current_layout], keycode, &modstate);
 
-            // Check if this keycode already exists in the keymap.
-            scancode = SDL_GetKeymapScancode(seat->keyboard.sdl_keymap[seat->keyboard.xkb.current_layout], keycode, &modstate);
-
-            // Make sure we have this keycode in our keymap
-            if (scancode == SDL_SCANCODE_UNKNOWN && keycode < SDLK_SCANCODE_MASK) {
-                scancode = SDL_GetKeymapNextReservedScancode(seat->keyboard.sdl_keymap[seat->keyboard.xkb.current_layout]);
-                SDL_SetKeymapEntry(seat->keyboard.sdl_keymap[seat->keyboard.xkb.current_layout], scancode, modstate, keycode);
+                // Make sure we have this keycode in our keymap
+                if (scancode == SDL_SCANCODE_UNKNOWN && keycode < SDLK_SCANCODE_MASK) {
+                    scancode = SDL_GetKeymapNextReservedScancode(seat->keyboard.sdl_keymap[seat->keyboard.xkb.current_layout]);
+                    SDL_SetKeymapEntry(seat->keyboard.sdl_keymap[seat->keyboard.xkb.current_layout], scancode, modstate, keycode);
+                }
             }
         }
-    }
 
-    SDL_SendKeyboardKeyIgnoreModifiers(timestamp_ns, seat->keyboard.sdl_id, key, scancode, state == WL_KEYBOARD_KEY_STATE_PRESSED);
+        SDL_SendKeyboardKeyIgnoreModifiers(timestamp_ns, seat->keyboard.sdl_id, key, scancode, state == WL_KEYBOARD_KEY_STATE_PRESSED);
 
-    if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-        if (has_text && !(SDL_GetModState() & (SDL_KMOD_CTRL | SDL_KMOD_ALT))) {
-            if (!handled_by_ime) {
-                SDL_SendKeyboardText(text);
+        if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+            if (has_text && !(SDL_GetModState() & (SDL_KMOD_CTRL | SDL_KMOD_ALT))) {
+                if (!handled_by_ime) {
+                    SDL_SendKeyboardText(text);
+                }
             }
-        }
-        if (seat->keyboard.xkb.keymap && WAYLAND_xkb_keymap_key_repeats(seat->keyboard.xkb.keymap, key + 8)) {
-            keyboard_repeat_set(&seat->keyboard.repeat, seat->keyboard.sdl_id, key, time, timestamp_ns, scancode, has_text, text);
+            if (seat->keyboard.xkb.keymap && WAYLAND_xkb_keymap_key_repeats(seat->keyboard.xkb.keymap, key + 8)) {
+                keyboard_repeat_set(&seat->keyboard.repeat, seat->keyboard.sdl_id, key, time, timestamp_ns, scancode, has_text, text);
+            }
         }
     }
 }
 
-static void keyboard_handle_modifiers(void *data, struct wl_keyboard *keyboard,
-                                      uint32_t serial, uint32_t mods_depressed,
-                                      uint32_t mods_latched, uint32_t mods_locked,
-                                      uint32_t group)
+static int keyboard_reserve_key_index(SDL_WaylandSeat *seat)
+{
+    if (seat->keyboard.pending_frame.key_event_count < seat->keyboard.pending_frame.key_event_max) {
+        return seat->keyboard.pending_frame.key_event_count++;
+    }
+
+    seat->keyboard.pending_frame.key_event_max *= 2;
+    seat->keyboard.pending_frame.keys = SDL_realloc(seat->keyboard.pending_frame.keys, seat->keyboard.pending_frame.key_event_max * sizeof(*seat->keyboard.pending_frame.keys));
+    if (seat->keyboard.pending_frame.keys) {
+        return seat->keyboard.pending_frame.key_event_count++;
+    }
+
+    seat->keyboard.pending_frame.key_event_count = 0;
+    seat->keyboard.pending_frame.key_event_max = 0;
+    return -1;
+}
+
+static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard, uint32_t serial, uint32_t time, uint32_t key, uint32_t state_w)
 {
     SDL_WaylandSeat *seat = data;
-    const uint32_t previous_layout = seat->keyboard.xkb.current_layout;
+    const int index = keyboard_reserve_key_index(seat);
 
-    seat->keyboard.xkb.wl_pressed_modifiers = mods_depressed;
-    seat->keyboard.xkb.wl_latched_modifiers = mods_latched;
-    seat->keyboard.xkb.wl_locked_modifiers = mods_locked;
-    seat->keyboard.xkb.current_layout = group;
+    Wayland_UpdateImplicitGrabSerial(seat, serial);
 
-    Wayland_ReconcileModifiers(seat, false);
+    if (index >= 0) {
+        seat->keyboard.pending_frame.timestamp_ns = Wayland_GetKeyboardTimestamp(seat, time);
+        seat->keyboard.pending_frame.raw_time_ms = time;
+        seat->keyboard.pending_frame.keys[index].keycode = key;
+        seat->keyboard.pending_frame.keys[index].state = state_w;
+
+        keyboard_dispatch_keys(seat, true);
+        seat->keyboard.pending_frame.key_event_count = 0;
+    }
+}
+
+static void keyboard_dispatch_modifiers(SDL_WaylandSeat *seat)
+{
+    const xkb_layout_index_t previous_layout = seat->keyboard.xkb.current_layout;
+
+    seat->keyboard.xkb.wl_pressed_modifiers = seat->keyboard.pending_frame.pressed_modifiers;
+    seat->keyboard.xkb.wl_latched_modifiers = seat->keyboard.pending_frame.latched_modifiers;
+    seat->keyboard.xkb.wl_locked_modifiers = seat->keyboard.pending_frame.locked_modifiers;
+    seat->keyboard.xkb.current_layout = seat->keyboard.pending_frame.layout;
+
+    Wayland_ReconcileModifiers(seat, true);
 
     // If we get a modifier notification before the keymap, there's no further state to update yet.
     if (!seat->keyboard.xkb.state) {
@@ -2355,8 +2417,10 @@ static void keyboard_handle_modifiers(void *data, struct wl_keyboard *keyboard,
     }
 
     WAYLAND_xkb_state_update_mask(seat->keyboard.xkb.state,
-                                  mods_depressed, mods_latched, mods_locked,
-                                  0, 0, group);
+                                  seat->keyboard.pending_frame.pressed_modifiers,
+                                  seat->keyboard.pending_frame.latched_modifiers,
+                                  seat->keyboard.pending_frame.locked_modifiers,
+                                  0, 0, seat->keyboard.pending_frame.layout);
 
     // If a key is repeating, update the text to apply the modifier.
     if (keyboard_repeat_is_set(&seat->keyboard.repeat)) {
@@ -2368,7 +2432,7 @@ static void keyboard_handle_modifiers(void *data, struct wl_keyboard *keyboard,
         }
     }
 
-    if (group != previous_layout) {
+    if (seat->keyboard.pending_frame.layout != previous_layout) {
         Wayland_SeatSetKeymap(seat);
 
         if (seat->keyboard.xkb.compose_state) {
@@ -2378,8 +2442,20 @@ static void keyboard_handle_modifiers(void *data, struct wl_keyboard *keyboard,
     }
 }
 
-static void keyboard_handle_repeat_info(void *data, struct wl_keyboard *wl_keyboard,
-                                        int32_t rate, int32_t delay)
+static void keyboard_handle_modifiers(void *data, struct wl_keyboard *keyboard, uint32_t serial,
+                                      uint32_t mods_depressed, uint32_t mods_latched, uint32_t mods_locked, uint32_t group)
+{
+    SDL_WaylandSeat *seat = data;
+
+    seat->keyboard.pending_frame.pressed_modifiers = mods_depressed;
+    seat->keyboard.pending_frame.latched_modifiers = mods_latched;
+    seat->keyboard.pending_frame.locked_modifiers = mods_locked;
+    seat->keyboard.pending_frame.layout = group;
+
+    keyboard_dispatch_modifiers(seat);
+}
+
+static void keyboard_handle_repeat_info(void *data, struct wl_keyboard *wl_keyboard, int32_t rate, int32_t delay)
 {
     SDL_WaylandSeat *seat = data;
     seat->keyboard.repeat.repeat_rate = SDL_clamp(rate, 0, 1000);
@@ -2409,7 +2485,6 @@ static void Wayland_SeatDestroyPointer(SDL_WaylandSeat *seat)
     if (seat->pointer.focus) {
         seat->pointer.pending_frame.leave_window = seat->pointer.focus;
         pointer_dispatch_leave(seat);
-        seat->pointer.pending_frame.leave_window = NULL;
     }
 
     SDL_RemoveMouse(seat->pointer.sdl_id);
@@ -2449,10 +2524,12 @@ static void Wayland_SeatDestroyKeyboard(SDL_WaylandSeat *seat)
 {
     // Make sure focus is removed from a surface before the keyboard is destroyed.
     if (seat->keyboard.focus) {
-        keyboard_handle_leave(seat, seat->keyboard.wl_keyboard, 0, seat->keyboard.focus->surface);
+        seat->keyboard.pending_frame.leave_window = seat->keyboard.focus;
+        keyboard_dispatch_leave(seat);
     }
 
     SDL_RemoveKeyboard(seat->keyboard.sdl_id);
+    SDL_free(seat->keyboard.pending_frame.keys);
 
     if (seat->keyboard.sdl_keymap) {
         if (seat->keyboard.xkb.current_layout < seat->keyboard.xkb.num_layouts &&
@@ -2463,7 +2540,6 @@ static void Wayland_SeatDestroyKeyboard(SDL_WaylandSeat *seat)
             SDL_DestroyKeymap(seat->keyboard.sdl_keymap[i]);
         }
         SDL_free(seat->keyboard.sdl_keymap);
-        seat->keyboard.sdl_keymap = NULL;
     }
 
     if (seat->keyboard.key_inhibitor) {
@@ -2578,6 +2654,14 @@ static void seat_handle_capabilities(void *data, struct wl_seat *wl_seat, enum w
         seat->keyboard.wl_keyboard = wl_seat_get_keyboard(wl_seat);
         wl_keyboard_set_user_data(seat->keyboard.wl_keyboard, seat);
         wl_keyboard_add_listener(seat->keyboard.wl_keyboard, &keyboard_listener, seat);
+
+        if (!seat->keyboard.pending_frame.keys) {
+            seat->keyboard.pending_frame.key_event_max = 8;
+            seat->keyboard.pending_frame.keys = SDL_calloc(seat->keyboard.pending_frame.key_event_max, sizeof(*seat->keyboard.pending_frame.keys));
+            if (!seat->keyboard.pending_frame.keys) {
+                seat->keyboard.pending_frame.key_event_max = 0;
+            }
+        }
 
         seat->keyboard.sdl_id = SDL_GetNextObjectID();
 
@@ -3673,7 +3757,9 @@ void Wayland_DisplayRemoveWindowReferencesFromSeats(SDL_VideoData *display, SDL_
     wl_list_for_each (seat, &display->seat_list, link)
     {
         if (seat->keyboard.focus == window) {
-            keyboard_handle_leave(seat, seat->keyboard.wl_keyboard, 0, window->surface);
+            seat->keyboard.pending_frame.leave_window = seat->keyboard.focus;
+            keyboard_dispatch_leave(seat);
+            seat->keyboard.pending_frame.leave_window = NULL;
         }
 
         if (seat->pointer.focus == window) {

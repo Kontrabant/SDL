@@ -150,6 +150,32 @@ typedef struct SDL_WaylandSeat
 
         struct
         {
+            int keymap_fd;
+            Uint32 keymap_size;
+            enum wl_keyboard_keymap_format keymap_format;
+
+            xkb_mod_mask_t pressed_modifiers;
+            xkb_mod_mask_t latched_modifiers;
+            xkb_mod_mask_t locked_modifiers;
+            xkb_layout_index_t layout;
+
+            Uint64 timestamp_ns;
+            Uint32 raw_time_ms;
+
+            int key_event_count;
+            int key_event_max;
+            struct
+            {
+                Uint32 keycode;
+                enum wl_keyboard_key_state state;
+            } *keys;
+
+            SDL_WindowData *enter_window;
+            SDL_WindowData *leave_window;
+        } pending_frame;
+
+        struct
+        {
             struct xkb_keymap *keymap;
             struct xkb_state *state;
             struct xkb_compose_table *compose_table;
