@@ -303,6 +303,9 @@ SDL_X11_SYM(XdbeBackBufferAttributes*,XdbeGetBackBufferAttributes,(Display *dpy,
 // XInput2 support for multiple mice, tablets, etc.
 #ifdef SDL_VIDEO_DRIVER_X11_XINPUT2
 SDL_X11_MODULE(XINPUT2)
+SDL_X11_SYM(XDevice*,XOpenDevice,(Display *a,XID b))
+SDL_X11_SYM(int,XCloseDevice,(Display *a,XDevice *b))
+SDL_X11_SYM(int,XGetDeviceButtonMapping,(Display *a,XDevice *b,unsigned char *c,int d))
 SDL_X11_SYM(XIDeviceInfo*,XIQueryDevice,(Display *a,int b,int *c))
 SDL_X11_SYM(void,XIFreeDeviceInfo,(XIDeviceInfo *a))
 SDL_X11_SYM(int,XISelectEvents,(Display *a,Window b,XIEventMask *c,int d))

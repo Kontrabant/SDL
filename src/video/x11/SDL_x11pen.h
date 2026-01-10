@@ -51,6 +51,7 @@ typedef struct X11_PenHandle
     float rotation_bias;    // rotation to add to PEN_AXIS_ROTATION  (after normalisation)
     float axis_min[SDL_PEN_AXIS_COUNT];
     float axis_max[SDL_PEN_AXIS_COUNT];
+    unsigned char *map;
 } X11_PenHandle;
 
 // Converts XINPUT2 valuators into pen axis information, including normalisation.

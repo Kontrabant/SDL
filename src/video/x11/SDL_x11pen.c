@@ -270,6 +270,19 @@ static X11_PenHandle *X11_MaybeAddPen(SDL_VideoDevice *_this, const XIDeviceInfo
     Uint32 wacom_serial = 0;
     X11_XInput2PenWacomDeviceID(_this, dev->deviceid, &wacom_devicetype_id, &wacom_serial);
 
+    // Retrieve old XInput button mapping data for xsetwacom remapping.
+    XDevice *xd = X11_XOpenDevice(data->display, dev->deviceid);
+    if (xd) {
+        const int mapping_count = X11_XGetDeviceButtonMapping(data->display, xd, NULL, 0);
+        if (mapping_count > 0) {
+            handle->map = SDL_calloc(mapping_count, sizeof(unsigned char));
+            if (handle->map) {
+                X11_XGetDeviceButtonMapping(data->display, xd, handle->map, mapping_count);
+            }
+        }
+        X11_XCloseDevice(data->display, xd);
+    }
+
     SDL_PenInfo peninfo;
     SDL_zero(peninfo);
     peninfo.capabilities = capabilities;
@@ -362,6 +375,8 @@ void X11_InitPen(SDL_VideoDevice *_this)
 
 static void X11_FreePenHandle(SDL_PenID instance_id, void *handle, void *userdata)
 {
+    X11_PenHandle *pen = (X11_PenHandle *)handle;
+    SDL_free(pen->map);
     SDL_free(handle);
 }
 

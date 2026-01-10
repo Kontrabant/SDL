@@ -595,6 +595,11 @@ void X11_HandleXinput2Event(SDL_VideoDevice *_this, XGenericEventCookie *cookie)
                 // Discard events from "Master" devices to avoid duplicates.
                 break;
             }
+
+            if (pen->map) {
+                button = pen->map[button - 1];
+            }
+
             // Only report button event; if there was also pen movement / pressure changes, we expect an XI_Motion event first anyway.
             SDL_Window *window = xinput2_get_sdlwindow(videodata, xev->event);
             if (button == 1) { // button 1 is the pen tip
