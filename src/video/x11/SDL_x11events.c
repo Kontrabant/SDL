@@ -1452,6 +1452,10 @@ static void X11_DispatchEvent(SDL_VideoDevice *_this, XEvent *xevent)
         // Gaining mouse coverage?
     case EnterNotify:
     {
+        if (data->xinput2_mouse_enabled) {
+            break; // Handled in XInput2.
+        }
+
         SDL_Mouse *mouse = SDL_GetMouse();
 #ifdef DEBUG_XEVENTS
         SDL_Log("window 0x%lx: EnterNotify! (%d,%d,%d)", xevent->xany.window,
@@ -1494,6 +1498,9 @@ static void X11_DispatchEvent(SDL_VideoDevice *_this, XEvent *xevent)
         // Losing mouse coverage?
     case LeaveNotify:
     {
+        if (data->xinput2_mouse_enabled) {
+            break;
+        }
 #ifdef DEBUG_XEVENTS
         SDL_Log("window 0x%lx: LeaveNotify! (%d,%d,%d)", xevent->xany.window,
                xevent->xcrossing.x,

@@ -480,10 +480,13 @@ static bool X11_CaptureMouse(SDL_Window *window)
                 // XGrabPointer can warp the cursor when confining, so update the coordinates.
                 data->videodata->global_mouse_changed = true;
             }
+        } else if (data->xinput2_mouse_enabled) {
+            X11_Xinput2GrabPointer(window);
         }
     } else if (mouse_focus) {
         SDL_UpdateWindowGrab(mouse_focus);
     } else {
+        X11_Xinput2UngrabPointer();
         X11_XUngrabPointer(display, CurrentTime);
     }
 

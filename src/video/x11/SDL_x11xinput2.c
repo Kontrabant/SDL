@@ -25,6 +25,7 @@
 #include "SDL_x11pen.h"
 #include "SDL_x11video.h"
 #include "SDL_x11xinput2.h"
+#include "SDL_x11xfixes.h"
 #include "../../events/SDL_events_c.h"
 #include "../../events/SDL_mouse_c.h"
 #include "../../events/SDL_pen_c.h"
@@ -39,6 +40,7 @@ static bool xinput2_initialized;
 static bool xinput2_scrolling_supported;
 static bool xinput2_multitouch_supported;
 static bool xinput2_grabbed_touch_raised;
+static bool xinput2_pointer_grabbed;
 static int xinput2_active_touch_count;
 #endif
 #ifdef SDL_VIDEO_DRIVER_X11_XINPUT2_SUPPORTS_GESTURE
@@ -630,11 +632,66 @@ void X11_HandleXinput2Event(SDL_VideoDevice *_this, XGenericEventCookie *cookie)
         }
     } break;
 
-#ifdef SDL_VIDEO_DRIVER_X11_XINPUT2_SUPPORTS_SCROLLINFO
     case XI_Enter:
+    {
+#ifdef SDL_VIDEO_DRIVER_X11_XINPUT2_SUPPORTS_SCROLLINFO
         xinput2_reset_scrollable_valuators();
-        break;
 #endif
+
+        const XIDeviceEvent *xev = (const XIDeviceEvent *)cookie->data;
+        SDL_Window *window = xinput2_get_sdlwindow(videodata, xev->event);
+
+        if (window) {
+            SDL_Mouse *mouse = SDL_GetMouse();
+            SDL_WindowData *windowdata = window->internal;
+
+            SDL_SetMouseFocus(window);
+
+            mouse->last_x = xev->event_x;
+            mouse->last_y = xev->event_y;
+
+#ifdef SDL_VIDEO_DRIVER_X11_XFIXES
+            {
+                // Only create the barriers if we have input focus
+                if ((windowdata->pointer_barrier_active == true) && windowdata->window->flags & SDL_WINDOW_INPUT_FOCUS) {
+                    X11_ConfineCursorWithFlags(_this, windowdata->window, &windowdata->barrier_rect, X11_BARRIER_HANDLED_BY_EVENT);
+                }
+            }
+#endif
+
+            if (!mouse->relative_mode) {
+                SDL_SendMouseMotion(0, window, SDL_GLOBAL_MOUSE_ID, false, (float)xev->event_x, (float)xev->event_y);
+            }
+
+            // We ungrab in LeaveNotify, so we may need to grab again here, but not if captured, as the capture can be lost.
+            if (!(window->flags & SDL_WINDOW_MOUSE_CAPTURE)) {
+                SDL_UpdateWindowGrab(window);
+            }
+
+            X11_ProcessHitTest(_this, windowdata, mouse->last_x, mouse->last_y, true);
+        }
+    } break;
+
+    case XI_Leave:
+    {
+        const XIDeviceEvent *xev = (const XIDeviceEvent *)cookie->data;
+        SDL_Window *window = xinput2_get_sdlwindow(videodata, xev->event);
+
+        if (xev->deviceid == videodata->xinput_master_pointer_device) {
+            if (!SDL_GetMouse()->relative_mode) {
+                SDL_SendMouseMotion(0, window, SDL_GLOBAL_MOUSE_ID, false, (float)xev->event_x, (float)xev->event_y);
+
+                /* In order for interaction with the window decorations and menu to work properly
+                 * on Mutter, we need to ungrab the keyboard when the mouse leaves.
+                 */
+                if (!(window->flags & SDL_WINDOW_FULLSCREEN)) {
+                    X11_SetWindowKeyboardGrab(_this, window, false);
+                }
+
+                SDL_SetMouseFocus(NULL);
+            }
+        }
+    } break;
 
     /* Register to receive XI_Motion (which deactivates MotionNotify), so that we can distinguish
        real mouse motions from synthetic ones, for multitouch and pen support. */
@@ -866,6 +923,46 @@ bool X11_Xinput2SelectMouseAndKeyboard(SDL_VideoDevice *_this, SDL_Window *windo
         return true;
     }
     return false;
+}
+
+extern void X11_Xinput2GrabPointer(SDL_Window *window)
+{
+#ifdef SDL_VIDEO_DRIVER_X11_XINPUT2
+    SDL_WindowData *data = window->internal;
+    Display *display = data->videodata->display;
+
+    unsigned char mask[4] = { 0, 0, 0, 0 };
+    XIEventMask eventmask;
+
+    eventmask.deviceid = data->videodata->xinput_master_pointer_device;
+    eventmask.mask_len = sizeof(mask);
+    eventmask.mask = mask;
+
+    XISetMask(eventmask.mask, XI_ButtonPress);
+    XISetMask(eventmask.mask, XI_ButtonRelease);
+    XISetMask(eventmask.mask, XI_Motion);
+
+    const int ret = X11_XIGrabDevice(display, data->videodata->xinput_master_pointer_device, data->xwindow,
+                                     CurrentTime, None, GrabModeAsync, GrabModeAsync, False, &eventmask);
+
+    if (ret == GrabSuccess) {
+        xinput2_pointer_grabbed = true;
+    } else {
+        xinput2_pointer_grabbed = false;
+    }
+#endif
+}
+
+extern void X11_Xinput2UngrabPointer(void)
+{
+#ifdef SDL_VIDEO_DRIVER_X11_XINPUT2
+    SDL_VideoData *data = SDL_GetVideoDevice()->internal;
+
+    if (xinput2_pointer_grabbed) {
+        X11_XIUngrabDevice(data->display, data->xinput_master_pointer_device, CurrentTime);
+        xinput2_pointer_grabbed = false;
+    }
+#endif
 }
 
 void X11_Xinput2GrabTouch(SDL_VideoDevice *_this, SDL_Window *window)
