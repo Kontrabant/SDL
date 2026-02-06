@@ -2107,6 +2107,7 @@ bool X11_SetWindowMouseGrab(SDL_VideoDevice *_this, SDL_Window *window, bool gra
         // Raise the window if we grab the mouse
         X11_XRaiseWindow(display, data->xwindow);
     } else {
+        X11_Xinput2UngrabPointer();
         X11_XUngrabPointer(display, CurrentTime);
 
         X11_Xinput2UngrabTouch(_this, window);
