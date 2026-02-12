@@ -120,6 +120,12 @@ typedef struct SDL_WaylandPenTool  // a stylus, etc, on a tablet.
     struct wl_list link;
 } SDL_WaylandPenTool;
 
+typedef struct Wayland_PendingKeyEvent
+{
+    Uint32 keycode;
+    enum wl_keyboard_key_state state;
+} Wayland_PendingKeyEvent;
+
 typedef struct SDL_WaylandSeat
 {
     SDL_VideoData *display;
@@ -165,13 +171,7 @@ typedef struct SDL_WaylandSeat
             Uint64 timestamp_ns;
             Uint32 raw_time_ms;
 
-            int key_event_count;
-            int key_event_max;
-            struct
-            {
-                Uint32 keycode;
-                enum wl_keyboard_key_state state;
-            } *keys;
+            struct wl_array keys;
 
             SDL_WindowData *enter_window;
             SDL_WindowData *leave_window;
