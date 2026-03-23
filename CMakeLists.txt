@@ -2393,7 +2393,7 @@ elseif(WINDOWS)
   set(HAVE_SDL_STORAGE 1)
 
   # Libraries for Win32 native and MinGW
-  sdl_link_dependency(base LIBS kernel32 user32 gdi32 winmm imm32 ole32 oleaut32 version uuid advapi32 setupapi shell32 hid)
+  sdl_link_dependency(base LIBS kernel32 user32 gdi32 winmm imm32 ole32 oleaut32 version uuid advapi32 setupapi shell32 hid mincore)
 
   set(SDL_TIME_WINDOWS 1)
   sdl_glob_sources("${SDL3_SOURCE_DIR}/src/time/windows/*.c")
@@ -2440,6 +2440,11 @@ elseif(WINDOWS)
   if(SDL_TRAY)
     sdl_glob_sources("${SDL3_SOURCE_DIR}/src/tray/windows/*.c")
     set(HAVE_SDL_TRAY TRUE)
+  endif()
+
+  if(SDL_NOTIFICATIONS)
+    sdl_glob_sources("${SDL3_SOURCE_DIR}/src/notifications/windows/*.c")
+    set(HAVE_SDL_NOTIFICATIONS TRUE)
   endif()
 
   if(SDL_HIDAPI)
