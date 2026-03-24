@@ -24,6 +24,8 @@ int main(int argc, char *argv[])
 {
     SDLTest_CommonState *state;
 
+    SDL_SetAppMetadata("SDL Notification Test", "0.0.1", "org.libsdl.testnotification");
+
     /* Initialize test framework */
     state = SDLTest_CommonCreateState(argv, 0);
     if (!state) {
@@ -45,6 +47,9 @@ int main(int argc, char *argv[])
         SDL_Event event;
         SDL_Window *window = SDL_CreateWindow("Test", 640, 480, SDL_WINDOW_RESIZABLE);
         SDL_Renderer *renderer = SDL_CreateRenderer(window, NULL);
+
+        SDL_Surface *header_icon = SDL_LoadPNG("sdl-test_round.png");
+        SDL_SetPointerProperty(SDL_GetGlobalProperties(), SDL_PROP_GLOBAL_NOTIFICATION_HEADER_ICON_POINTER, header_icon);
 
         SDL_NotificationAction actions[2] = {
             { "button_action_1", "Button 1" },
@@ -71,6 +76,11 @@ int main(int argc, char *argv[])
                         notification_data.replaces = last_id;
                     } else {
                         notification_data.replaces = 0;
+                    }
+                    if (event.key.mod & SDL_KMOD_ALT) {
+                        notification_data.flags |= SDL_NOTIFICATION_TRANSIENT;
+                    } else {
+                        notification_data.flags &= ~SDL_NOTIFICATION_TRANSIENT;
                     }
                     // Test showing a system notification message.
                     const SDL_NotificationID new_id = SDL_ShowNotification(&notification_data);
@@ -99,6 +109,7 @@ int main(int argc, char *argv[])
 
     breakout:
         SDL_DestroyWindow(window);
+        //SDL_DestroySurface(header_icon);
     }
 
     SDL_Quit();

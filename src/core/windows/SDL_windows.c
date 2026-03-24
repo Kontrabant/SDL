@@ -198,7 +198,7 @@ WIN_CoInitialize(void)
     // On Xbox, there's no need to call CoInitializeEx (and it's not implemented)
     return S_OK;
 #else
-    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     if (hr == RPC_E_CHANGED_MODE) {
         hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     }
@@ -372,6 +372,11 @@ BOOL WIN_IsWindows7OrGreater(void)
 BOOL WIN_IsWindows8OrGreater(void)
 {
     CHECKWINVER(TRUE, IsWindowsVersionOrGreater(HIBYTE(_WIN32_WINNT_WIN8), LOBYTE(_WIN32_WINNT_WIN8), 0));
+}
+
+BOOL WIN_IsWindows10OrGreater(void)
+{
+    CHECKWINVER(TRUE, IsWindowsVersionOrGreater(HIBYTE(_WIN32_WINNT_WIN10), LOBYTE(_WIN32_WINNT_WIN10), 0));
 }
 
 BOOL WIN_IsWindows11OrGreater(void)

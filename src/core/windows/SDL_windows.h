@@ -183,6 +183,9 @@ extern BOOL WIN_IsWindows7OrGreater(void);
 // Returns true if we're running on Windows 8 and newer
 extern BOOL WIN_IsWindows8OrGreater(void);
 
+// Returns true if we're running on Windows 10 and newer
+extern BOOL WIN_IsWindows10OrGreater(void);
+
 // Returns true if we're running on Windows 11 and newer
 extern BOOL WIN_IsWindows11OrGreater(void);
 

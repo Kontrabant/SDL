@@ -37,12 +37,26 @@
 extern "C" {
 #endif
 
+/**
+ * The pointer to a global SDL_Surface object used as the header icon on some
+ * platforms for system notifications.
+ *
+ * Can be set before calling SDL_ShowNotification() or SDL_ShowSimpleNotification()
+ * for the first time. After showing the first notification, the surface can be
+ * destroyed.
+ *
+ * \since This macro is available since SDL 3.6.0.
+ */
+#define SDL_PROP_GLOBAL_NOTIFICATION_HEADER_ICON_POINTER "SDL.notification.header_icon"
+
 typedef Uint32 SDL_NotificationID;
 
 /**
  * \brief SDL_Notification flags.
  *
  * Note that some system implementations may not support all flags.
+ *
+ * \since These flags are available since SDL 3.6.0
  */
 typedef Uint64 SDL_NotificationFlags;
 
@@ -51,6 +65,7 @@ typedef Uint64 SDL_NotificationFlags;
 #define SDL_NOTIFICATION_PRIORITY_HIGH   SDL_UINT64_C(0x0000000000000004) /**< High/important priority. */
 #define SDL_NOTIFICATION_PRIORITY_URGENT SDL_UINT64_C(0x0000000000000008) /**< Highest/critical priority. Note that this may override any "Do Not Disturb" settings. */
 #define SDL_NOTIFICATION_TRANSIENT       SDL_UINT64_C(0x0000000000000010) /**< Request that the notification not persist in any notification logs. */
+#define SDL_NOTIFICATION_SILENT          SDL_UINT64_C(0x0000000000000020) /**< Request that the notification not play a sound when shown. */
 
 /**
  * Notification structure containing button IDs and labels
@@ -67,7 +82,7 @@ typedef struct SDL_NotificationAction
 typedef struct SDL_NotificationData
 {
     SDL_NotificationFlags flags;     /**< ::SDL_NotificationFlags */
-    const char *title;               /**< UTF-8 title */
+    const char *title;               /**< UTF-8 title text */
     const char *message;             /**< UTF-8 message text */
     SDL_Surface *icon;               /**< Icon data */
     SDL_NotificationAction *actions; /**< Array of notification actions */
