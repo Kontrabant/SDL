@@ -2284,6 +2284,7 @@ elseif(WINDOWS)
   check_include_file(audioclient.h HAVE_AUDIOCLIENT_H)
   check_include_file(sensorsapi.h HAVE_SENSORSAPI_H)
   check_include_file(shellscalingapi.h HAVE_SHELLSCALINGAPI_H)
+  check_include_file(Windows.ui.notifications.h HAVE_WINDOWS_UI_NOTIFICATIONS_H)
   check_c_source_compiles("
     #include <windows.h>
     #include <mfapi.h>
@@ -2442,7 +2443,7 @@ elseif(WINDOWS)
     set(HAVE_SDL_TRAY TRUE)
   endif()
 
-  if(SDL_NOTIFICATIONS)
+  if(SDL_NOTIFICATIONS AND HAVE_WINDOWS_UI_NOTIFICATIONS_H)
     sdl_glob_sources("${SDL3_SOURCE_DIR}/src/notifications/windows/*.c")
     set(HAVE_SDL_NOTIFICATIONS TRUE)
   endif()

@@ -200,48 +200,52 @@ static bool SetCoreIcon(SDL_DBusContext *dbus, DBusMessageIter *iterInit, SDL_Su
     return true;
 }
 
-static bool SetCoreHints(SDL_DBusContext *dbus, DBusMessageIter *iterInit, SDL_NotificationFlags flags, SDL_Surface *surface)
+static bool SetCoreHints(SDL_DBusContext *dbus, DBusMessageIter *iterInit, SDL_PropertiesID props)
 {
     DBusMessageIter iterDict;
+    SDL_Surface *icon = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_ICON_POINTER, NULL);
+    SDL_NotificationPriority priority = SDL_GetNumberProperty(props, SDL_PROP_NOTIFICATION_PRIORITY_NUMBER, SDL_NOTIFICATION_PRIORITY_NORMAL);
+    const bool transient = SDL_GetBooleanProperty(props, SDL_PROP_NOTIFICATION_TRANSIENT_BOOLEAN, false);
+    const bool silent = SDL_GetBooleanProperty(props, SDL_PROP_NOTIFICATION_SILENT_BOOLEAN, false);
 
     if (!dbus->message_iter_open_container(iterInit, DBUS_TYPE_ARRAY, "{sv}", &iterDict)) {
         goto failed;
     }
 
-    if (flags & ALL_PRIORITY_FLAGS) {
-        Uint8 priority;
+    Uint8 dbus_priority;
 
-        switch (flags & ALL_PRIORITY_FLAGS) {
-        case SDL_NOTIFICATION_PRIORITY_NORMAL:
-        case SDL_NOTIFICATION_PRIORITY_HIGH:
-        default:
-            priority = 1;
-            break;
-        case SDL_NOTIFICATION_PRIORITY_LOW:
-            priority = 0;
-            break;
-        case SDL_NOTIFICATION_PRIORITY_URGENT:
-            priority = 2;
-            break;
-        }
-
-        AppendOption(dbus, &iterDict, DBUS_TYPE_BYTE_AS_STRING, "urgency", &priority);
+    switch (priority) {
+    case SDL_NOTIFICATION_PRIORITY_NORMAL:
+    case SDL_NOTIFICATION_PRIORITY_HIGH:
+    default:
+        dbus_priority = 1;
+        break;
+    case SDL_NOTIFICATION_PRIORITY_LOW:
+        dbus_priority = 0;
+        break;
+    case SDL_NOTIFICATION_PRIORITY_URGENT:
+        dbus_priority = 2;
+        break;
     }
 
-    if (flags & SDL_NOTIFICATION_TRANSIENT) {
-        const dbus_bool_t db_transient = true;
-        AppendOption(dbus, &iterDict, DBUS_TYPE_BOOLEAN_AS_STRING, "transient", &db_transient);
+    AppendOption(dbus, &iterDict, DBUS_TYPE_BYTE_AS_STRING, "urgency", &dbus_priority);
+
+    const dbus_bool_t db_transient = transient;
+    AppendOption(dbus, &iterDict, DBUS_TYPE_BOOLEAN_AS_STRING, "transient", &db_transient);
+
+    if (!silent) {
+        AppendStringOption(dbus, &iterDict, "sound-name", "dialog-information");
     }
 
-    if (surface) {
-        SDL_Surface *icon_surface = surface;
-        if (surface->format != SDL_PIXELFORMAT_ABGR8888) {
-            icon_surface = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_ABGR8888);
+    if (icon) {
+        SDL_Surface *icon_surface = icon;
+        if (icon->format != SDL_PIXELFORMAT_ABGR8888) {
+            icon_surface = SDL_ConvertSurface(icon, SDL_PIXELFORMAT_ABGR8888);
         }
 
         SetCoreIcon(dbus, &iterDict, icon_surface);
 
-        if (icon_surface != surface) {
+        if (icon_surface != icon) {
             SDL_DestroySurface(icon_surface);
         }
     }
@@ -286,17 +290,22 @@ static bool InitCoreSignalListener(SDL_DBusContext *dbus)
     return true;
 }
 
-static SDL_NotificationID ShowCoreNotification(SDL_DBusContext *dbus, const SDL_NotificationData *notification_data)
+static SDL_NotificationID ShowCoreNotification(SDL_DBusContext *dbus, SDL_PropertiesID props)
 {
     DBusConnection *conn = dbus->session_conn;
     DBusMessage *msg = NULL;
     DBusMessageIter iter, array;
-    const char *id = SDL_GetAppID();
+    const char *id = SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_NAME_STRING);
     Uint32 message_id = 0;
 
     if (!InitCoreSignalListener(dbus)) {
         return 0;
     }
+
+    const SDL_PropertiesID replaces = SDL_GetNumberProperty(props, SDL_PROP_NOTIFICATION_REPLACES_NUMBER, 0);
+    const char *title = SDL_GetStringProperty(props, SDL_PROP_NOTIFICATION_TITLE_STRING, NULL);
+    const char *message = SDL_GetStringProperty(props, SDL_PROP_NOTIFICATION_MESSAGE_STRING, NULL);
+    const SDL_NotificationAction **actions = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_ACTIONS_POINTER, NULL);
 
     // Call org.freedesktop.Notifications.Notify()
     msg = dbus->message_new_method_call(NOTIFICATION_CORE_NODE, NOTIFICATION_CORE_PATH, NOTIFICATION_CORE_INTERFACE, "Notify");
@@ -306,27 +315,30 @@ static SDL_NotificationID ShowCoreNotification(SDL_DBusContext *dbus, const SDL_
 
     dbus->message_iter_init_append(msg, &iter);
     // App ID
+    if (!id) {
+        SDL_GetAppID();
+    }
     dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &id);
     // Replaces id
-    const Uint32 uid = notification_data->replaces;
+    const Uint32 uid = replaces;
     dbus->message_iter_append_basic(&iter, DBUS_TYPE_UINT32, &uid);
     // Icon string (always empty, set later via a hint)
     id = "";
     dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &id);
     // Summary
-    dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &notification_data->title);
+    dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &title);
     // Body
-    dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &notification_data->message);
+    dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &message);
     // Actions
     dbus->message_iter_open_container(&iter, DBUS_TYPE_ARRAY, DBUS_TYPE_STRING_AS_STRING, &array);
-    for (int i = 0; i < notification_data->num_actions; ++i) {
-        dbus->message_iter_append_basic(&array, DBUS_TYPE_STRING, &notification_data->actions[i].button_id);
-        dbus->message_iter_append_basic(&array, DBUS_TYPE_STRING, &notification_data->actions[i].button_label);
+    for (int i = 0; actions[i]; ++i) {
+        dbus->message_iter_append_basic(&array, DBUS_TYPE_STRING, &actions[i]->button_id);
+        dbus->message_iter_append_basic(&array, DBUS_TYPE_STRING, &actions[i]->button_label);
     }
     dbus->message_iter_close_container(&iter, &array);
 
     // Hints
-    SetCoreHints(dbus, &iter, notification_data->flags, notification_data->icon);
+    SetCoreHints(dbus, &iter, props);
 
     // Timeout
     const Sint32 timeout = -1;
@@ -384,7 +396,7 @@ static DBusHandlerResult PortalNotificationFilter(DBusConnection *conn, DBusMess
 
         // Parse the ID.
         Uint32 id = 0;
-        const int ret = SDL_sscanf(str, "SDL_DBusPortalNotification-%" SDL_PRIu32, &id);
+        const int ret = SDL_sscanf(str, "SDL3_DBusPortalNotification-%" SDL_PRIu32, &id);
         if (ret != 1) {
             goto not_our_signal;
         }
@@ -450,7 +462,26 @@ done:
     SDL_CloseIO(png);
 }
 
-static void AddPortalButtons(SDL_DBusContext *dbus, DBusMessageIter *iterInit, const SDL_NotificationData *notification_data)
+static void SetPortalSound(SDL_DBusContext *dbus, DBusMessageIter *iterInit, bool silent)
+{
+    DBusMessageIter options_pair, variant_iter, struct_iter, sound_val_iter;
+    const char *key = "sound";
+    const char *val = silent ? "silent" : "default";
+
+    dbus->message_iter_open_container(iterInit, DBUS_TYPE_DICT_ENTRY, NULL, &options_pair);
+    dbus->message_iter_append_basic(&options_pair, DBUS_TYPE_STRING, &key);
+    dbus->message_iter_open_container(&options_pair, DBUS_TYPE_VARIANT, "(sv)", &variant_iter);
+    dbus->message_iter_open_container(&variant_iter, DBUS_TYPE_STRUCT, NULL, &struct_iter);
+    dbus->message_iter_append_basic(&struct_iter, DBUS_TYPE_STRING, &key);
+    dbus->message_iter_open_container(&struct_iter, DBUS_TYPE_VARIANT, "s", &sound_val_iter);
+    dbus->message_iter_append_basic(&sound_val_iter, DBUS_TYPE_STRING, &val);
+    dbus->message_iter_close_container(&struct_iter, &sound_val_iter);
+    dbus->message_iter_close_container(&variant_iter, &struct_iter);
+    dbus->message_iter_close_container(&options_pair, &variant_iter);
+    dbus->message_iter_close_container(iterInit, &options_pair);
+}
+
+static void AddPortalButtons(SDL_DBusContext *dbus, DBusMessageIter *iterInit, const SDL_NotificationAction **actions)
 {
     DBusMessageIter options_pair, options_value, button_array, properties_array;
     const char *key = "buttons";
@@ -460,11 +491,11 @@ static void AddPortalButtons(SDL_DBusContext *dbus, DBusMessageIter *iterInit, c
     dbus->message_iter_open_container(&options_pair, DBUS_TYPE_VARIANT, "aa{sv}", &options_value);
     dbus->message_iter_open_container(&options_value, DBUS_TYPE_ARRAY, "a{sv}", &button_array);
 
-    for (int i = 0; i < notification_data->num_actions; ++i) {
+    for (int i = 0; actions[i]; ++i) {
         dbus->message_iter_open_container(&button_array, DBUS_TYPE_ARRAY, "{sv}", &properties_array);
 
-        AppendStringOption(dbus, &properties_array, "action", notification_data->actions[i].button_id);
-        AppendStringOption(dbus, &properties_array, "label", notification_data->actions[i].button_label);
+        AppendStringOption(dbus, &properties_array, "action", actions[i]->button_id);
+        AppendStringOption(dbus, &properties_array, "label", actions[i]->button_label);
 
         dbus->message_iter_close_container(&button_array, &properties_array);
     }
@@ -474,10 +505,11 @@ static void AddPortalButtons(SDL_DBusContext *dbus, DBusMessageIter *iterInit, c
     dbus->message_iter_close_container(iterInit, &options_pair);
 }
 
-static void SetPortalDisplayHints(SDL_DBusContext *dbus, DBusMessageIter *iterInit, SDL_NotificationFlags flags)
+static void SetPortalDisplayHints(SDL_DBusContext *dbus, DBusMessageIter *iterInit, SDL_PropertiesID props)
 {
     DBusMessageIter options_pair, options_value, var_struct, string_array;
     const char *key = "display-hint";
+    const bool transient = SDL_GetBooleanProperty(props, SDL_PROP_NOTIFICATION_TRANSIENT_BOOLEAN, false);
 
     dbus->message_iter_open_container(iterInit, DBUS_TYPE_DICT_ENTRY, NULL, &options_pair);
     dbus->message_iter_append_basic(&options_pair, DBUS_TYPE_STRING, &key);
@@ -485,7 +517,7 @@ static void SetPortalDisplayHints(SDL_DBusContext *dbus, DBusMessageIter *iterIn
     dbus->message_iter_open_container(&options_value, DBUS_TYPE_STRUCT, NULL, &var_struct);
     dbus->message_iter_open_container(&var_struct, DBUS_TYPE_ARRAY, "s", &string_array);
 
-    if (flags & SDL_NOTIFICATION_TRANSIENT) {
+    if (transient) {
         const char *val = "transient";
         dbus->message_iter_append_basic(&string_array, DBUS_TYPE_STRING, &val);
     }
@@ -551,7 +583,7 @@ static SDL_NotificationID GetNewID()
     return random_id;
 }
 
-static SDL_NotificationID ShowPortalNotification(SDL_DBusContext *dbus, const SDL_NotificationData *notification_data)
+static SDL_NotificationID ShowPortalNotification(SDL_DBusContext *dbus, SDL_PropertiesID props)
 {
     DBusConnection *conn = dbus->session_conn;
     DBusMessage *msg = NULL;
@@ -560,6 +592,14 @@ static SDL_NotificationID ShowPortalNotification(SDL_DBusContext *dbus, const SD
     if (!InitPortalSignalListener(dbus)) {
         return 0;
     }
+
+    const SDL_PropertiesID replaces = SDL_GetNumberProperty(props, SDL_PROP_NOTIFICATION_REPLACES_NUMBER, 0);
+    const char *title = SDL_GetStringProperty(props, SDL_PROP_NOTIFICATION_TITLE_STRING, NULL);
+    const char *message = SDL_GetStringProperty(props, SDL_PROP_NOTIFICATION_MESSAGE_STRING, NULL);
+    const SDL_NotificationPriority priority = SDL_GetNumberProperty(props, SDL_PROP_NOTIFICATION_PRIORITY_NUMBER, SDL_NOTIFICATION_PRIORITY_NORMAL);
+    SDL_Surface *icon = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_ICON_POINTER, NULL);
+    const SDL_NotificationAction **actions = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_ACTIONS_POINTER, NULL);
+    const bool silent = SDL_GetBooleanProperty(props, SDL_PROP_NOTIFICATION_SILENT_BOOLEAN, false);
 
     /* Call Notification.AddNotification() */
     msg = dbus->message_new_method_call(NOTIFICATION_PORTAL_NODE, NOTIFICATION_PORTAL_PATH, NOTIFICATION_PORTAL_INTERFACE, "AddNotification");
@@ -571,7 +611,7 @@ static SDL_NotificationID ShowPortalNotification(SDL_DBusContext *dbus, const SD
 
     // Notification ID
     char id_str[128];
-    const Uint32 new_id = notification_data->replaces ? notification_data->replaces : GetNewID();
+    const Uint32 new_id = replaces ? replaces : GetNewID();
     if (!new_id) {
         SDL_SetError("Failed to generate an ID for the notification");
         goto failure;
@@ -582,48 +622,47 @@ static SDL_NotificationID ShowPortalNotification(SDL_DBusContext *dbus, const SD
 
     // Parameters
     dbus->message_iter_open_container(&iter, DBUS_TYPE_ARRAY, "{sv}", &array);
-    AppendStringOption(dbus, &array, "title", notification_data->title);
-    AppendStringOption(dbus, &array, "body", notification_data->message);
+    AppendStringOption(dbus, &array, "title", title);
+    AppendStringOption(dbus, &array, "body", message);
 
-    if (notification_data->flags & ALL_PRIORITY_FLAGS) {
-        const char *priority;
+    SetPortalSound(dbus, &array, silent);
 
-        switch (notification_data->flags & ALL_PRIORITY_FLAGS) {
-        case SDL_NOTIFICATION_PRIORITY_NORMAL:
-        default:
-            priority = "normal";
-            break;
-        case SDL_NOTIFICATION_PRIORITY_LOW:
-            priority = "low";
-            break;
-        case SDL_NOTIFICATION_PRIORITY_HIGH:
-            priority = "high";
-            break;
-        case SDL_NOTIFICATION_PRIORITY_URGENT:
-            priority = "urgent";
-            break;
-        }
+    const char *priority_str;
 
-        AppendStringOption(dbus, &array, "priority", priority);
+    switch (priority) {
+    case SDL_NOTIFICATION_PRIORITY_NORMAL:
+    default:
+        priority_str = "normal";
+        break;
+    case SDL_NOTIFICATION_PRIORITY_LOW:
+        priority_str = "low";
+        break;
+    case SDL_NOTIFICATION_PRIORITY_HIGH:
+        priority_str = "high";
+        break;
+    case SDL_NOTIFICATION_PRIORITY_URGENT:
+        priority_str = "urgent";
+        break;
     }
 
-    SetPortalDisplayHints(dbus, &array, notification_data->flags);
+    AppendStringOption(dbus, &array, "priority", priority_str);
+    SetPortalDisplayHints(dbus, &array, props);
 
-    if (notification_data->icon) {
-        SDL_Surface *icon_surface = notification_data->icon;
+    if (icon) {
+        SDL_Surface *icon_surface = icon;
         if (icon_surface->format != SDL_PIXELFORMAT_ABGR8888) {
             icon_surface = SDL_ConvertSurface(icon_surface, SDL_PIXELFORMAT_ABGR8888);
         }
 
         SetPortalIcon(dbus, &array, icon_surface);
 
-        if (icon_surface != notification_data->icon) {
+        if (icon_surface != icon) {
             SDL_DestroySurface(icon_surface);
         }
     }
 
-    if (notification_data->num_actions) {
-        AddPortalButtons(dbus, &array, notification_data);
+    if (actions) {
+        AddPortalButtons(dbus, &array, actions);
     }
 
     dbus->message_iter_close_container(&iter, &array);
@@ -653,7 +692,7 @@ failure:
     return 0;
 }
 
-SDL_NotificationID SDL_SYS_ShowNotification(const SDL_NotificationData *notification_data)
+SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
 {
     SDL_DBusContext *dbus = SDL_DBus_GetContext();
 
@@ -663,9 +702,9 @@ SDL_NotificationID SDL_SYS_ShowNotification(const SDL_NotificationData *notifica
 
     // The portal is only used if inside a container, or the app association can be wrong.
     if (IsInContainer()) {
-        return ShowPortalNotification(dbus, notification_data);
+        return ShowPortalNotification(dbus, props);
     } else {
-        return ShowCoreNotification(dbus, notification_data);
+        return ShowCoreNotification(dbus, props);
     }
 }
 

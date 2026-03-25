@@ -23,13 +23,12 @@
 #include "notifications/SDL_notification_c.h"
 #include "video/SDL_surface_c.h"
 
+#include "../../core/windows/SDL_windows.h"
 #include <Windows.ui.notifications.h>
 #include <bcrypt.h>
 #include <initguid.h>
 #include <roapi.h>
 #include <winstring.h>
-
-#include "../../core/windows/SDL_windows.h"
 
 /* This is normally found in NotificationActivationCallback.h, however, MinGW
  * doesn't provide this header, so the relevant sections are included manually.
@@ -94,6 +93,9 @@ DEFINE_GUID(IID_IToastNotificationFactory,
 
 DEFINE_GUID(IID_IToastNotification2,
             0x9dfb9fd1, 0x143a, 0x490e, 0x90, 0xbf, 0xb9, 0xfb, 0xa7, 0x13, 0x2d, 0xe7);
+
+DEFINE_GUID(IID_IToastNotification4,
+            0x15154935, 0x28ea, 0x4727, 0x88, 0xe9, 0xc5, 0x86, 0x80, 0xe2, 0xd1, 0x18);
 
 DEFINE_GUID(IID_INotificationActivationCallback,
             0x53e31837, 0x6600, 0x4a81, 0x93, 0x95, 0x75, 0xcf, 0xfe, 0x74, 0x6f, 0x94);
@@ -799,10 +801,18 @@ static bool AppendXmlText(SDL_IOStream *dst, const char *text)
     return true;
 }
 
-static WCHAR *BuildNotificationXml(const SDL_NotificationData *notification_info, const WCHAR *icon_path, SDL_NotificationID id, Uint32 *wchar_count)
+static WCHAR *BuildNotificationXml(SDL_PropertiesID props, const WCHAR *icon_path, SDL_NotificationID id, Uint32 *wchar_count)
 {
     WCHAR *xml = NULL;
     SDL_IOStream *dst = SDL_IOFromDynamicMem();
+    if (!dst) {
+        return NULL;
+    }
+
+    const char *title = SDL_GetStringProperty(props, SDL_PROP_NOTIFICATION_TITLE_STRING, NULL);
+    const char *message = SDL_GetStringProperty(props, SDL_PROP_NOTIFICATION_MESSAGE_STRING, NULL);
+    const SDL_NotificationAction **actions = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_ACTIONS_POINTER, NULL);
+    const bool silent = SDL_GetBooleanProperty(props, SDL_PROP_NOTIFICATION_SILENT_BOOLEAN, false);
 
     size_t size = sizeof(XML_TOAST_OPENING_STR) - sizeof(WCHAR);
     if (SDL_WriteIO(dst, XML_TOAST_OPENING_STR, size) < size) {
@@ -811,10 +821,10 @@ static WCHAR *BuildNotificationXml(const SDL_NotificationData *notification_info
     if (!AppendXmlImage(dst, icon_path)) {
         goto done;
     }
-    if (!AppendXmlText(dst, notification_info->title)) {
+    if (!AppendXmlText(dst, title)) {
         goto done;
     }
-    if (!AppendXmlText(dst, notification_info->message)) {
+    if (!AppendXmlText(dst, message)) {
         goto done;
     }
 
@@ -823,18 +833,18 @@ static WCHAR *BuildNotificationXml(const SDL_NotificationData *notification_info
         goto done;
     }
 
-    if (!AppendXmlAudio(dst, (notification_info->flags & SDL_NOTIFICATION_SILENT) != 0)) {
+    if (!AppendXmlAudio(dst, silent)) {
         goto done;
     }
 
-    if (notification_info->num_actions) {
+    if (actions) {
         size = sizeof(XML_ACTIONS_OPENING_STR) - sizeof(WCHAR);
         if (SDL_WriteIO(dst, XML_ACTIONS_OPENING_STR, size) < size) {
             goto done;
         }
 
-        for (int i = 0; i < notification_info->num_actions; ++i) {
-            if (!AppendXmlAction(dst, id, notification_info->actions[i].button_label, notification_info->actions[i].button_id)) {
+        for (int i = 0; actions[i]; ++i) {
+            if (!AppendXmlAction(dst, id, actions[i]->button_label, actions[i]->button_id)) {
                 goto done;
             }
         }
@@ -880,7 +890,7 @@ static void ClearNotificationWithID(SDL_NotificationID id)
     }
 
     SDL_swprintf(tag, SDL_arraysize(tag), L"%" SDL_PRIu32, id);
-    hr = WindowsCreateStringReference(tag, SDL_wcslen(tag), &hshTag, &hsTag);
+    hr = WindowsCreateStringReference(tag, (UINT32)SDL_wcslen(tag), &hshTag, &hsTag);
     if (FAILED(hr)) {
         goto cleanup;
     }
@@ -899,7 +909,7 @@ cleanup:
 
 static void SDL_SYS_CleanupNotifications(bool cleanup_reg_keys);
 
-SDL_NotificationID SDL_SYS_ShowNotification(const SDL_NotificationData *notification_info)
+SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
 {
     HRESULT hr = S_OK;
     SDL_NotificationID ret = 0;
@@ -915,8 +925,13 @@ SDL_NotificationID SDL_SYS_ShowNotification(const SDL_NotificationData *notifica
         return 0;
     }
 
-    if (notification_info->replaces) {
-        ClearNotificationWithID(notification_info->replaces);
+    SDL_Surface *icon = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_ICON_POINTER, NULL);
+    const SDL_NotificationID replaces = SDL_GetNumberProperty(props, SDL_PROP_NOTIFICATION_REPLACES_NUMBER, 0);
+    const SDL_NotificationPriority priority = SDL_GetNumberProperty(props, SDL_PROP_NOTIFICATION_PRIORITY_NUMBER, SDL_NOTIFICATION_PRIORITY_NORMAL);
+    const bool transient = SDL_GetBooleanProperty(props, SDL_PROP_NOTIFICATION_TRANSIENT_BOOLEAN, false);
+
+    if (replaces) {
+        ClearNotificationWithID(replaces);
     }
 
     SDL_NotificationID new_id = 0;
@@ -927,11 +942,11 @@ SDL_NotificationID SDL_SYS_ShowNotification(const SDL_NotificationData *notifica
     }
 
     // Windows notifications load images from disk, so save it to temporary storage.
-    WCHAR *image_path = SaveToastIcon(notification_info->icon, false);
+    WCHAR *image_path = SaveToastIcon(icon, false);
 
     // Build the XML description for the notification.
     Uint32 xml_len = 0;
-    WCHAR *xml = BuildNotificationXml(notification_info, image_path, new_id, &xml_len);
+    WCHAR *xml = BuildNotificationXml(props, image_path, new_id, &xml_len);
     SDL_free(image_path);
     if (!xml) {
         return 0;
@@ -982,7 +997,7 @@ SDL_NotificationID SDL_SYS_ShowNotification(const SDL_NotificationData *notifica
     }
 
     // Register the OnDismissed notifier to clear transient notifications when cancelled or timed out.
-    if (notification_info->flags & SDL_NOTIFICATION_TRANSIENT) {
+    if (transient & SDL_NOTIFICATION_TRANSIENT) {
         EventRegistrationToken dismissedToken;
         hr = pToastNotification->lpVtbl->add_Dismissed(pToastNotification, &OnDismissed, &dismissedToken);
         if (FAILED(hr)) {
@@ -1003,7 +1018,7 @@ SDL_NotificationID SDL_SYS_ShowNotification(const SDL_NotificationData *notifica
         }
 
         SDL_swprintf(tag, SDL_arraysize(tag), L"%" SDL_PRIu32, new_id);
-        hr = WindowsCreateStringReference(tag, SDL_wcslen(tag), &hshTag, &hsTag);
+        hr = WindowsCreateStringReference(tag, (UINT32)SDL_wcslen(tag), &hshTag, &hsTag);
         if (FAILED(hr)) {
             goto cleanup;
         }
@@ -1019,6 +1034,26 @@ SDL_NotificationID SDL_SYS_ShowNotification(const SDL_NotificationData *notifica
         }
 
         pToastNotification2->lpVtbl->Release(pToastNotification2);
+    }
+
+    /* Set the priority.
+     * All levels except for SDL_NOTIFICATION_PRIORITY_URGENT map to normal on Windows, as selecting
+     * high priority can wake the screen, and should only be done when absolutely necessary.
+     */
+    {
+        const __x_ABI_CWindows_CUI_CNotifications_CToastNotificationPriority toast_priority = priority != SDL_NOTIFICATION_PRIORITY_URGENT ? ToastNotificationPriority_Default : ToastNotificationPriority_High;
+        __x_ABI_CWindows_CUI_CNotifications_CIToastNotification4 *pToastNotification4;
+        hr = pToastNotification->lpVtbl->QueryInterface(pToastNotification, &IID_IToastNotification4, (LPVOID *)&pToastNotification4);
+        if (FAILED(hr)) {
+            goto cleanup;
+        }
+
+        hr = pToastNotification4->lpVtbl->put_Priority(pToastNotification4, toast_priority);
+        if (FAILED(hr)) {
+            goto cleanup;
+        }
+
+        pToastNotification4->lpVtbl->Release(pToastNotification4);
     }
 
     // Finally, show the notification.

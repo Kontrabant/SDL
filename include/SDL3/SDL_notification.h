@@ -29,7 +29,6 @@
 #define SDL_notification_h_
 
 #include <SDL3/SDL_stdinc.h>
-#include <SDL3/SDL_surface.h>
 
 #include <SDL3/SDL_begin_code.h>
 /* Set up for C function definitions, even when using C++ */
@@ -51,22 +50,16 @@ extern "C" {
 
 typedef Uint32 SDL_NotificationID;
 
-/**
- * \brief SDL_Notification flags.
- *
- * Note that some system implementations may not support all flags.
- *
- * \since These flags are available since SDL 3.6.0
- */
-typedef Uint64 SDL_NotificationFlags;
+#define SDL_NOTIFICATION_TRANSIENT SDL_UINT64_C(0x0000000000000010) /**< Request that the notification not persist in any notification logs. */
+#define SDL_NOTIFICATION_SILENT    SDL_UINT64_C(0x0000000000000020) /**< Request that the notification not play a sound when shown. */
 
-#define SDL_NOTIFICATION_PRIORITY_LOW    SDL_UINT64_C(0x0000000000000001) /**< Lowest priority. */
-#define SDL_NOTIFICATION_PRIORITY_NORMAL SDL_UINT64_C(0x0000000000000002) /**< Normal/medium priority. */
-#define SDL_NOTIFICATION_PRIORITY_HIGH   SDL_UINT64_C(0x0000000000000004) /**< High/important priority. */
-#define SDL_NOTIFICATION_PRIORITY_URGENT SDL_UINT64_C(0x0000000000000008) /**< Highest/critical priority. Note that this may override any "Do Not Disturb" settings. */
-#define SDL_NOTIFICATION_TRANSIENT       SDL_UINT64_C(0x0000000000000010) /**< Request that the notification not persist in any notification logs. */
-#define SDL_NOTIFICATION_SILENT          SDL_UINT64_C(0x0000000000000020) /**< Request that the notification not play a sound when shown. */
-
+typedef enum SDL_NotificationPriority
+{
+    SDL_NOTIFICATION_PRIORITY_LOW = -1,   /**< Lowest priority. */
+    SDL_NOTIFICATION_PRIORITY_NORMAL = 0, /**< Normal/medium priority. */
+    SDL_NOTIFICATION_PRIORITY_HIGH = 1,   /**< High/important priority. */
+    SDL_NOTIFICATION_PRIORITY_URGENT = 2  /**< Highest/critical priority. Note that this may override any "Do Not Disturb" settings. */
+} SDL_NotificationPriority;
 /**
  * Notification structure containing button IDs and labels
  */
@@ -76,6 +69,7 @@ typedef struct SDL_NotificationAction
     const char *button_label; /**< The localized label string for the button. */
 } SDL_NotificationAction;
 
+#if 0
 /**
  * Notification structure containing title, message, icon, etc.
  */
@@ -89,11 +83,21 @@ typedef struct SDL_NotificationData
     int num_actions;                 /**< Length of the actions array */
     SDL_NotificationID replaces;     /**< ID of an existing notification to replace */
 } SDL_NotificationData;
+#endif
+
+#define SDL_PROP_NOTIFICATION_TITLE_STRING      "SDL.notification.title"
+#define SDL_PROP_NOTIFICATION_MESSAGE_STRING    "SDL.notification.message"
+#define SDL_PROP_NOTIFICATION_ICON_POINTER      "SDL.notification.icon"
+#define SDL_PROP_NOTIFICATION_ACTIONS_POINTER   "SDL.notification.actions"
+#define SDL_PROP_NOTIFICATION_PRIORITY_NUMBER   "SDL.notification.priority"
+#define SDL_PROP_NOTIFICATION_TRANSIENT_BOOLEAN "SDL.notification.transient"
+#define SDL_PROP_NOTIFICATION_SILENT_BOOLEAN    "SDL.notification.silent"
+#define SDL_PROP_NOTIFICATION_REPLACES_NUMBER   "SDL.notification.replaces"
 
 /**
- *  \brief Create a system notification.
+ *  \brief Show a system notification.
  *
- *  \param notification_data the SDL_NotificationData structure with title, text and other options
+ *  \param props the properties to be used when creating this notification
  *  \returns A non-zero SDL_NotificationID on success or 0 on failure; call
  *           SDL_GetError() for more information.
  *
@@ -102,13 +106,14 @@ typedef struct SDL_NotificationData
  *  \sa SDL_ShowSimpleNotification
  *  \sa SDL_NotificationData
  */
-extern SDL_DECLSPEC SDL_NotificationID SDLCALL SDL_ShowNotification(const SDL_NotificationData *notification_data);
+extern SDL_DECLSPEC SDL_NotificationID SDLCALL SDL_ShowNotificationWithProperties(SDL_PropertiesID props);
 
 /**
- *  \brief Create a simple system notification.
+ *  \brief Show a simple system notification.
  *
  *  \param title    UTF-8 title text
  *  \param message  UTF-8 message text
+ *  \param icon The image associated with is notification
  *  \returns A non-zero SDL_NotificationID on success or 0 on failure; call
  *           SDL_GetError() for more information.
  *
@@ -117,7 +122,7 @@ extern SDL_DECLSPEC SDL_NotificationID SDLCALL SDL_ShowNotification(const SDL_No
  *  \sa SDL_ShowNotification
  *  \sa SDL_NotificationData
  */
-extern SDL_DECLSPEC SDL_NotificationID SDLCALL SDL_ShowSimpleNotification(const char *title, const char *message);
+extern SDL_DECLSPEC SDL_NotificationID SDLCALL SDL_ShowSimpleNotification(const char *title, const char *message, SDL_Surface *icon);
 
 // Ends C function definitions when using C++
 #ifdef __cplusplus

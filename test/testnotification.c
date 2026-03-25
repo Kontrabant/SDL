@@ -51,20 +51,23 @@ int main(int argc, char *argv[])
         SDL_Surface *header_icon = SDL_LoadPNG("sdl-test_round.png");
         SDL_SetPointerProperty(SDL_GetGlobalProperties(), SDL_PROP_GLOBAL_NOTIFICATION_HEADER_ICON_POINTER, header_icon);
 
-        SDL_NotificationAction actions[2] = {
+        SDL_NotificationAction actions[] = {
             { "button_action_1", "Button 1" },
-            { "button_action_2", "Button 2" }
+            { "button_action_2", "Button 2" },
         };
 
-        SDL_NotificationData notification_data;
-        SDL_zero(notification_data);
+        SDL_NotificationAction **action_array = SDL_calloc(SDL_arraysize(actions) + 1, sizeof(SDL_NotificationAction *));
+        for (int i = 0; i < SDL_arraysize(actions); ++i) {
+            action_array[i] = &actions[i];
+        }
 
-        notification_data.title = "Test Notification";
-        notification_data.message = "Hey, pay attention to me!";
-        notification_data.icon = SDL_LoadPNG("sdl-test_round.png");
-        notification_data.actions = actions;
-        notification_data.num_actions = SDL_arraysize(actions);
-        notification_data.flags = SDL_NOTIFICATION_PRIORITY_NORMAL;
+        SDL_Surface *icon = SDL_LoadPNG("sdl-test_round.png");
+
+        SDL_PropertiesID props = SDL_CreateProperties();
+        SDL_SetStringProperty(props, SDL_PROP_NOTIFICATION_TITLE_STRING, "Test Notification");
+        SDL_SetStringProperty(props, SDL_PROP_NOTIFICATION_MESSAGE_STRING, "Hey, pay attention to me!");
+        SDL_SetPointerProperty(props, SDL_PROP_NOTIFICATION_ICON_POINTER, icon);
+        SDL_SetPointerProperty(props, SDL_PROP_NOTIFICATION_ACTIONS_POINTER, action_array);
 
         SDL_NotificationID last_id = 0;
 
@@ -73,17 +76,17 @@ int main(int argc, char *argv[])
                 if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_SPACE) {
 
                     if (event.key.mod & SDL_KMOD_CTRL) {
-                        notification_data.replaces = last_id;
+                        SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_REPLACES_NUMBER, last_id);
                     } else {
-                        notification_data.replaces = 0;
+                        SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_REPLACES_NUMBER, 0);
                     }
                     if (event.key.mod & SDL_KMOD_ALT) {
-                        notification_data.flags |= SDL_NOTIFICATION_TRANSIENT;
+                        SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_TRANSIENT_BOOLEAN, true);
                     } else {
-                        notification_data.flags &= ~SDL_NOTIFICATION_TRANSIENT;
+                        SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_TRANSIENT_BOOLEAN, false);
                     }
                     // Test showing a system notification message.
-                    const SDL_NotificationID new_id = SDL_ShowNotification(&notification_data);
+                    const SDL_NotificationID new_id = SDL_ShowNotificationWithProperties(props);
                     if (new_id) {
                         SDL_Log("Notification successfully dispatched. ID: %" SDL_PRIu32, new_id);
                         last_id = new_id;

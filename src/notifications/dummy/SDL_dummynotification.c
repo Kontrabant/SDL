@@ -21,7 +21,7 @@
 
 #include "../SDL_notification_c.h"
 
-SDL_NotificationID SDL_SYS_ShowNotification(const SDL_NotificationData *notification_info)
+SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
 {
     SDL_Unsupported();
     return 0;

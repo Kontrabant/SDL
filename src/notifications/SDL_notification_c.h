@@ -24,7 +24,7 @@
 
 #include <SDL3/SDL_notification.h>
 
-extern SDL_NotificationID SDL_SYS_ShowNotification(const SDL_NotificationData *notification_info);
+extern SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props);
 extern void SDL_CleanupNotifications();
 
 #endif // SDL_NOTIFICATION_C_H

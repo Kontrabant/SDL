@@ -21,31 +21,41 @@
 #include "SDL_internal.h"
 
 #include "SDL_notification_c.h"
+#include <SDL3/SDL_properties.h>
 
-SDL_NotificationID SDL_ShowNotification(const SDL_NotificationData *notification_data)
+SDL_NotificationID SDL_ShowNotificationWithProperties(SDL_PropertiesID props)
 {
-    if (notification_data == NULL) {
-        return SDL_InvalidParamError("notificationdata");
+    if (!props) {
+        return SDL_InvalidParamError("props");
     }
 
-    if (notification_data->title == NULL) {
-        return SDL_InvalidParamError("notificationdata->title");
+    const char *title = SDL_GetStringProperty(props, SDL_PROP_NOTIFICATION_TITLE_STRING, NULL);
+    if (!title) {
+        return SDL_SetError("Notifications must have a title");
     }
 
-    if (notification_data->message == NULL) {
-        return SDL_InvalidParamError("notificationdata->message");
-    }
-
-    return SDL_SYS_ShowNotification(notification_data);
+    return SDL_SYS_ShowNotification(props);
 }
 
-SDL_NotificationID SDL_ShowSimpleNotification(const char *title, const char *message)
+SDL_NotificationID SDL_ShowSimpleNotification(const char *title, const char *message, SDL_Surface *icon)
 {
-    SDL_NotificationData notification_data;
-    SDL_zero(notification_data);
+    SDL_PropertiesID props = SDL_CreateProperties();
+    if (!props) {
+        return 0;
+    }
 
-    notification_data.title = title;
-    notification_data.message = message;
+    if (title) {
+        SDL_SetStringProperty(props, SDL_PROP_NOTIFICATION_TITLE_STRING, title);
+    }
+    if (message) {
+        SDL_SetStringProperty(props, SDL_PROP_NOTIFICATION_MESSAGE_STRING, message);
+    }
+    if (icon) {
+        SDL_SetPointerProperty(props, SDL_PROP_NOTIFICATION_ICON_POINTER, icon);
+    }
 
-    return SDL_ShowNotification(&notification_data);
+    SDL_NotificationID id = SDL_ShowNotificationWithProperties(props);
+    SDL_DestroyProperties(props);
+
+    return id;
 }
