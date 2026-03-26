@@ -19,11 +19,14 @@
   3. This notice may not be removed or altered from any source distribution.
 */
 
+#include "SDL_internal.h"
+
 #include "../../events/SDL_notificationevents_c.h"
 #include "notifications/SDL_notification_c.h"
 #include "video/SDL_surface_c.h"
 
 #include "../../core/windows/SDL_windows.h"
+#define COBJMACROS
 #include <Windows.ui.notifications.h>
 #include <bcrypt.h>
 #include <initguid.h>
@@ -471,10 +474,11 @@ static bool InitGUID()
     StringFromGUID2(&guid, guid_str, 128);
 
 format_reg_key:
-    const size_t key_size = sizeof(REG_CLSID_FMT) + 128;
-    guid_reg_key = SDL_malloc(key_size);
-    SDL_swprintf(guid_reg_key, key_size, REG_CLSID_FMT, guid_str);
-
+    {
+        const size_t key_size = sizeof(REG_CLSID_FMT) + 128;
+        guid_reg_key = SDL_malloc(key_size);
+        SDL_swprintf(guid_reg_key, key_size, REG_CLSID_FMT, guid_str);
+    }
     return true;
 }
 
@@ -529,19 +533,14 @@ static bool InitToastSystem()
     WCHAR *image_path = NULL;
 
     // Initialize COM and Windows runtime with the same threading model.
-    RO_INIT_TYPE ro_init_type = RO_INIT_SINGLETHREADED;
-    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-    if (hr == RPC_E_CHANGED_MODE) {
-        hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
-        ro_init_type = RO_INIT_MULTITHREADED;
-    }
-    if (hr != S_OK && hr != S_FALSE && hr != RPC_E_CHANGED_MODE) {
+    HRESULT hr = WIN_CoInitialize();
+    if (FAILED(hr)) {
         return false;
     }
     co_initialized = true;
 
-    hr = RoInitialize(ro_init_type);
-    if (hr != S_OK && hr != S_FALSE && hr != RPC_E_CHANGED_MODE) {
+    hr = WIN_RoInitialize();
+    if (FAILED(hr)) {
         return false;
     }
     ro_initialized = true;
@@ -1143,11 +1142,11 @@ static void SDL_SYS_CleanupNotifications(bool cleanup_reg_keys)
     app_reg_key = NULL;
 
     if (ro_initialized) {
-        RoUninitialize();
+        WIN_RoUninitialize();
         ro_initialized = false;
     }
     if (co_initialized) {
-        CoUninitialize();
+        WIN_CoUninitialize();
         co_initialized = false;
     }
 }

@@ -29,6 +29,8 @@
 #define SDL_notification_h_
 
 #include <SDL3/SDL_stdinc.h>
+#include <SDL3/SDL_properties.h>
+#include <SDL3/SDL_surface.h>
 
 #include <SDL3/SDL_begin_code.h>
 /* Set up for C function definitions, even when using C++ */
