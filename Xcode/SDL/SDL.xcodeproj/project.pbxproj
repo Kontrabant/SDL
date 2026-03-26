@@ -560,6 +560,9 @@
 		F3FD042E2C9B755700824C4C /* SDL_hidapi_nintendo.h in Headers */ = {isa = PBXBuildFile; fileRef = F3FD042C2C9B755700824C4C /* SDL_hidapi_nintendo.h */; };
 		F3FD042F2C9B755700824C4C /* SDL_hidapi_steam_hori.c in Sources */ = {isa = PBXBuildFile; fileRef = F3FD042D2C9B755700824C4C /* SDL_hidapi_steam_hori.c */; };
 		FA73671D19A540EF004122E4 /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FA73671C19A540EF004122E4 /* CoreVideo.framework */; platformFilters = (ios, maccatalyst, macos, tvos, ); settings = {ATTRIBUTES = (Required, ); }; };
+		00009183ED11C92F23FC0000 /* SDL_notification.c in Sources */ = {isa = PBXBuildFile; fileRef = 000059D16599F687D87B0000 /* SDL_notification.c */; };
+		0000B6DBAE1F178E87010000 /* SDL_notification_c.h in Headers */ = {isa = PBXBuildFile; fileRef = 000045BF87FD2865AB1C0000 /* SDL_notification_c.h */; };
+		0000FB5C9B8CE5929A250000 /* SDL_cocoanotification.m in Sources */ = {isa = PBXBuildFile; fileRef = 000088B5AFB11E40F7920000 /* SDL_cocoanotification.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1154,6 +1157,9 @@
 		F59C710600D5CB5801000001 /* SDL.info */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text; path = SDL.info; sourceTree = "<group>"; };
 		F5A2EF3900C6A39A01000001 /* BUGS.txt */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text; name = BUGS.txt; path = ../../BUGS.txt; sourceTree = SOURCE_ROOT; };
 		FA73671C19A540EF004122E4 /* CoreVideo.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreVideo.framework; path = System/Library/Frameworks/CoreVideo.framework; sourceTree = SDKROOT; };
+		000059D16599F687D87B0000 /* SDL_notification.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = SDL_notification.c; path = SDL_notification.c; sourceTree = "<group>"; };
+		000045BF87FD2865AB1C0000 /* SDL_notification_c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SDL_notification_c.h; path = SDL_notification_c.h; sourceTree = "<group>"; };
+		000088B5AFB11E40F7920000 /* SDL_cocoanotification.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = SDL_cocoanotification.m; path = SDL_cocoanotification.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1431,6 +1437,7 @@
 				F3E5A6EA2AD5E0E600293D83 /* SDL_properties.c */,
 				F386F6E62884663E001840AA /* SDL_utils.c */,
 				F386F6E52884663E001840AA /* SDL_utils_c.h */,
+				0000A12B47E1FC5391780000 /* notifications */,
 			);
 			name = "Library Source";
 			path = ../../src;
@@ -2529,6 +2536,24 @@
 			path = resources;
 			sourceTree = "<group>";
 		};
+		0000A12B47E1FC5391780000 /* notifications */ = {
+			isa = PBXGroup;
+			children = (
+				000059D16599F687D87B0000 /* SDL_notification.c */,
+				000045BF87FD2865AB1C0000 /* SDL_notification_c.h */,
+				0000B071CC4D6AB5CE640000 /* cocoa */,
+			);
+			path = notifications;
+			sourceTree = "<group>";
+		};
+		0000B071CC4D6AB5CE640000 /* cocoa */ = {
+			isa = PBXGroup;
+			children = (
+				000088B5AFB11E40F7920000 /* SDL_cocoanotification.m */,
+			);
+			path = cocoa;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXHeadersBuildPhase section */
@@ -3166,6 +3191,8 @@
 				0000A03C0F32C43816F40000 /* SDL_asyncio_windows_ioring.c in Sources */,
 				0000A877C7DB9FA935FC0000 /* SDL_uikitpen.m in Sources */,
 				63124A422E5C357500A53610 /* SDL_hidapi_zuiki.c in Sources */,
+				00009183ED11C92F23FC0000 /* SDL_notification.c in Sources */,
+				0000FB5C9B8CE5929A250000 /* SDL_cocoanotification.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

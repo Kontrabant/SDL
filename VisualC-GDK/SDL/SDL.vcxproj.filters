@@ -4,6 +4,8 @@
     <ClCompile Include="..\..\src\core\gdk\SDL_gdk.cpp" />
     <ClCompile Include="..\..\src\core\windows\pch.c" />
     <ClCompile Include="..\..\src\core\windows\pch_cpp.cpp" />
+    <ClCompile Include="..\..\src\notifications\dummy\SDL_dummynotification.c" />
+    <ClCompile Include="..\..\src\notifications\SDL_notification.c" />
     <ClCompile Include="..\..\src\render\direct3d12\SDL_render_d3d12_xbox.cpp" />
     <ClCompile Include="..\..\src\render\direct3d12\SDL_shaders_d3d12_xboxone.cpp" />
     <ClCompile Include="..\..\src\render\direct3d12\SDL_shaders_d3d12_xboxseries.cpp" />
@@ -241,6 +243,7 @@
     <ClCompile Include="..\..\src\video\yuv2rgb\yuv_rgb_lsx.c" />
     <ClCompile Include="..\..\src\video\yuv2rgb\yuv_rgb_sse.c" />
     <ClCompile Include="..\..\src\video\yuv2rgb\yuv_rgb_std.c" />
+    <ClInclude Include="..\..\src\notifications\SDL_notification_c.h" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\include\SDL3\SDL.h" />

@@ -262,6 +262,12 @@
     <Filter Include="render\gpu\shaders">
       <UniqueIdentifier>{107d41e6-7c7e-4d9a-a3b3-b6f4abfde0c1}</UniqueIdentifier>
     </Filter>
+    <Filter Include="notifications">
+      <UniqueIdentifier>{0000b1b2d12877646f6147a5a7510000}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="notifications\windows">
+      <UniqueIdentifier>{0000b6590eb19c11945581d0479b0000}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\include\SDL3\SDL.h">
@@ -500,6 +506,9 @@
     </ClInclude>
     <ClInclude Include="..\..\src\main\SDL_main_callbacks.h">
       <Filter>main</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\notifications\SDL_notification_c.h">
+      <Filter>notifications</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\SDL_error_c.h" />
     <ClInclude Include="..\..\src\SDL_hashtable.h" />
@@ -1377,6 +1386,12 @@
     </ClCompile>
     <ClCompile Include="..\..\src\main\windows\SDL_sysmain_runapp.c">
       <Filter>main\windows</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\notifications\SDL_notification.c">
+      <Filter>notifications</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\notifications\windows\SDL_windowsnotification.c">
+      <Filter>notifications\windows</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\SDL.c" />
     <ClCompile Include="..\..\src\SDL_assert.c" />
