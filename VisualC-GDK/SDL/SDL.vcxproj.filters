@@ -4,6 +4,7 @@
     <ClCompile Include="..\..\src\core\gdk\SDL_gdk.cpp" />
     <ClCompile Include="..\..\src\core\windows\pch.c" />
     <ClCompile Include="..\..\src\core\windows\pch_cpp.cpp" />
+    <ClCompile Include="..\..\src\events\SDL_notificationevents.c" />
     <ClCompile Include="..\..\src\notifications\dummy\SDL_dummynotification.c" />
     <ClCompile Include="..\..\src\notifications\SDL_notification.c" />
     <ClCompile Include="..\..\src\render\direct3d12\SDL_render_d3d12_xbox.cpp" />
@@ -56,6 +57,7 @@
     <ClCompile Include="..\..\src\gpu\vulkan\SDL_gpu_vulkan.c" />
     <ClCompile Include="..\..\src\gpu\xr\SDL_gpu_openxr.c" />
     <ClCompile Include="..\..\src\gpu\xr\SDL_openxrdyn.c" />
+    <ClInclude Include="..\..\src\events\SDL_notificationevents_c.h" />
     <ClInclude Include="..\..\src\gpu\xr\SDL_openxr_internal.h" />
     <ClCompile Include="..\..\src\haptic\dummy\SDL_syshaptic.c" />
     <ClCompile Include="..\..\src\haptic\SDL_haptic.c" />

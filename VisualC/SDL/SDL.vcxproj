@@ -466,6 +466,7 @@
     <ClInclude Include="..\..\src\events\SDL_keysym_to_keycode_c.h" />
     <ClInclude Include="..\..\src\events\SDL_keysym_to_scancode_c.h" />
     <ClInclude Include="..\..\src\events\SDL_mouse_c.h" />
+    <ClInclude Include="..\..\src\events\SDL_notificationevents_c.h" />
     <ClInclude Include="..\..\src\events\SDL_pen_c.h" />
     <ClInclude Include="..\..\src\events\SDL_scancode_tables_c.h" />
     <ClInclude Include="..\..\src\events\SDL_touch_c.h" />
@@ -625,6 +626,7 @@
     <ClCompile Include="..\..\src\events\imKStoUCS.c" />
     <ClCompile Include="..\..\src\events\SDL_keysym_to_keycode.c" />
     <ClCompile Include="..\..\src\events\SDL_keysym_to_scancode.c" />
+    <ClCompile Include="..\..\src\events\SDL_notificationevents.c" />
     <ClCompile Include="..\..\src\events\SDL_scancode_tables.c" />
     <ClCompile Include="..\..\src\filesystem\SDL_filesystem.c" />
     <ClCompile Include="..\..\src\filesystem\windows\SDL_sysfsops.c" />

@@ -563,6 +563,8 @@
 		00009183ED11C92F23FC0000 /* SDL_notification.c in Sources */ = {isa = PBXBuildFile; fileRef = 000059D16599F687D87B0000 /* SDL_notification.c */; };
 		0000B6DBAE1F178E87010000 /* SDL_notification_c.h in Headers */ = {isa = PBXBuildFile; fileRef = 000045BF87FD2865AB1C0000 /* SDL_notification_c.h */; };
 		0000FB5C9B8CE5929A250000 /* SDL_cocoanotification.m in Sources */ = {isa = PBXBuildFile; fileRef = 000088B5AFB11E40F7920000 /* SDL_cocoanotification.m */; };
+		0000AF1D2CED20010C2D0000 /* SDL_notificationevents.c in Sources */ = {isa = PBXBuildFile; fileRef = 0000D6CCB566B8AE47FE0000 /* SDL_notificationevents.c */; };
+		00004A19C923458228C10000 /* SDL_notificationevents_c.h in Headers */ = {isa = PBXBuildFile; fileRef = 0000FA7334391F6720820000 /* SDL_notificationevents_c.h */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1160,6 +1162,8 @@
 		000059D16599F687D87B0000 /* SDL_notification.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = SDL_notification.c; path = SDL_notification.c; sourceTree = "<group>"; };
 		000045BF87FD2865AB1C0000 /* SDL_notification_c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SDL_notification_c.h; path = SDL_notification_c.h; sourceTree = "<group>"; };
 		000088B5AFB11E40F7920000 /* SDL_cocoanotification.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = SDL_cocoanotification.m; path = SDL_cocoanotification.m; sourceTree = "<group>"; };
+		0000D6CCB566B8AE47FE0000 /* SDL_notificationevents.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = SDL_notificationevents.c; path = SDL_notificationevents.c; sourceTree = "<group>"; };
+		0000FA7334391F6720820000 /* SDL_notificationevents_c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = SDL_notificationevents_c.h; path = SDL_notificationevents_c.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -2315,6 +2319,8 @@
 				A7D8A93723E2514000DCD162 /* SDL_touch_c.h */,
 				A7D8A92F23E2514000DCD162 /* SDL_windowevents.c */,
 				A7D8A94323E2514000DCD162 /* SDL_windowevents_c.h */,
+				0000D6CCB566B8AE47FE0000 /* SDL_notificationevents.c */,
+				0000FA7334391F6720820000 /* SDL_notificationevents_c.h */,
 			);
 			path = events;
 			sourceTree = "<group>";
@@ -3193,6 +3199,7 @@
 				63124A422E5C357500A53610 /* SDL_hidapi_zuiki.c in Sources */,
 				00009183ED11C92F23FC0000 /* SDL_notification.c in Sources */,
 				0000FB5C9B8CE5929A250000 /* SDL_cocoanotification.m in Sources */,
+				0000AF1D2CED20010C2D0000 /* SDL_notificationevents.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
