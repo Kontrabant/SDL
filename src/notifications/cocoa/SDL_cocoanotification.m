@@ -21,9 +21,13 @@
 
 #include "SDL_internal.h"
 
+#include "../SDL_notification_c.h"
+
+// tvOS doesn't support the notification features SDL cares about.
+#ifndef SDL_PLATFORM_TVOS
+
 #include "../../events/SDL_notificationevents_c.h"
 #include "../../video/SDL_surface_c.h"
-#include "../SDL_notification_c.h"
 
 #import <Foundation/Foundation.h>
 #import <UserNotifications/UNNotificationAction.h>
@@ -50,8 +54,6 @@
     }
 }
 
-// Silent warnings on tvOS.
-#ifndef SDL_PLATFORM_TVOS
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center didReceiveNotificationResponse:(UNNotificationResponse *)response withCompletionHandler:(void (^)(void))completionHandler
     API_AVAILABLE(macos(10.14))
 {
@@ -64,7 +66,6 @@
 
     completionHandler();
 }
-#endif
 @end
 
 API_AVAILABLE(macos(10.14))
@@ -89,12 +90,9 @@ static bool ShouldEnableNotifications()
     }
 
     return false;
-#elif defined(SDL_PLATFORM_IOS)
+#else
     // iOS can always anble notificaions.
     return true;
-#else
-    // tvOS only supports a very limited subset of notification functionality
-    return false;
 #endif
 }
 
@@ -134,9 +132,6 @@ static NSURL *SaveTempImage(SDL_Surface *image)
 
 SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
 {
-#ifdef SDL_PLATFORM_TVOS
-    return 0;
-#else
     @autoreleasepool {
         if (@available(macOS 10.14, *)) {
 
@@ -269,8 +264,14 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
 
         return 0;
     }
-#endif
 }
+#else
+SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
+{
+    SDL_SetError("Notifications not supported on tvOS");
+    return 0;
+}
+#endif
 
 void SDL_CleanupNotifications()
 {
