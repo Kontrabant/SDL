@@ -42,6 +42,8 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    SDL_RequestNotificationPermission();
+
     /* Test showing a message box with a parent window */
     {
         SDL_Event event;

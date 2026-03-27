@@ -265,7 +265,7 @@ define_sdl_subsystem(Power)
 define_sdl_subsystem(Sensor)
 define_sdl_subsystem(Dialog)
 define_sdl_subsystem(Tray)
-define_sdl_subsystem(Notifications)
+define_sdl_subsystem(Notification)
 
 cmake_dependent_option(SDL_FRAMEWORK "Build SDL libraries as Apple Framework" OFF "APPLE" OFF)
 if(SDL_FRAMEWORK)
@@ -439,7 +439,7 @@ if (NGAGE)
   set(SDL_DUMMYAUDIO       OFF)
   set(SDL_DUMMYCAMERA      OFF)
   set(SDL_DUMMYVIDEO       OFF)
-  set(SDL_NOTIFICATIONS    OFF)
+  set(SDL_NOTIFICATION     OFF)
   set(SDL_OFFSCREEN        OFF)
   set(SDL_RENDER_GPU       OFF)
   set(SDL_TRAY             OFF)
@@ -1288,8 +1288,8 @@ sdl_glob_sources(
   "${SDL3_SOURCE_DIR}/src/main/*.h"
   "${SDL3_SOURCE_DIR}/src/misc/*.c"
   "${SDL3_SOURCE_DIR}/src/misc/*.h"
-  "${SDL3_SOURCE_DIR}/src/notifications/*.c"
-  "${SDL3_SOURCE_DIR}/src/notifications/*.h"
+  "${SDL3_SOURCE_DIR}/src/notification/*.c"
+  "${SDL3_SOURCE_DIR}/src/notification/*.h"
   "${SDL3_SOURCE_DIR}/src/power/*.c"
   "${SDL3_SOURCE_DIR}/src/power/*.h"
   "${SDL3_SOURCE_DIR}/src/render/*.c"
@@ -2018,11 +2018,11 @@ elseif(UNIX AND NOT APPLE AND NOT RISCOS AND NOT HAIKU)
         "${SDL3_SOURCE_DIR}/src/core/linux/SDL_progressbar.h"
       )
 
-      if(SDL_NOTIFICATIONS)
+      if(SDL_NOTIFICATION)
         sdl_sources(
-          "${SDL3_SOURCE_DIR}/src/notifications/unix/SDL_dbusnotification.c"
+          "${SDL3_SOURCE_DIR}/src/notification/unix/SDL_dbusnotification.c"
         )
-        set(HAVE_SDL_NOTIFICATIONS TRUE)
+        set(HAVE_SDL_NOTIFICATION TRUE)
       endif()
     endif()
 
@@ -2444,9 +2444,9 @@ elseif(WINDOWS)
     set(HAVE_SDL_TRAY TRUE)
   endif()
 
-  if(SDL_NOTIFICATIONS AND HAVE_WINDOWS_UI_NOTIFICATIONS_H)
-    sdl_glob_sources("${SDL3_SOURCE_DIR}/src/notifications/windows/*.c")
-    set(HAVE_SDL_NOTIFICATIONS TRUE)
+  if(SDL_NOTIFICATION AND HAVE_WINDOWS_UI_NOTIFICATIONS_H)
+    sdl_glob_sources("${SDL3_SOURCE_DIR}/src/notification/windows/*.c")
+    set(HAVE_SDL_NOTIFICATION TRUE)
   endif()
 
   if(SDL_HIDAPI)
@@ -2625,7 +2625,7 @@ elseif(APPLE)
     set(HAVE_SDL_HAPTIC TRUE)
   endif()
 
-  if(SDL_NOTIFICATIONS)
+  if(SDL_NOTIFICATION)
     set(SDL_FRAMEWORK_SECURITY 1)
     set(SDL_FRAMEWORK_USERNOTIFICATIONS 1)
   endif()
@@ -2660,9 +2660,9 @@ elseif(APPLE)
   sdl_glob_sources("${SDL3_SOURCE_DIR}/src/filesystem/cocoa/*.m")
   set(HAVE_SDL_FILESYSTEM TRUE)
 
-  set(SDL_NOTIFICATIONS_COCOA 1)
-  sdl_glob_sources("${SDL3_SOURCE_DIR}/src/notifications/cocoa/*.m")
-  set(HAVE_SDL_NOTIFICATIONS TRUE)
+  set(SDL_NOTIFICATION_COCOA 1)
+  sdl_glob_sources("${SDL3_SOURCE_DIR}/src/notification/cocoa/*.m")
+  set(HAVE_SDL_NOTIFICATION TRUE)
 
   # TODO: SDL_STORAGE_ICLOUD
   set(SDL_STORAGE_GENERIC 1)
@@ -3698,10 +3698,10 @@ if(NOT HAVE_CAMERA)
     "${SDL3_SOURCE_DIR}/src/camera/dummy/*.h"
   )
 endif()
-if(NOT HAVE_SDL_NOTIFICATIONS)
+if(NOT HAVE_SDL_NOTIFICATION)
   sdl_glob_sources(
-     "${SDL3_SOURCE_DIR}/src/notifications/dummy/*.c"
-     "${SDL3_SOURCE_DIR}/src/notifications/dummy/*.h"
+     "${SDL3_SOURCE_DIR}/src/notification/dummy/*.c"
+     "${SDL3_SOURCE_DIR}/src/notification/dummy/*.h"
   )
 endif()
 

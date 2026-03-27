@@ -97,6 +97,19 @@ typedef struct SDL_NotificationData
 #define SDL_PROP_NOTIFICATION_REPLACES_NUMBER   "SDL.notification.replaces"
 
 /**
+ *  \brief Requests permission to display notifications.
+ *
+ *  \returns True on success or false on failure; call
+ *           SDL_GetError() for more information.
+ *
+ *  \since This function is available since SDL 3.6.0
+ *
+ *  \sa SDL_ShowSimpleNotification
+ *  \sa SDL_NotificationData
+ */
+extern SDL_DECLSPEC bool SDLCALL SDL_RequestNotificationPermission();
+
+/**
  *  \brief Show a system notification.
  *
  *  \param props the properties to be used when creating this notification

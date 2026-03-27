@@ -19,7 +19,13 @@
   3. This notice may not be removed or altered from any source distribution.
 */
 
+#include "SDL_internal.h"
 #include "../SDL_notification_c.h"
+
+bool SDL_RequestNotificationPermission(void)
+{
+    return SDL_Unsupported();
+}
 
 SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
 {

@@ -22,9 +22,13 @@
 #include "../../core/linux/SDL_dbus.h"
 #include "../../core/unix/SDL_appid.h"
 #include "../../events/SDL_notificationevents_c.h"
+#include "../../io/SDL_iostream_c.h"
 #include "../../video/SDL_surface_c.h"
+#include <SDL3/SDL_iostream.h>
 
 #include <fcntl.h>
+#include <limits.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #define NOTIFICATION_PORTAL_NODE      "org.freedesktop.portal.Desktop"
@@ -42,6 +46,8 @@
 
 static bool core_listener_registered = false;
 static bool portal_listener_registered = false;
+
+static char *icon_uri;
 
 static bool IsInContainer()
 {
@@ -290,6 +296,59 @@ static bool InitCoreSignalListener(SDL_DBusContext *dbus)
     return true;
 }
 
+static const char *GetIconURI()
+{
+    if (icon_uri) {
+        return icon_uri;
+    }
+
+    SDL_PropertiesID props = SDL_GetGlobalProperties();
+    SDL_Surface *icon = SDL_GetPointerProperty(props, SDL_PROP_GLOBAL_NOTIFICATION_HEADER_ICON_POINTER, NULL);
+    if (!icon) {
+        return NULL;
+    }
+
+    static const char template[] = "/SDL_notificationicon-XXXXXX.png";
+    const char *xdg_path;
+    char tmp_path[PATH_MAX];
+
+    xdg_path = SDL_getenv("XDG_RUNTIME_DIR");
+    if (!xdg_path) {
+        return NULL;
+    }
+
+    SDL_strlcpy(tmp_path, xdg_path, PATH_MAX);
+    SDL_strlcat(tmp_path, template, PATH_MAX);
+
+    int fd = mkostemps(tmp_path, 4, O_CLOEXEC);
+    if (fd < 0) {
+        goto done;
+    }
+
+    SDL_IOStream *icon_file = SDL_IOFromFD(fd, true);
+    if (!icon_file) {
+        goto done;
+    }
+    if (!SDL_SavePNG_IO(icon, icon_file, true)) {
+        goto done;
+    }
+
+    fd = -1;
+    SDL_asprintf(&icon_uri, "file://%s", tmp_path);
+
+done:
+    if (fd >= 0) {
+        if (icon_file) {
+            SDL_CloseIO(icon_file);
+        } else {
+            close(fd);
+        }
+        unlink(tmp_path);
+    }
+
+    return icon_uri;
+}
+
 static SDL_NotificationID ShowCoreNotification(SDL_DBusContext *dbus, SDL_PropertiesID props)
 {
     DBusConnection *conn = dbus->session_conn;
@@ -322,8 +381,8 @@ static SDL_NotificationID ShowCoreNotification(SDL_DBusContext *dbus, SDL_Proper
     // Replaces id
     const Uint32 uid = replaces;
     dbus->message_iter_append_basic(&iter, DBUS_TYPE_UINT32, &uid);
-    // Icon string (always empty, set later via a hint)
-    id = "";
+    // Icon URI
+    id = GetIconURI();
     dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &id);
     // Summary
     dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &title);
@@ -377,7 +436,6 @@ failure:
 }
 
 // org.freedesktop.portal.Notification interface, used when running in a Flatpak or SNAP container
-
 static DBusHandlerResult PortalNotificationFilter(DBusConnection *conn, DBusMessage *msg, void *data)
 {
     SDL_DBusContext *dbus = SDL_DBus_GetContext();
@@ -601,7 +659,7 @@ static SDL_NotificationID ShowPortalNotification(SDL_DBusContext *dbus, SDL_Prop
     const SDL_NotificationAction **actions = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_ACTIONS_POINTER, NULL);
     const bool silent = SDL_GetBooleanProperty(props, SDL_PROP_NOTIFICATION_SILENT_BOOLEAN, false);
 
-    /* Call Notification.AddNotification() */
+    // Call Notification.AddNotification()
     msg = dbus->message_new_method_call(NOTIFICATION_PORTAL_NODE, NOTIFICATION_PORTAL_PATH, NOTIFICATION_PORTAL_INTERFACE, "AddNotification");
     if (msg == NULL) {
         goto failure;
@@ -734,4 +792,15 @@ void SDL_CleanupNotifications()
         portal_listener_registered = false;
         core_listener_registered = false;
     }
+
+    if (icon_uri) {
+        unlink(icon_uri);
+        SDL_free(icon_uri);
+    }
+}
+
+bool SDL_RequestNotificationPermission(void)
+{
+    // TODO: Anything to do here?
+    return true;
 }

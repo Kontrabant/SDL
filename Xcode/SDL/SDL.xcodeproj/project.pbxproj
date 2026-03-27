@@ -1447,7 +1447,7 @@
 				F3E5A6EA2AD5E0E600293D83 /* SDL_properties.c */,
 				F386F6E62884663E001840AA /* SDL_utils.c */,
 				F386F6E52884663E001840AA /* SDL_utils_c.h */,
-				0000A12B47E1FC5391780000 /* notifications */,
+				0000A12B47E1FC5391780000 /* notification */,
 			);
 			name = "Library Source";
 			path = ../../src;
@@ -2550,14 +2550,14 @@
 			path = resources;
 			sourceTree = "<group>";
 		};
-		0000A12B47E1FC5391780000 /* notifications */ = {
+		0000A12B47E1FC5391780000 /* notification */ = {
 			isa = PBXGroup;
 			children = (
 				000059D16599F687D87B0000 /* SDL_notification.c */,
 				000045BF87FD2865AB1C0000 /* SDL_notification_c.h */,
 				0000B071CC4D6AB5CE640000 /* cocoa */,
 			);
-			path = notifications;
+			path = notification;
 			sourceTree = "<group>";
 		};
 		0000B071CC4D6AB5CE640000 /* cocoa */ = {

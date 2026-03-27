@@ -22,7 +22,7 @@
 #include "SDL_internal.h"
 
 #include "../../events/SDL_notificationevents_c.h"
-#include "notifications/SDL_notification_c.h"
+#include "notification/SDL_notification_c.h"
 #include "video/SDL_surface_c.h"
 
 #include "../../core/windows/SDL_windows.h"
@@ -1198,4 +1198,10 @@ static void SDL_SYS_CleanupNotifications(bool cleanup_reg_keys)
 void SDL_CleanupNotifications()
 {
     SDL_SYS_CleanupNotifications(false);
+}
+
+bool SDL_RequestNotificationPermission(void)
+{
+    // Notifications are supported on Win10 or higher.
+    return (bool)WIN_IsWindows10OrGreater();
 }

@@ -130,15 +130,14 @@ static NSURL *SaveTempImage(SDL_Surface *image)
     }
 }
 
-SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
+bool SDL_RequestNotificationPermission()
 {
     @autoreleasepool {
         if (@available(macOS 10.14, *)) {
-
             // Notifications not initialized (not in a bundle).
             if (!center) {
                 SDL_SetError("macOS notifications not supported outside an application bundle");
-                return 0;
+                return false;
             }
 
             // Check authorization to send notifications, and request it if necessary.
@@ -159,7 +158,23 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
 
             if (!authorized) {
                 SDL_SetError("Notifications not authorized");
-                return 0;
+                return false;
+            }
+        } else {
+            SDL_SetError("Notifications require macOS 10.14 or higher");
+                return false;
+        }
+    }
+
+    return false;
+}
+
+SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
+{
+    @autoreleasepool {
+        if (@available(macOS 10.14, *)) {
+            if (!SDL_RequestNotificationPermission()) {
+                return false;
             }
 
             // Get the notification properties.
@@ -266,10 +281,16 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
     }
 }
 #else
+// Notifications are too limited on tvOS to be of use
 SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
 {
     SDL_SetError("Notifications not supported on tvOS");
     return 0;
+}
+
+bool SDL_RequestNotificationPermission() {
+    SDL_SetError("Notifications not supported on tvOS");
+    return false;
 }
 #endif
 
