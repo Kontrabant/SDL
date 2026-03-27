@@ -19,93 +19,257 @@
   3. This notice may not be removed or altered from any source distribution.
 */
 
+#include "SDL_internal.h"
+
+#include "../../events/SDL_notificationevents_c.h"
+#include "../../video/SDL_surface_c.h"
 #include "../SDL_notification_c.h"
 
-#import <UserNotifications/UNUserNotificationCenter.h>
-#import <UserNotifications/UNNotificationRequest.h>
-#import <UserNotifications/UNNotificationContent.h>
-#import <UserNotifications/UNNotificationSettings.h>
-#import <UserNotifications/UNNotificationAction.h>
-#import <UserNotifications/UNNotificationCategory.h>
 #import <Foundation/Foundation.h>
+#import <UserNotifications/UNNotificationAction.h>
+#import <UserNotifications/UNNotificationAttachment.h>
+#import <UserNotifications/UNNotificationCategory.h>
+#import <UserNotifications/UNNotificationContent.h>
+#import <UserNotifications/UNNotificationRequest.h>
+#import <UserNotifications/UNNotificationResponse.h>
+#import <UserNotifications/UNNotificationSettings.h>
+#import <UserNotifications/UNNotificationSound.h>
+#import <UserNotifications/UNUserNotificationCenter.h>
 
-/* Retrieving the notification center will crash with an unhandled
- * exception if attempted without an application bundle.
- *
- * Check the proxy bundle and disable notifications if nul to avoid
- * this crash.
- */
-@interface LSApplicationProxy
+@interface SDLNotificationDelegate : NSObject <UNUserNotificationCenterDelegate>
 @end
 
-@interface LSBundleProxy: NSObject
-+ (nonnull LSApplicationProxy *)bundleProxyForCurrentProcess;
-@end
-
-SDL_NotificationID SDL_SYS_ShowNotification(const SDL_NotificationData *notification_info)
+@implementation SDLNotificationDelegate
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center willPresentNotification:(UNNotification *)notification withCompletionHandler:(void (^)(UNNotificationPresentationOptions))completionHandler
+    API_AVAILABLE(macos(10.14))
 {
-    if (@available(macOS 10.14, *)) {
-        if ([LSBundleProxy bundleProxyForCurrentProcess] == nil) {
-            SDL_SetError("macOS notifications not supported outside an application bundle");
-            return 0;
-        }
+    if (@available(macOS 11, iOS 14, *)) {
+        completionHandler(UNNotificationPresentationOptionBanner + UNNotificationPresentationOptionSound);
+    } else {
+        completionHandler(UNNotificationPresentationOptionAlert + UNNotificationPresentationOptionSound);
+    }
+}
 
-        UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+// Silent warnings on tvOS.
+#ifndef SDL_PLATFORM_TVOS
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center didReceiveNotificationResponse:(UNNotificationResponse *)response withCompletionHandler:(void (^)(void))completionHandler
+    API_AVAILABLE(macos(10.14))
+{
+    Uint32 id;
+    char action[256];
 
-        __block BOOL authorized = YES;
-        [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings * _Nonnull settings) {
-            if (settings.authorizationStatus == UNAuthorizationStatusNotDetermined) {
-                UNAuthorizationOptions options = UNAuthorizationOptionAlert + UNAuthorizationOptionSound;
-                [center requestAuthorizationWithOptions:options
-                                      completionHandler:^(BOOL granted, NSError *_Nullable error) {
-                                        if (!granted) {
-                                            authorized = NO;
-                                        }
-                                      }];
-            } else if (settings.authorizationStatus != UNAuthorizationStatusAuthorized) {
-                authorized = NO; // Not authorized
-            }
-        }];
-
-        if (!authorized) {
-            return 0;
-        }
-
-        NSMutableArray *actions = [NSMutableArray arrayWithCapacity:notification_info->num_actions];
-        for (int i = 0; i < notification_info->num_actions; ++i) {
-            UNNotificationAction *action = [UNNotificationAction actionWithIdentifier:[NSString stringWithUTF8String:notification_info->actions[i].button_id]
-                                                                                title:[NSString stringWithUTF8String:notification_info->actions[i].button_label]
-                                                                              options:UNNotificationActionOptionNone];
-
-            actions[i] = action;
-        }
-
-        NSString *category_id = [[NSUUID new] UUIDString];
-        UNNotificationCategory *category = [UNNotificationCategory categoryWithIdentifier:category_id
-                                                                                  actions:actions intentIdentifiers:@[]
-                                                                                  options:UNNotificationCategoryOptionNone];
-        NSSet *categories = [NSSet setWithObject:category];
-        [center setNotificationCategories:categories];
-
-        UNMutableNotificationContent *content = [UNMutableNotificationContent new];
-        content.title = [NSString stringWithUTF8String:notification_info->title];
-        content.body = [NSString stringWithUTF8String:notification_info->message];
-        content.categoryIdentifier = category_id;
-
-        NSString *identifier = @"SDLLocalNotification";
-        UNNotificationRequest *request = [UNNotificationRequest requestWithIdentifier:identifier
-                                                                              content:content
-                                                                              trigger:nil];
-
-        [center addNotificationRequest:request
-                 withCompletionHandler:^(NSError *_Nullable error) {
-                   if (error != nil) {
-                       NSLog(@"Something went wrong: %@", error);
-                   }
-                 }];
+    if (SDL_sscanf([response.actionIdentifier UTF8String], "SDL_notification=%" SDL_PRIu32 ",button=%s", &id, action) == 2) {
+        SDL_SendNotificationAction(id, action);
     }
 
+    completionHandler();
+}
+#endif
+@end
+
+API_AVAILABLE(macos(10.14))
+static UNUserNotificationCenter *center;
+static SDLNotificationDelegate *delegate;
+
+static bool ShouldEnableNotifications()
+{
+#if defined(SDL_PLATFORM_MACOS)
+    /* Notifications outside of an app bundle are unsupported, and will crash with an
+     * unhandled exception error, deep within a system library.
+     *
+     * FIXME: These functions are deprecated, find a modern way.
+     */
+    CFBundleRef bundle = CFBundleGetMainBundle();
+    CFURLRef bundleUrl = CFBundleCopyBundleURL(bundle);
+
+    CFStringRef uti;
+    if (CFURLCopyResourcePropertyForKey(bundleUrl, kCFURLTypeIdentifierKey, &uti, NULL) &&
+        uti && UTTypeConformsTo(uti, kUTTypeApplicationBundle)) {
+        true;
+    }
+
+    return false;
+#elif defined(SDL_PLATFORM_IOS)
+    // iOS can always anble notificaions.
+    return true;
+#else
+    // tvOS only supports a very limited subset of notification functionality
+    return false;
+#endif
+}
+
+void Cocoa_RegisterNotificationDelegate()
+{
+    if (!ShouldEnableNotifications()) {
+        return;
+    }
+
+    if (@available(macOS 10.14, *)) {
+        @autoreleasepool {
+            if (!center) {
+                center = [UNUserNotificationCenter currentNotificationCenter];
+            }
+            if (!delegate) {
+                delegate = [SDLNotificationDelegate new];
+                [center setDelegate:delegate];
+            }
+        }
+    }
+}
+
+static NSURL *SaveTempImage(SDL_Surface *image)
+{
+    @autoreleasepool {
+        const UInt32 hash = SDL_murmur3_32(image->pixels, image->pitch * image->h, 0);
+        NSString *tempFileName = [NSString stringWithFormat:@"SDL_tmpimage-%u.png", hash];
+        NSString *tempFilePath = [NSTemporaryDirectory() stringByAppendingPathComponent:tempFileName];
+
+        if (!SDL_SavePNG(image, [tempFilePath fileSystemRepresentation])) {
+            return nil;
+        }
+
+        return [NSURL fileURLWithPath:tempFilePath];
+    }
+}
+
+SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
+{
+#ifdef SDL_PLATFORM_TVOS
     return 0;
+#else
+    @autoreleasepool {
+        if (@available(macOS 10.14, *)) {
+
+            // Notifications not initialized (not in a bundle).
+            if (!center) {
+                SDL_SetError("macOS notifications not supported outside an application bundle");
+                return 0;
+            }
+
+            // Check authorization to send notifications, and request it if necessary.
+            __block BOOL authorized = YES;
+            [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings *_Nonnull settings) {
+              if (settings.authorizationStatus == UNAuthorizationStatusNotDetermined) {
+                  UNAuthorizationOptions options = UNAuthorizationOptionAlert + UNAuthorizationOptionSound;
+                  [center requestAuthorizationWithOptions:options
+                                        completionHandler:^(BOOL granted, NSError *_Nullable error) {
+                                          if (!granted) {
+                                              authorized = NO;
+                                          }
+                                        }];
+              } else if (settings.authorizationStatus != UNAuthorizationStatusAuthorized) {
+                  authorized = NO; // Not authorized
+              }
+            }];
+
+            if (!authorized) {
+                SDL_SetError("Notifications not authorized");
+                return 0;
+            }
+
+            // Get the notification properties.
+            const char *title = SDL_GetStringProperty(props, SDL_PROP_NOTIFICATION_TITLE_STRING, NULL);
+            const char *message = SDL_GetStringProperty(props, SDL_PROP_NOTIFICATION_MESSAGE_STRING, "");
+            SDL_Surface *icon = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_ICON_POINTER, NULL);
+            const SDL_NotificationID replaces = (SDL_NotificationID)SDL_GetNumberProperty(props, SDL_PROP_NOTIFICATION_REPLACES_NUMBER, 0);
+            const SDL_NotificationPriority priority = (SDL_NotificationPriority)SDL_GetNumberProperty(props, SDL_PROP_NOTIFICATION_PRIORITY_NUMBER, SDL_NOTIFICATION_PRIORITY_NORMAL);
+            const SDL_NotificationAction **sdlactions = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_ACTIONS_POINTER, NULL);
+            const bool silent = SDL_GetBooleanProperty(props, SDL_PROP_NOTIFICATION_SILENT_BOOLEAN, false);
+
+            // Generate a new ID.
+            Uint32 new_id;
+            if (replaces) {
+                new_id = replaces;
+            } else if (SecRandomCopyBytes(kSecRandomDefault, sizeof(new_id), &new_id) != errSecSuccess) {
+                new_id = (Uint32)SDL_GetTicksNS();
+            }
+
+            // Build the action array.
+            NSMutableArray *actions = nil;
+            if (sdlactions) {
+                actions = [NSMutableArray array];
+                for (int i = 0; sdlactions[i]; ++i) {
+                    UNNotificationAction *action = [UNNotificationAction actionWithIdentifier:[NSString stringWithFormat:@"SDL_notification=%u,button=%s", new_id, sdlactions[i]->button_id]
+                                                                                        title:[NSString stringWithUTF8String:sdlactions[i]->button_label]
+                                                                                      options:UNNotificationActionOptionNone];
+
+                    actions[i] = action;
+                }
+            }
+
+            // Create the category.
+            NSString *category_id = nil;
+            if (actions) {
+                // Create the notification category.
+                category_id = [[NSUUID new] UUIDString];
+                UNNotificationCategory *category = [UNNotificationCategory categoryWithIdentifier:category_id
+                                                                                          actions:actions
+                                                                                intentIdentifiers:@[]
+                                                                                          options:UNNotificationCategoryOptionNone];
+                NSSet *categories = [NSSet setWithObject:category];
+                [center setNotificationCategories:categories];
+            }
+
+            // Configure the content.
+            UNMutableNotificationContent *content = [UNMutableNotificationContent new];
+            content.title = [NSString stringWithUTF8String:title];
+            content.body = [NSString stringWithUTF8String:message];
+            content.categoryIdentifier = category_id;
+
+            if (!silent || priority == SDL_NOTIFICATION_PRIORITY_URGENT) {
+                // defaultCriticalSound is only in iOS 12+
+                if (@available(iOS 12, *)) {
+                    content.sound = priority != SDL_NOTIFICATION_PRIORITY_URGENT ? [UNNotificationSound defaultSound] : [UNNotificationSound defaultCriticalSound];
+                } else {
+                    content.sound = [UNNotificationSound defaultSound];
+                }
+            }
+
+            if (@available(macOS 12, iOS 15, *)) {
+                switch (priority) {
+                case SDL_NOTIFICATION_PRIORITY_LOW:
+                    content.interruptionLevel = UNNotificationInterruptionLevelPassive;
+                    break;
+                case SDL_NOTIFICATION_PRIORITY_URGENT:
+                    content.interruptionLevel = UNNotificationInterruptionLevelCritical;
+                    break;
+                case SDL_NOTIFICATION_PRIORITY_NORMAL:
+                case SDL_NOTIFICATION_PRIORITY_HIGH:
+                default:
+                    content.interruptionLevel = UNNotificationInterruptionLevelActive;
+                    break;
+                }
+            }
+
+            // Notifications load images from file paths, so save it to a temporary location.
+            if (icon) {
+                NSURL *url = SaveTempImage(icon);
+                if (url) {
+                    UNNotificationAttachment *attach = [UNNotificationAttachment attachmentWithIdentifier:@"" URL:url options:nil error:nil];
+                    content.attachments = @[ attach ];
+                }
+            }
+
+            NSString *identifier = [NSString stringWithFormat:@"SDLLocalNotification-%u", new_id];
+            UNNotificationRequest *request = [UNNotificationRequest requestWithIdentifier:identifier
+                                                                                  content:content
+                                                                                  trigger:nil];
+
+            [center addNotificationRequest:request
+                     withCompletionHandler:^(NSError *_Nullable error) {
+                       if (error != nil) {
+                           SDL_SetError("Failed to show notification");
+                       }
+                     }];
+
+            return new_id;
+        } else {
+            SDL_SetError("macOS 10.14+ required for notifications");
+        }
+
+        return 0;
+    }
+#endif
 }
 
 void SDL_CleanupNotifications()

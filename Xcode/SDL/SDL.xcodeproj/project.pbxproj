@@ -56,6 +56,8 @@
 		00D0D0D810675E46004B05EF /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 007317C10858E15000B2BC32 /* Carbon.framework */; platformFilters = (macos, ); };
 		02D6A1C228A84B8F00A7F002 /* SDL_hidapi_sinput.c in Sources */ = {isa = PBXBuildFile; fileRef = 02D6A1C128A84B8F00A7F001 /* SDL_hidapi_sinput.c */; };
 		1485C3312BBA4AF30063985B /* UniformTypeIdentifiers.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1485C32F2BBA4A0C0063985B /* UniformTypeIdentifiers.framework */; platformFilters = (maccatalyst, macos, ); settings = {ATTRIBUTES = (Weak, ); }; };
+		30840D4C2F76A822000F1D1B /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 30840D4B2F76A822000F1D1B /* UserNotifications.framework */; };
+		30840D4E2F76A8E7000F1D1B /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 30840D4D2F76A8E7000F1D1B /* Security.framework */; };
 		557D0CFA254586CA003913E3 /* CoreHaptics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F37DC5F225350EBC0002E6F7 /* CoreHaptics.framework */; platformFilters = (ios, maccatalyst, macos, tvos, ); settings = {ATTRIBUTES = (Weak, ); }; };
 		557D0CFB254586D7003913E3 /* GameController.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A75FDABD23E28B6200529352 /* GameController.framework */; settings = {ATTRIBUTES = (Required, ); }; };
 		5616CA4C252BB2A6005D5928 /* SDL_url.c in Sources */ = {isa = PBXBuildFile; fileRef = 5616CA49252BB2A5005D5928 /* SDL_url.c */; };
@@ -622,6 +624,8 @@
 		00D0D08310675DD9004B05EF /* CoreFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreFoundation.framework; path = System/Library/Frameworks/CoreFoundation.framework; sourceTree = SDKROOT; };
 		02D6A1C128A84B8F00A7F001 /* SDL_hidapi_sinput.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = SDL_hidapi_sinput.c; sourceTree = "<group>"; };
 		1485C32F2BBA4A0C0063985B /* UniformTypeIdentifiers.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UniformTypeIdentifiers.framework; path = System/Library/Frameworks/UniformTypeIdentifiers.framework; sourceTree = SDKROOT; };
+		30840D4B2F76A822000F1D1B /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
+		30840D4D2F76A8E7000F1D1B /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 		5616CA49252BB2A5005D5928 /* SDL_url.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = SDL_url.c; sourceTree = "<group>"; };
 		5616CA4A252BB2A6005D5928 /* SDL_sysurl.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = SDL_sysurl.h; sourceTree = "<group>"; };
 		5616CA4B252BB2A6005D5928 /* SDL_sysurl.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = SDL_sysurl.m; sourceTree = "<group>"; };
@@ -1172,11 +1176,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				1485C3312BBA4AF30063985B /* UniformTypeIdentifiers.framework in Frameworks */,
+				30840D4E2F76A8E7000F1D1B /* Security.framework in Frameworks */,
 				A7381E971D8B6A0300B177DD /* AudioToolbox.framework in Frameworks */,
 				00D0D0D810675E46004B05EF /* Carbon.framework in Frameworks */,
 				007317A40858DECD00B2BC32 /* Cocoa.framework in Frameworks */,
 				A7381E961D8B69D600B177DD /* CoreAudio.framework in Frameworks */,
 				557D0CFA254586CA003913E3 /* CoreHaptics.framework in Frameworks */,
+				30840D4C2F76A822000F1D1B /* UserNotifications.framework in Frameworks */,
 				00D0D08410675DD9004B05EF /* CoreFoundation.framework in Frameworks */,
 				FA73671D19A540EF004122E4 /* CoreVideo.framework in Frameworks */,
 				00CFA89D106B4BA100758660 /* ForceFeedback.framework in Frameworks */,
@@ -1471,6 +1477,8 @@
 		564624341FF821B70074AC87 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				30840D4D2F76A8E7000F1D1B /* Security.framework */,
+				30840D4B2F76A822000F1D1B /* UserNotifications.framework */,
 				1485C32F2BBA4A0C0063985B /* UniformTypeIdentifiers.framework */,
 				F382339B2738ED6600F7F527 /* CoreBluetooth.framework */,
 				F376F7272559B77100CFC0BC /* CoreAudio.framework */,

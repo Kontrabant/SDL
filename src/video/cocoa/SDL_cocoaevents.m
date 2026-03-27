@@ -303,8 +303,12 @@ static void Cocoa_DispatchEvent(NSEvent *theEvent)
     return (BOOL)SDL_SendDropFile(NULL, NULL, [filename UTF8String]) && SDL_SendDropComplete(NULL);
 }
 
+void Cocoa_RegisterNotificationDelegate();
+
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
+    Cocoa_RegisterNotificationDelegate();
+
     if (!SDL_GetHintBoolean("SDL_MAC_REGISTER_ACTIVATION_HANDLERS", true)) {
         return;
     }
