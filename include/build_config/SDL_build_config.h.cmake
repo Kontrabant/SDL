@@ -92,6 +92,7 @@
 #cmakedefine HAVE_WCSCMP 1
 #cmakedefine HAVE_WCSNCMP 1
 #cmakedefine HAVE_WCSTOL 1
+#cmakedefine HAVE_WCSTOUL 1
 #cmakedefine HAVE_STRLEN 1
 #cmakedefine HAVE_STRNLEN 1
 #cmakedefine HAVE_STRLCPY 1

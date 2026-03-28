@@ -432,7 +432,7 @@ static size_t SDL_ScanUnsignedLongLongInternal(const char *text, int count, int 
 }
 #endif
 
-#ifndef HAVE_WCSTOL
+#if !defined(HAVE_WCSTOL) || !defined(HAVE_WCSTOUL)
 // SDL_ScanUnsignedLongLongInternalW assumes that wchar_t can be converted to int without truncating bits
 SDL_COMPILE_TIME_ASSERT(wchar_t_int, sizeof(wchar_t) <= sizeof(int));
 
@@ -564,6 +564,29 @@ static size_t SDL_ScanLongW(const wchar_t *text, int count, int radix, long *val
         value = long_max;
     }
     *valuep = (long)value;
+    return len;
+}
+#endif
+
+#ifndef HAVE_WCSTOUL
+static size_t SDL_ScanUnsignedLongW(const wchar_t *text, int count, int radix, unsigned long *valuep)
+{
+    const unsigned long ulong_max = ~0UL;
+    unsigned long long value;
+    bool negative;
+    size_t len = SDL_ScanUnsignedLongLongInternalW(text, count, radix, &value, &negative);
+    if (negative) {
+        if (value == 0 || value > ulong_max) {
+            value = ulong_max;
+        } else if (value == ulong_max) {
+            value = 1;
+        } else {
+            value = 0ULL - value;
+        }
+    } else if (value > ulong_max) {
+        value = ulong_max;
+    }
+    *valuep = (unsigned long)value;
     return len;
 }
 #endif
@@ -921,6 +944,20 @@ long SDL_wcstol(const wchar_t *string, wchar_t **endp, int base)
     }
     return value;
 #endif // HAVE_WCSTOL
+}
+
+unsigned long SDL_wcstoul(const wchar_t *string, wchar_t **endp, int base)
+{
+#ifdef HAVE_WCSTOUL
+    return wcstoul(string, endp, base);
+#else
+    unsigned long value = 0;
+    size_t len = SDL_ScanUnsignedLongW(string, 0, base, &value);
+    if (endp) {
+        *endp = (wchar_t *)string + len;
+    }
+    return value;
+#endif // HAVE_WCSTOUL
 }
 
 size_t SDL_strlcpy(SDL_OUT_Z_CAP(maxlen) char *dst, const char *src, size_t maxlen)

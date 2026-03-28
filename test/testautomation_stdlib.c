@@ -1287,54 +1287,59 @@ stdlib_strpbrk(void *arg)
     return TEST_COMPLETED;
 }
 
-static int SDLCALL stdlib_wcstol(void *arg)
+static int SDLCALL stdlib_wcstox(void *arg)
 {
     const long long_max = (~0UL) >> 1;
     const long long_min = ((~0UL) >> 1) + 1UL;
 
-#define WCSTOL_TEST_CASE(str, base, expected_result, expected_endp_offset) do {                             \
-        const wchar_t *s = str;                                                                             \
-        long r, expected_r = expected_result;                                                               \
-        wchar_t *ep, *expected_ep = (wchar_t *)s + expected_endp_offset;                                    \
-        r = SDL_wcstol(s, &ep, base);                                                                       \
-        SDLTest_AssertPass("Call to SDL_wcstol(" #str ", &endp, " #base ")");                               \
-        SDLTest_AssertCheck(r == expected_r, "Check result value, expected: %ld, got: %ld", expected_r, r); \
-        SDLTest_AssertCheck(ep == expected_ep, "Check endp value, expected: %p, got: %p", expected_ep, ep); \
+#define WCSTOX_TEST_CASE(func_name, type, format_spec, str, base, expected_result, expected_endp_offset)                                      \
+    do {                                                                                                                         \
+        const wchar_t *s = str;                                                                                                  \
+        type r, expected_r = expected_result;                                                                                    \
+        wchar_t *ep, *expected_ep = (wchar_t *)s + expected_endp_offset;                                                         \
+        r = func_name(s, &ep, base);                                                                                             \
+        SDLTest_AssertPass("Call to " #func_name "(" #str ", &endp, " #base ")");                                                \
+        SDLTest_AssertCheck(r == expected_r, "Check result value, expected: " format_spec ", got: " format_spec, expected_r, r); \
+        SDLTest_AssertCheck(ep == expected_ep, "Check endp value, expected: %p, got: %p", expected_ep, ep);                      \
     } while (0)
 
     // infer decimal
-    WCSTOL_TEST_CASE(L"\t  123abcxyz", 0, 123, 6); // skip leading space
-    WCSTOL_TEST_CASE(L"+123abcxyz", 0, 123, 4);
-    WCSTOL_TEST_CASE(L"-123abcxyz", 0, -123, 4);
-    WCSTOL_TEST_CASE(L"99999999999999999999abcxyz", 0, long_max, 20);
-    WCSTOL_TEST_CASE(L"-99999999999999999999abcxyz", 0, long_min, 21);
+    WCSTOX_TEST_CASE(SDL_wcstol, long, "%ld", L"\t  123abcxyz", 0, 123, 6); // skip leading space
+    WCSTOX_TEST_CASE(SDL_wcstol, long, "%ld", L"+123abcxyz", 0, 123, 4);
+    WCSTOX_TEST_CASE(SDL_wcstol, long, "%ld", L"-123abcxyz", 0, -123, 4);
+    WCSTOX_TEST_CASE(SDL_wcstol, long, "%ld", L"99999999999999999999abcxyz", 0, long_max, 20);
+    WCSTOX_TEST_CASE(SDL_wcstol, long, "%ld", L"-99999999999999999999abcxyz", 0, long_min, 21);
 
     // infer hexadecimal
-    WCSTOL_TEST_CASE(L"0x123abcxyz", 0, 0x123abc, 8);
-    WCSTOL_TEST_CASE(L"0X123ABCXYZ", 0, 0x123abc, 8); // uppercase X
+    WCSTOX_TEST_CASE(SDL_wcstol, long, "%ld", L"0x123abcxyz", 0, 0x123abc, 8);
+    WCSTOX_TEST_CASE(SDL_wcstol, long, "%ld", L"0X123ABCXYZ", 0, 0x123abc, 8); // uppercase X
 
     // infer octal
-    WCSTOL_TEST_CASE(L"0123abcxyz", 0, 0123, 4);
+    WCSTOX_TEST_CASE(SDL_wcstol, long, "%ld", L"0123abcxyz", 0, 0123, 4);
 
     // arbitrary bases
-    WCSTOL_TEST_CASE(L"00110011", 2, 51, 8);
-    WCSTOL_TEST_CASE(L"-uvwxyz", 32, -991, 3);
-    WCSTOL_TEST_CASE(L"ZzZzZzZzZzZzZ", 36, long_max, 13);
+    WCSTOX_TEST_CASE(SDL_wcstol, long, "%ld", L"00110011", 2, 51, 8);
+    WCSTOX_TEST_CASE(SDL_wcstol, long, "%ld", L"-uvwxyz", 32, -991, 3);
+    WCSTOX_TEST_CASE(SDL_wcstol, long, "%ld", L"ZzZzZzZzZzZzZ", 36, long_max, 13);
 
-    WCSTOL_TEST_CASE(L"-0", 10, 0, 2);
-    WCSTOL_TEST_CASE(L" - 1", 0, 0, 0); // invalid input
+    WCSTOX_TEST_CASE(SDL_wcstol, long, "%ld", L"-0", 10, 0, 2);
+    WCSTOX_TEST_CASE(SDL_wcstol, long, "%ld", L" - 1", 0, 0, 0); // invalid input
 
     // values near the bounds of the type
     const bool long_is_32bit = sizeof(long) == 4;
     if (long_is_32bit) {
-        WCSTOL_TEST_CASE(L"2147483647", 10, 2147483647, 10);
-        WCSTOL_TEST_CASE(L"2147483648", 10, 2147483647, 10);
-        WCSTOL_TEST_CASE(L"-2147483648", 10, -2147483647L - 1, 11);
-        WCSTOL_TEST_CASE(L"-2147483649", 10, -2147483647L - 1, 11);
-        WCSTOL_TEST_CASE(L"-9999999999999999999999999999999999999999", 10, -2147483647L - 1, 41);
+        WCSTOX_TEST_CASE(SDL_wcstol, long, "%ld", L"2147483647", 10, 2147483647, 10);
+        WCSTOX_TEST_CASE(SDL_wcstol, long, "%ld", L"2147483648", 10, 2147483647, 10);
+        WCSTOX_TEST_CASE(SDL_wcstol, long, "%ld", L"-2147483648", 10, -2147483647L - 1, 11);
+        WCSTOX_TEST_CASE(SDL_wcstol, long, "%ld", L"-2147483649", 10, -2147483647L - 1, 11);
+        WCSTOX_TEST_CASE(SDL_wcstol, long, "%ld", L"-9999999999999999999999999999999999999999", 10, -2147483647L - 1, 41);
+
+        WCSTOX_TEST_CASE(SDL_wcstoul, unsigned long, "%lu", L"4294967295", 10, 4294967295UL, 10);
+        WCSTOX_TEST_CASE(SDL_wcstoul, unsigned long, "%lu", L"4294967296", 10, 4294967295UL, 10);
+        WCSTOX_TEST_CASE(SDL_wcstoul, unsigned long, "%lu", L"-4294967295", 10, 1, 11);
     }
 
-#undef WCSTOL_TEST_CASE
+#undef WCSTOX_TEST_CASE
 
     return TEST_COMPLETED;
 }
@@ -1492,8 +1497,8 @@ static const SDLTest_TestCaseReference stdlibTest_strpbrk = {
     stdlib_strpbrk, "stdlib_strpbrk", "Calls to SDL_strpbrk", TEST_ENABLED
 };
 
-static const SDLTest_TestCaseReference stdlibTest_wcstol = {
-    stdlib_wcstol, "stdlib_wcstol", "Calls to SDL_wcstol", TEST_ENABLED
+static const SDLTest_TestCaseReference stdlibTest_wcstox = {
+    stdlib_wcstox, "stdlib_wcstox", "Calls to SDL_wcstol and SDL_wcstoul", TEST_ENABLED
 };
 
 static const SDLTest_TestCaseReference stdlibTest_strtox = {
@@ -1517,7 +1522,7 @@ static const SDLTest_TestCaseReference *stdlibTests[] = {
     &stdlibTestOverflow,
     &stdlibTest_iconv,
     &stdlibTest_strpbrk,
-    &stdlibTest_wcstol,
+    &stdlibTest_wcstox,
     &stdlibTest_strtox,
     &stdlibTest_strtod,
     NULL
