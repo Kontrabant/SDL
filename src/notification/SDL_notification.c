@@ -51,7 +51,7 @@ SDL_NotificationID SDL_ShowSimpleNotification(const char *title, const char *mes
         SDL_SetStringProperty(props, SDL_PROP_NOTIFICATION_MESSAGE_STRING, message);
     }
     if (icon) {
-        SDL_SetPointerProperty(props, SDL_PROP_NOTIFICATION_ICON_POINTER, icon);
+        SDL_SetPointerProperty(props, SDL_PROP_NOTIFICATION_IMAGE_POINTER, icon);
     }
 
     SDL_NotificationID id = SDL_ShowNotificationWithProperties(props);

@@ -89,7 +89,7 @@ typedef struct SDL_NotificationData
 
 #define SDL_PROP_NOTIFICATION_TITLE_STRING      "SDL.notification.title"
 #define SDL_PROP_NOTIFICATION_MESSAGE_STRING    "SDL.notification.message"
-#define SDL_PROP_NOTIFICATION_ICON_POINTER      "SDL.notification.icon"
+#define SDL_PROP_NOTIFICATION_IMAGE_POINTER     "SDL.notification.icon"
 #define SDL_PROP_NOTIFICATION_ACTIONS_POINTER   "SDL.notification.actions"
 #define SDL_PROP_NOTIFICATION_PRIORITY_NUMBER   "SDL.notification.priority"
 #define SDL_PROP_NOTIFICATION_TRANSIENT_BOOLEAN "SDL.notification.transient"

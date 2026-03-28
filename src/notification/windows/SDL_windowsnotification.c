@@ -196,8 +196,8 @@ static HRESULT STDMETHODCALLTYPE Impl_INotificationActivationCallback_Activate(I
         }
         WideCharToMultiByte(CP_UTF8, 0, invokedArgs, -1, utf8_args, len, NULL, NULL);
 
-        char action[256];
-        const int ret = SDL_sscanf(utf8_args, "notification_id=%" SDL_PRIu32 ",action=%s", &id, action);
+        char action[512];
+        const int ret = SDL_sscanf(utf8_args, "action:%" SDL_PRIu32 ",%s", &id, action);
         SDL_free(utf8_args);
         if (ret != 2) {
             goto done;
@@ -514,10 +514,14 @@ static WCHAR *GetAppMetadata(const char *metadata_name)
     } else {
         WCHAR *wszExePath = GetExePath();
 
-        metadata = wcsrchr(wszExePath, L'\\');
-        if (metadata) {
-            ++metadata;
-        } else {
+        for (WCHAR *c = wszExePath + SDL_wcslen(wszExePath); c >= wszExePath; --c) {
+            if (*c == L'/' || *c == L'\\') {
+                metadata = c + 1;
+                break;
+            }
+        }
+
+        if (!metadata) {
             metadata = wszExePath;
         }
 
@@ -782,10 +786,10 @@ static bool AppendXmlImage(SDL_IOStream *dst, const WCHAR *image_path)
     return ret;
 }
 
-#define XML_TOAST_OPENING_STR                                                                   \
-    L"<toast scenario=\"default\" activationType=\"foreground\" launch=\"action=mainContent\">" \
-    L"<visual>"                                                                                 \
-    L"<binding template=\"ToastGeneric\">"
+#define XML_TOAST_OPENING_STR_PART_1 L"<toast scenario=\"default\" activationType=\"foreground\" launch=\"action:"
+#define XML_TOAST_OPENING_STR_PART_2 L",default\">" \
+                                     L"<visual>"    \
+                                     L"<binding template=\"ToastGeneric\">"
 #define XML_TOAST_CLOSING_STR   L"</toast>"
 #define XML_TEXT_OPENING_STR    L"<text><![CDATA["
 #define XML_TEXT_CLOSING_STR    L"]]></text>"
@@ -836,8 +840,24 @@ static WCHAR *BuildNotificationXml(SDL_PropertiesID props, const WCHAR *icon_pat
     const SDL_NotificationAction **actions = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_ACTIONS_POINTER, NULL);
     const bool silent = SDL_GetBooleanProperty(props, SDL_PROP_NOTIFICATION_SILENT_BOOLEAN, false);
 
-    size_t size = sizeof(XML_TOAST_OPENING_STR) - sizeof(WCHAR);
-    if (SDL_WriteIO(dst, XML_TOAST_OPENING_STR, size) < size) {
+    size_t size = sizeof(XML_TOAST_OPENING_STR_PART_1) - sizeof(WCHAR);
+    if (SDL_WriteIO(dst, XML_TOAST_OPENING_STR_PART_1, size) < size) {
+        goto done;
+    }
+    {
+        WCHAR wcid[32];
+        const int ret = SDL_swprintf(wcid, SDL_arraysize(wcid), L"%" SDL_PRIu32, id);
+        if (ret <= 0) {
+            goto done;
+        }
+
+        size = (size_t)ret * sizeof(WCHAR);
+        if (SDL_WriteIO(dst, wcid, size) < size) {
+            goto done;
+        }
+    }
+    size = sizeof(XML_TOAST_OPENING_STR_PART_2) - sizeof(WCHAR);
+    if (SDL_WriteIO(dst, XML_TOAST_OPENING_STR_PART_2, size) < size) {
         goto done;
     }
     if (!AppendXmlImage(dst, icon_path)) {
@@ -931,7 +951,7 @@ cleanup:
 
 static void SDL_SYS_CleanupNotifications(bool cleanup_reg_keys);
 
-NTSTATUS WIN_BCryptGenRandom(BCRYPT_ALG_HANDLE hAlgorithm, PUCHAR pbBuffer, ULONG cbBuffer,ULONG dwFlags)
+NTSTATUS WIN_BCryptGenRandom(BCRYPT_ALG_HANDLE hAlgorithm, PUCHAR pbBuffer, ULONG cbBuffer, ULONG dwFlags)
 {
     static bool s_bLoaded;
     static HMODULE s_hBCrypt;
@@ -968,7 +988,7 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
         return 0;
     }
 
-    SDL_Surface *icon = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_ICON_POINTER, NULL);
+    SDL_Surface *image = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_IMAGE_POINTER, NULL);
     const SDL_NotificationID replaces = SDL_GetNumberProperty(props, SDL_PROP_NOTIFICATION_REPLACES_NUMBER, 0);
     const SDL_NotificationPriority priority = SDL_GetNumberProperty(props, SDL_PROP_NOTIFICATION_PRIORITY_NUMBER, SDL_NOTIFICATION_PRIORITY_NORMAL);
     const bool transient = SDL_GetBooleanProperty(props, SDL_PROP_NOTIFICATION_TRANSIENT_BOOLEAN, false);
@@ -985,7 +1005,7 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
     }
 
     // Windows notifications load images from disk, so save it to temporary storage.
-    WCHAR *image_path = SaveToastIcon(icon, false);
+    WCHAR *image_path = SaveToastIcon(image, false);
 
     // Build the XML description for the notification.
     Uint32 xml_len = 0;

@@ -44,10 +44,36 @@
 #define ALL_PRIORITY_FLAGS (SDL_NOTIFICATION_PRIORITY_LOW | SDL_NOTIFICATION_PRIORITY_NORMAL | \
                             SDL_NOTIFICATION_PRIORITY_HIGH | SDL_NOTIFICATION_PRIORITY_URGENT)
 
-static bool core_listener_registered = false;
-static bool portal_listener_registered = false;
+static bool core_listener_registered;
+static bool portal_listener_registered;
 
 static char *icon_uri;
+static Uint64 session_id;
+
+static Uint32 core_id_list[32];
+static Uint32 core_id_count;
+
+static void GetRandom(void *dst, size_t size)
+{
+    int fd = open("/dev/urandom", O_RDONLY);
+    if (fd < 0) {
+        fd = open("/dev/random", O_RDONLY);
+    }
+    if (fd >= 0) {
+        while (read(fd, dst, size) != size) {
+        }
+        close(fd);
+    } else {
+        size_t written = 0;
+
+        while (written < size) {
+            const Uint64 tval = SDL_GetTicksNS();
+            const size_t towrite = SDL_min(size - written, sizeof(tval));
+            SDL_memcpy((Uint8 *)dst + written, &tval, towrite);
+            written += towrite;
+        }
+    }
+}
 
 static bool IsInContainer()
 {
@@ -119,7 +145,34 @@ static DBusHandlerResult CoreNotificationFilter(DBusConnection *conn, DBusMessag
         }
         dbus->message_iter_get_basic(&signal_iter, &button);
         if (button) {
-            SDL_SendNotificationAction(id, button);
+            char action[512];
+            bool send_event = false;
+
+            /* Core notifications don't provide a session ID for default actions,
+             * so they need to be checked against the list.
+             */
+            if (SDL_strcmp(button, "default") == 0) {
+                for (Uint32 i = 0; i < core_id_count; i++) {
+                    if (core_id_list[i] == id) {
+                        send_event = true;
+                        SDL_strlcpy(action, "default", sizeof(action));
+                        break;
+                    }
+                }
+            } else {
+                Uint64 session = 0;
+                if (SDL_sscanf(button, "SDL_session=%" SDL_PRIu64 ",button=%s", &session, action) == 2) {
+                    if (session == session_id) {
+                        send_event = true;
+                    }
+                }
+            }
+
+            if (send_event) {
+                SDL_SendNotificationAction(id, action);
+            } else {
+                goto not_our_signal;
+            }
         }
 
         return DBUS_HANDLER_RESULT_HANDLED;
@@ -131,7 +184,7 @@ not_our_signal:
 
 // Only add the filter if at least one of the settings we want is present.
 
-static bool SetCoreIcon(SDL_DBusContext *dbus, DBusMessageIter *iterInit, SDL_Surface *surface)
+static bool SetCoreImage(SDL_DBusContext *dbus, DBusMessageIter *iterInit, SDL_Surface *surface)
 {
     DBusMessageIter iterEntry, iterValue;
     DBusMessageIter iter, array;
@@ -209,7 +262,8 @@ static bool SetCoreIcon(SDL_DBusContext *dbus, DBusMessageIter *iterInit, SDL_Su
 static bool SetCoreHints(SDL_DBusContext *dbus, DBusMessageIter *iterInit, SDL_PropertiesID props)
 {
     DBusMessageIter iterDict;
-    SDL_Surface *icon = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_ICON_POINTER, NULL);
+    const char *app_id = SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_IDENTIFIER_STRING);
+    SDL_Surface *icon = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_IMAGE_POINTER, NULL);
     SDL_NotificationPriority priority = SDL_GetNumberProperty(props, SDL_PROP_NOTIFICATION_PRIORITY_NUMBER, SDL_NOTIFICATION_PRIORITY_NORMAL);
     const bool transient = SDL_GetBooleanProperty(props, SDL_PROP_NOTIFICATION_TRANSIENT_BOOLEAN, false);
     const bool silent = SDL_GetBooleanProperty(props, SDL_PROP_NOTIFICATION_SILENT_BOOLEAN, false);
@@ -236,6 +290,10 @@ static bool SetCoreHints(SDL_DBusContext *dbus, DBusMessageIter *iterInit, SDL_P
 
     AppendOption(dbus, &iterDict, DBUS_TYPE_BYTE_AS_STRING, "urgency", &dbus_priority);
 
+    if (app_id) {
+        AppendOption(dbus, &iterDict, DBUS_TYPE_STRING_AS_STRING, "desktop-entry", &app_id);
+    }
+
     const dbus_bool_t db_transient = transient;
     AppendOption(dbus, &iterDict, DBUS_TYPE_BOOLEAN_AS_STRING, "transient", &db_transient);
 
@@ -249,7 +307,7 @@ static bool SetCoreHints(SDL_DBusContext *dbus, DBusMessageIter *iterInit, SDL_P
             icon_surface = SDL_ConvertSurface(icon, SDL_PIXELFORMAT_ABGR8888);
         }
 
-        SetCoreIcon(dbus, &iterDict, icon_surface);
+        SetCoreImage(dbus, &iterDict, icon_surface);
 
         if (icon_surface != icon) {
             SDL_DestroySurface(icon_surface);
@@ -271,6 +329,10 @@ static bool InitCoreSignalListener(SDL_DBusContext *dbus)
 {
     if (core_listener_registered) {
         return true;
+    }
+
+    if (!session_id) {
+        GetRandom(&session_id, sizeof(session_id));
     }
 
     DBusError error;
@@ -354,7 +416,7 @@ static SDL_NotificationID ShowCoreNotification(SDL_DBusContext *dbus, SDL_Proper
     DBusConnection *conn = dbus->session_conn;
     DBusMessage *msg = NULL;
     DBusMessageIter iter, array;
-    const char *id = SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_NAME_STRING);
+    const char *tmpstr = NULL;
     Uint32 message_id = 0;
 
     if (!InitCoreSignalListener(dbus)) {
@@ -374,27 +436,51 @@ static SDL_NotificationID ShowCoreNotification(SDL_DBusContext *dbus, SDL_Proper
 
     dbus->message_iter_init_append(msg, &iter);
     // App ID
-    if (!id) {
+    tmpstr = SDL_GetAppMetadataProperty(SDL_PROP_APP_METADATA_NAME_STRING);
+    if (!tmpstr) {
         SDL_GetAppID();
     }
-    dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &id);
+    dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &tmpstr);
+
     // Replaces id
     const Uint32 uid = replaces;
     dbus->message_iter_append_basic(&iter, DBUS_TYPE_UINT32, &uid);
+
     // Icon URI
-    id = GetIconURI();
-    dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &id);
+    tmpstr = GetIconURI();
+    if (!tmpstr) {
+        tmpstr = "";
+    }
+    dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &tmpstr);
+
     // Summary
     dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &title);
+
     // Body
+    tmpstr = message ? message : "";
     dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &message);
-    // Actions
-    dbus->message_iter_open_container(&iter, DBUS_TYPE_ARRAY, DBUS_TYPE_STRING_AS_STRING, &array);
-    for (int i = 0; actions[i]; ++i) {
-        dbus->message_iter_append_basic(&array, DBUS_TYPE_STRING, &actions[i]->button_id);
-        dbus->message_iter_append_basic(&array, DBUS_TYPE_STRING, &actions[i]->button_label);
+
+    {
+        // Actions
+        dbus->message_iter_open_container(&iter, DBUS_TYPE_ARRAY, DBUS_TYPE_STRING_AS_STRING, &array);
+
+        // Add the default action
+        tmpstr = "default";
+        dbus->message_iter_append_basic(&array, DBUS_TYPE_STRING, &tmpstr);
+        dbus->message_iter_append_basic(&array, DBUS_TYPE_STRING, &tmpstr);
+
+        // Add the buttons
+        if (actions) {
+            char fmt_action_id[512];
+            for (int i = 0; actions[i]; ++i) {
+                SDL_snprintf(fmt_action_id, sizeof(fmt_action_id), "SDL_session=%" SDL_PRIu64 ",button=%s", session_id, actions[i]->button_id);
+                tmpstr = fmt_action_id;
+                dbus->message_iter_append_basic(&array, DBUS_TYPE_STRING, &tmpstr);
+                dbus->message_iter_append_basic(&array, DBUS_TYPE_STRING, &actions[i]->button_label);
+            }
+        }
+        dbus->message_iter_close_container(&iter, &array);
     }
-    dbus->message_iter_close_container(&iter, &array);
 
     // Hints
     SetCoreHints(dbus, &iter, props);
@@ -426,6 +512,11 @@ static SDL_NotificationID ShowCoreNotification(SDL_DBusContext *dbus, SDL_Proper
     dbus->message_iter_get_basic(&reply_iter, &message_id);
     dbus->message_unref(reply);
 
+    core_id_list[core_id_count++] = message_id;
+    if (core_id_count == SDL_arraysize(core_id_list)) {
+        SDL_memmove(core_id_list, &core_id_list[1], --core_id_count);
+    }
+
     return message_id;
 
 failure:
@@ -453,9 +544,10 @@ static DBusHandlerResult PortalNotificationFilter(DBusConnection *conn, DBusMess
         dbus->message_iter_get_basic(&signal_iter, &str);
 
         // Parse the ID.
+        Uint64 session = 0;
         Uint32 id = 0;
-        const int ret = SDL_sscanf(str, "SDL3_DBusPortalNotification-%" SDL_PRIu32, &id);
-        if (ret != 1) {
+        const int ret = SDL_sscanf(str, "SDL3_DBusPortalNotification:%" SDL_PRIu64 ",%" SDL_PRIu32, &session, &id);
+        if (ret != 2) {
             goto not_our_signal;
         }
 
@@ -592,6 +684,10 @@ static bool InitPortalSignalListener(SDL_DBusContext *dbus)
         return true;
     }
 
+    if (!session_id) {
+        GetRandom(&session_id, sizeof(session_id));
+    }
+
     DBusError error;
     dbus->error_init(&error);
 
@@ -615,32 +711,6 @@ static bool InitPortalSignalListener(SDL_DBusContext *dbus)
     return true;
 }
 
-static SDL_NotificationID GetNewID()
-{
-    SDL_NotificationID random_id = 0;
-
-    /* Generate a reasonably unique ID for the notification
-     * with a low chance of collision.
-     *
-     * Try /dev/urandom first, then fall back to the time.
-     */
-    int fd = open("/dev/urandom", O_RDONLY);
-    if (fd < 0) {
-        open("/dev/random", O_RDONLY);
-    }
-    if (fd >= 0) {
-        if (read(fd, &random_id, sizeof(random_id)) != sizeof(random_id)) {
-            random_id = 0;
-        }
-        close(fd);
-    }
-    if (!random_id) {
-        random_id = (SDL_NotificationID)SDL_GetTicksNS();
-    }
-
-    return random_id;
-}
-
 static SDL_NotificationID ShowPortalNotification(SDL_DBusContext *dbus, SDL_PropertiesID props)
 {
     DBusConnection *conn = dbus->session_conn;
@@ -655,7 +725,7 @@ static SDL_NotificationID ShowPortalNotification(SDL_DBusContext *dbus, SDL_Prop
     const char *title = SDL_GetStringProperty(props, SDL_PROP_NOTIFICATION_TITLE_STRING, NULL);
     const char *message = SDL_GetStringProperty(props, SDL_PROP_NOTIFICATION_MESSAGE_STRING, NULL);
     const SDL_NotificationPriority priority = SDL_GetNumberProperty(props, SDL_PROP_NOTIFICATION_PRIORITY_NUMBER, SDL_NOTIFICATION_PRIORITY_NORMAL);
-    SDL_Surface *icon = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_ICON_POINTER, NULL);
+    SDL_Surface *icon = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_IMAGE_POINTER, NULL);
     const SDL_NotificationAction **actions = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_ACTIONS_POINTER, NULL);
     const bool silent = SDL_GetBooleanProperty(props, SDL_PROP_NOTIFICATION_SILENT_BOOLEAN, false);
 
@@ -668,20 +738,25 @@ static SDL_NotificationID ShowPortalNotification(SDL_DBusContext *dbus, SDL_Prop
     dbus->message_iter_init_append(msg, &iter);
 
     // Notification ID
-    char id_str[128];
-    const Uint32 new_id = replaces ? replaces : GetNewID();
-    if (!new_id) {
-        SDL_SetError("Failed to generate an ID for the notification");
-        goto failure;
+    Uint32 new_id = 0;
+    if (!replaces) {
+        GetRandom(&new_id, sizeof(new_id));
+    } else {
+        new_id = replaces;
     }
-    SDL_snprintf(id_str, SDL_arraysize(id_str), "SDL3_DBusPortalNotification-%" SDL_PRIu32, new_id);
-    const char *id = id_str;
-    dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &id);
+
+    {
+        char id_str[512];
+        SDL_snprintf(id_str, SDL_arraysize(id_str), "SDL3_DBusPortalNotification:%" SDL_PRIu64 ",%" SDL_PRIu32, session_id, new_id);
+        const char *id = id_str;
+        dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &id);
+    }
 
     // Parameters
     dbus->message_iter_open_container(&iter, DBUS_TYPE_ARRAY, "{sv}", &array);
     AppendStringOption(dbus, &array, "title", title);
     AppendStringOption(dbus, &array, "body", message);
+    AppendStringOption(dbus, &array, "default-action", "default");
 
     SetPortalSound(dbus, &array, silent);
 
@@ -759,7 +834,7 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
     }
 
     // The portal is only used if inside a container, or the app association can be wrong.
-    if (IsInContainer()) {
+    if (!IsInContainer()) {
         return ShowPortalNotification(dbus, props);
     } else {
         return ShowCoreNotification(dbus, props);
@@ -796,7 +871,10 @@ void SDL_CleanupNotifications()
     if (icon_uri) {
         unlink(icon_uri);
         SDL_free(icon_uri);
+        icon_uri = NULL;
     }
+
+    session_id = 0;
 }
 
 bool SDL_RequestNotificationPermission()

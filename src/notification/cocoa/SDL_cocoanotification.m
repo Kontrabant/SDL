@@ -191,7 +191,7 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
             // Get the notification properties.
             const char *title = SDL_GetStringProperty(props, SDL_PROP_NOTIFICATION_TITLE_STRING, NULL);
             const char *message = SDL_GetStringProperty(props, SDL_PROP_NOTIFICATION_MESSAGE_STRING, "");
-            SDL_Surface *icon = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_ICON_POINTER, NULL);
+            SDL_Surface *image = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_IMAGE_POINTER, NULL);
             const SDL_NotificationID replaces = (SDL_NotificationID)SDL_GetNumberProperty(props, SDL_PROP_NOTIFICATION_REPLACES_NUMBER, 0);
             const SDL_NotificationPriority priority = (SDL_NotificationPriority)SDL_GetNumberProperty(props, SDL_PROP_NOTIFICATION_PRIORITY_NUMBER, SDL_NOTIFICATION_PRIORITY_NORMAL);
             const SDL_NotificationAction **sdlactions = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_ACTIONS_POINTER, NULL);
@@ -263,8 +263,8 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
             }
 
             // Notifications load images from file paths, so save it to a temporary location.
-            if (icon) {
-                NSURL *url = SaveTempImage(icon);
+            if (image) {
+                NSURL *url = SaveTempImage(image);
                 if (url) {
                     UNNotificationAttachment *attach = [UNNotificationAttachment attachmentWithIdentifier:@"" URL:url options:nil error:nil];
                     content.attachments = @[ attach ];

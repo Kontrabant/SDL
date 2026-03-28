@@ -68,7 +68,7 @@ int main(int argc, char *argv[])
         SDL_PropertiesID props = SDL_CreateProperties();
         SDL_SetStringProperty(props, SDL_PROP_NOTIFICATION_TITLE_STRING, "Test Notification");
         SDL_SetStringProperty(props, SDL_PROP_NOTIFICATION_MESSAGE_STRING, "Hey, pay attention to me!");
-        SDL_SetPointerProperty(props, SDL_PROP_NOTIFICATION_ICON_POINTER, icon);
+        SDL_SetPointerProperty(props, SDL_PROP_NOTIFICATION_IMAGE_POINTER, icon);
         SDL_SetPointerProperty(props, SDL_PROP_NOTIFICATION_ACTIONS_POINTER, action_array);
 
         SDL_NotificationID last_id = 0;
@@ -96,15 +96,12 @@ int main(int argc, char *argv[])
                         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s", SDL_GetError());
                     }
                 } else if (event.type == SDL_EVENT_NOTIFICATION_ACTION) {
-                    SDL_Log("User responded to notification %" SDL_PRIu32 " with action %s", event.notification.which, event.notification.button_id);
+                    SDL_Log("User responded to notification %" SDL_PRIu32 " with action \"%s\"", event.notification.which, event.notification.button_id);
                 } else if (event.type == SDL_EVENT_QUIT) {
                     goto breakout;
                 }
             }
 
-            /* On wayland, no window will actually show until something has
-             * actually been displayed.
-             */
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
             SDL_RenderClear(renderer);
             SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
