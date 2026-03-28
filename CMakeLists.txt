@@ -1126,7 +1126,7 @@ if(SDL_LIBC)
     tan tanf trunc truncf
     unsetenv
     vsnprintf vsscanf
-    wcsnlen wcscmp wcsdup wcslcat wcslcpy wcslen wcsncmp wcsstr wcstol
+    wcsnlen wcscmp wcsdup wcslcat wcslcpy wcslen wcsncmp wcsstr wcstol wcstoll wcstoul wcstoull
   )
   if(WINDOWS)
     list(APPEND symbols_to_check

@@ -147,6 +147,8 @@ STDLIB_SYMBOLS = (
     'wcsncasecmp',
     'wcsncmp',
     'wcsstr',
+    'wcstol',
+    'wcstoul',
 )
 RE_STDLIB_SYMBOL = re.compile(rf"(?<!->)\b(?P<symbol>{'|'.join(STDLIB_SYMBOLS)})\b\(")
 
