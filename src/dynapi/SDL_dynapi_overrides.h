@@ -1313,3 +1313,6 @@
 #define SDL_GDKResumeRenderer SDL_GDKResumeRenderer_REAL
 #define SDL_IsPhone SDL_IsPhone_REAL
 #define SDL_wcstoul SDL_wcstoul_REAL
+#define SDL_RequestNotificationPermission SDL_RequestNotificationPermission_REAL
+#define SDL_ShowNotificationWithProperties SDL_ShowNotificationWithProperties_REAL
+#define SDL_ShowSimpleNotification SDL_ShowSimpleNotification_REAL

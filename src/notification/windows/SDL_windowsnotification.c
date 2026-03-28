@@ -37,6 +37,7 @@ typedef HRESULT(WINAPI *RoActivateInstance_t)(HSTRING activatableClassId, IInspe
 typedef HRESULT(WINAPI *WindowsCreateString_t)(PCWSTR sourceString, UINT32 length, HSTRING *string);
 typedef HRESULT(WINAPI *WindowsCreateStringReference_t)(PCWSTR sourceString, UINT32 length, HSTRING_HEADER *hstringHeader, HSTRING *string);
 typedef HRESULT(WINAPI *WindowsDeleteString_t)(HSTRING string);
+typedef PCWSTR(WINAPI *WindowsGetStringRawBuffer_t)(HSTRING string, UINT32 *length);
 typedef NTSTATUS(WINAPI *BCryptGenRandom_t)(BCRYPT_ALG_HANDLE hAlgorithm, PUCHAR pbBuffer, ULONG cbBuffer, ULONG dwFlags);
 
 static RoGetActivationFactory_t WIN_RoGetActivationFactory;
@@ -44,57 +45,10 @@ static RoActivateInstance_t WIN_RoActivateInstance;
 static WindowsCreateString_t WIN_WindowsCreateString;
 static WindowsCreateStringReference_t WIN_WindowsCreateStringReference;
 static WindowsDeleteString_t WIN_WindowsDeleteString;
-
-/* This is normally found in NotificationActivationCallback.h, however, MinGW
- * doesn't provide this header, so the relevant sections are included manually.
- *
- * TODO: Replace with the actual header if MinGW starts including it.
- */
-typedef interface INotificationActivationCallback INotificationActivationCallback;
-
-typedef struct NOTIFICATION_USER_INPUT_DATA
-{
-    LPCWSTR Key;
-    LPCWSTR Value;
-} NOTIFICATION_USER_INPUT_DATA;
-
-typedef struct INotificationActivationCallbackVtbl
-{
-    BEGIN_INTERFACE
-
-    /*** IUnknown methods ***/
-    HRESULT(STDMETHODCALLTYPE *QueryInterface)(
-        INotificationActivationCallback *This,
-        REFIID riid,
-        void **ppvObject);
-
-    ULONG(STDMETHODCALLTYPE *AddRef)(
-        INotificationActivationCallback *This);
-
-    ULONG(STDMETHODCALLTYPE *Release)(
-        INotificationActivationCallback *This);
-
-    /*** INotificationActivationCallback methods ***/
-    HRESULT(STDMETHODCALLTYPE *Activate)(
-        INotificationActivationCallback *This,
-        LPCWSTR appUserModelId,
-        LPCWSTR invokedArgs,
-        const NOTIFICATION_USER_INPUT_DATA *data,
-        ULONG count);
-
-    END_INTERFACE
-} INotificationActivationCallbackVtbl;
-
-interface INotificationActivationCallback
-{
-    CONST_VTBL INotificationActivationCallbackVtbl *lpVtbl;
-};
-// End NotificationActivationCallback.h content
+static WindowsGetStringRawBuffer_t WIN_WindowsGetStringRawBuffer;
 
 // The registry key base needed to register the app instance so notifications can be sent.
-#define REG_KEY_BASE    L"SOFTWARE\\Classes\\AppUserModelId\\"
-#define REG_CLSID_FMT   L"SOFTWARE\\Classes\\CLSID\\%ls\\LocalServer32"
-#define GROUP_ID_STRING L"SDL_Notification"
+#define REG_KEY_BASE L"SOFTWARE\\Classes\\AppUserModelId\\"
 
 // IIDs for the interfaces.
 DEFINE_GUID(IID_IToastNotificationManagerStatics,
@@ -121,23 +75,25 @@ DEFINE_GUID(IID_IXmlDocument,
 DEFINE_GUID(IID_IXmlDocumentIO,
             0x6cd0e74e, 0xee65, 0x4489, 0x9e, 0xbf, 0xca, 0x43, 0xe8, 0x7b, 0xa6, 0x37);
 
+DEFINE_GUID(IID_IToastActivatedEventArgs,
+            0xe3bf92f3, 0xc197, 0x436f, 0x82, 0x65, 0x06, 0x25, 0x82, 0x4f, 0x8d, 0xac);
+
+DEFINE_GUID(IID_IToastActivatedEventHandler,
+            0xab54de2d, 0x97d9, 0x5528, 0xb6, 0xad, 0x10, 0x5a, 0xfe, 0x15, 0x65, 0x30);
+
 DEFINE_GUID(IID_IToastDismissedEventHandler,
             0x61c2402f, 0x0ed0, 0x5a18, 0xab, 0x69, 0x59, 0xf4, 0xaa, 0x99, 0xa3, 0x68);
 
 static struct Impl_IGeneric *pClassFactory = NULL;
 
-static HSTRING hsGroupId = NULL;
+static HSTRING hsGUID = NULL;
 static HSTRING hsAppId = NULL;
 
 static __x_ABI_CWindows_CUI_CNotifications_CIToastNotificationManagerStatics *pToastNotificationManager = NULL;
 static __x_ABI_CWindows_CUI_CNotifications_CIToastNotifier *pToastNotifier = NULL;
 static __x_ABI_CWindows_CUI_CNotifications_CIToastNotificationFactory *pNotificationFactory = NULL;
 
-static DWORD dwCookie = 0;
-
 static GUID guid;
-static WCHAR *guid_str = NULL;
-static WCHAR *guid_reg_key = NULL;
 static WCHAR *app_reg_key = NULL;
 
 static bool ro_initialized = false;
@@ -155,125 +111,69 @@ static ULONG STDMETHODCALLTYPE Impl_IGeneric_AddRef(Impl_IGeneric *_this)
     return SDL_AddAtomicInt(&_this->refCount, 1) + 1;
 }
 
-static ULONG STDMETHODCALLTYPE Impl_IGeneric_Release(Impl_IGeneric *_this)
-{
-    int newRefCount = SDL_AddAtomicInt(&_this->refCount, -1) - 1;
-    if (!newRefCount) {
-        SDL_free(_this);
-    }
-    return (ULONG)newRefCount;
-}
-
-// INotificationActivationCallback implementation
-static HRESULT STDMETHODCALLTYPE Impl_INotificationActivationCallback_QueryInterface(INotificationActivationCallback *_this, REFIID riid, void **ppvObject)
+// OnActivated interface
+static HRESULT STDMETHODCALLTYPE Impl_OnActivated_QueryInterface(__FITypedEventHandler_2_Windows__CUI__CNotifications__CToastNotification_IInspectable *_this, REFIID riid, void **ppvObject)
 {
     if (ppvObject == NULL) {
         return E_POINTER;
     }
-    if (IsEqualGUID(riid, &IID_INotificationActivationCallback) ||
+    if (IsEqualGUID(riid, &IID_IToastActivatedEventHandler) ||
         IsEqualGUID(riid, &IID_IAgileObject) ||
         IsEqualGUID(riid, &IID_IUnknown)) {
         *ppvObject = _this;
         _this->lpVtbl->AddRef(_this);
         return S_OK;
     }
-
     return E_NOINTERFACE;
 }
 
-// This is what is called when the user interacts with a notification.
-static HRESULT STDMETHODCALLTYPE Impl_INotificationActivationCallback_Activate(INotificationActivationCallback *_this, LPCWSTR appUserModelId, LPCWSTR invokedArgs, const NOTIFICATION_USER_INPUT_DATA *data, ULONG count)
+static HRESULT STDMETHODCALLTYPE Impl_OnActivated_Invoke(__FITypedEventHandler_2_Windows__CUI__CNotifications__CToastNotification_IInspectable *_this, __x_ABI_CWindows_CUI_CNotifications_CIToastNotification *Sender, IInspectable *Args)
 {
-    SDL_NotificationID id = 0;
-    if (invokedArgs && *invokedArgs != L'\0') {
-        const int len = WideCharToMultiByte(CP_UTF8, 0, invokedArgs, -1, NULL, 0, NULL, NULL);
-        if (len <= 0) {
-            goto done;
-        }
-        char *utf8_args = SDL_malloc(len * sizeof(char));
-        if (!utf8_args) {
-            goto done;
-        }
-        WideCharToMultiByte(CP_UTF8, 0, invokedArgs, -1, utf8_args, len, NULL, NULL);
+    __x_ABI_CWindows_CUI_CNotifications_CIToastActivatedEventArgs *pEventArgs;
+    HRESULT hr = Args->lpVtbl->QueryInterface(Args, &IID_IToastActivatedEventArgs, (LPVOID *)&pEventArgs);
+    if (SUCCEEDED(hr)) {
+        SDL_NotificationID id = 0;
 
-        char action[512];
-        const int ret = SDL_sscanf(utf8_args, "action:%" SDL_PRIu32 ",%s", &id, action);
-        SDL_free(utf8_args);
-        if (ret != 2) {
-            goto done;
+        __x_ABI_CWindows_CUI_CNotifications_CIToastNotification2 *pToastNotification2;
+        hr = Sender->lpVtbl->QueryInterface(Sender, &IID_IToastNotification2, (LPVOID *)&pToastNotification2);
+        if (SUCCEEDED(hr)) {
+            HSTRING hsTag;
+            hr = pToastNotification2->lpVtbl->get_Tag(pToastNotification2, &hsTag);
+            if (SUCCEEDED(hr)) {
+                PCWSTR tag = WIN_WindowsGetStringRawBuffer(hsTag, NULL);
+                id = (SDL_NotificationID)SDL_wcstoul(tag, NULL, 10);
+            }
+            pToastNotification2->lpVtbl->Release(pToastNotification2);
         }
 
-        SDL_SendNotificationAction(id, action);
+        if (id) {
+            HSTRING hsEventString;
+            hr = pEventArgs->lpVtbl->get_Arguments(pEventArgs, &hsEventString);
+            if (SUCCEEDED(hr)) {
+                PCWCHAR wstr = WIN_WindowsGetStringRawBuffer(hsEventString, NULL);
+                if (wstr) {
+                    char tmp[512];
+                    const int len = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, tmp, sizeof(tmp), NULL, NULL);
+                    if (len > 0 && len <= sizeof(tmp)) {
+                        SDL_SendNotificationAction(id, tmp);
+                    }
+                }
+            }
+        }
     }
 
-done:
     return S_OK;
 }
 
-static const INotificationActivationCallbackVtbl Impl_INotificationActivationCallback_Vtbl = {
-    .QueryInterface = (void *)Impl_INotificationActivationCallback_QueryInterface,
+static __FITypedEventHandler_2_Windows__CUI__CNotifications__CToastNotification_IInspectableVtbl WindowsToast__OnActivatedVtbl = {
+    .QueryInterface = &Impl_OnActivated_QueryInterface,
     .AddRef = (void *)Impl_IGeneric_AddRef,
-    .Release = (void *)Impl_IGeneric_Release,
-    .Activate = Impl_INotificationActivationCallback_Activate
+    .Release = (void *)Impl_IGeneric_AddRef,
+    .Invoke = &Impl_OnActivated_Invoke,
 };
 
-// IClassFactory
-static HRESULT STDMETHODCALLTYPE Impl_IClassFactory_QueryInterface(Impl_IGeneric *_this, REFIID riid, void **ppvObject)
-{
-    if (ppvObject == NULL) {
-        return E_POINTER;
-    }
-    if (IsEqualGUID(riid, &IID_IClassFactory) ||
-        IsEqualGUID(riid, &IID_IAgileObject) ||
-        IsEqualGUID(riid, &IID_IUnknown)) {
-        *ppvObject = _this;
-        _this->lpVtbl->AddRef((IUnknown *)_this);
-        return S_OK;
-    }
-
-    return E_NOINTERFACE;
-}
-
-static HRESULT STDMETHODCALLTYPE Impl_IClassFactory_LockServer(IClassFactory *_this, BOOL flock)
-{
-    return S_OK;
-}
-
-static HRESULT STDMETHODCALLTYPE Impl_IClassFactory_CreateInstance(IClassFactory *_this, IUnknown *punkOuter, REFIID vTableGuid, void **ppv)
-{
-    HRESULT hr = E_NOINTERFACE;
-    Impl_IGeneric *thisobj = NULL;
-    *ppv = 0;
-
-    if (punkOuter) {
-        hr = CLASS_E_NOAGGREGATION;
-    } else {
-        BOOL bOk = FALSE;
-        thisobj = SDL_malloc(sizeof(Impl_IGeneric));
-        if (!thisobj) {
-            hr = E_OUTOFMEMORY;
-        } else {
-            thisobj->lpVtbl = (IUnknownVtbl *)&Impl_INotificationActivationCallback_Vtbl;
-            bOk = TRUE;
-        }
-        if (bOk) {
-            SDL_SetAtomicInt(&thisobj->refCount, 1);
-            hr = thisobj->lpVtbl->QueryInterface((IUnknown *)thisobj, vTableGuid, ppv);
-            thisobj->lpVtbl->Release((IUnknown *)thisobj);
-        } else {
-            return hr;
-        }
-    }
-
-    return hr;
-}
-
-static const IClassFactoryVtbl Impl_IClassFactory_Vtbl = {
-    .QueryInterface = (void *)Impl_IClassFactory_QueryInterface,
-    .AddRef = (void *)Impl_IGeneric_AddRef,
-    .Release = (void *)Impl_IGeneric_Release,
-    .LockServer = Impl_IClassFactory_LockServer,
-    .CreateInstance = Impl_IClassFactory_CreateInstance
+static __FITypedEventHandler_2_Windows__CUI__CNotifications__CToastNotification_IInspectable OnActivated = {
+    .lpVtbl = &WindowsToast__OnActivatedVtbl
 };
 
 // OnDismissed interface
@@ -413,7 +313,7 @@ static WCHAR *SaveToastIcon(SDL_Surface *icon, bool is_header)
         WCHAR file_name[MAX_PATH];
         if (is_header) {
             const Uint32 hash = SDL_murmur3_32(icon->pixels, (size_t)(icon->pitch * icon->h), 0);
-            SDL_swprintf(file_name, MAX_PATH, L"%ls_%" SDL_PRIu32, guid_str, hash);
+            SDL_swprintf(file_name, MAX_PATH, L"%ls_%" SDL_PRIu32, WIN_WindowsGetStringRawBuffer(hsGUID, NULL), hash);
         } else {
             const UINT name_ret = GetTempFileNameW(temp_path, L"SDL", 0, file_name);
             if (!name_ret) {
@@ -460,38 +360,21 @@ static WCHAR *SaveToastIcon(SDL_Surface *icon, bool is_header)
 
 static bool InitGUID()
 {
-    HRESULT hr;
     SDL_zero(guid);
 
-    WCHAR tmp_guid_str[128];
-    DWORD tmp_size = sizeof(tmp_guid_str);
-    const LONG ret = RegGetValueW(HKEY_CURRENT_USER, app_reg_key, L"CustomActivator", RRF_RT_REG_SZ, NULL, &tmp_guid_str, &tmp_size);
-    if (ret == 0) { // ERROR_SUCCESS
-        hr = CLSIDFromString(tmp_guid_str, &guid);
-        if (SUCCEEDED(hr)) {
-            guid_str = SDL_wcsdup(tmp_guid_str);
-            goto format_reg_key;
-        }
-    }
-
-    hr = CoCreateGuid(&guid);
+    HRESULT hr = CoCreateGuid(&guid);
     if (FAILED(hr)) {
         return false;
     }
 
-    guid_str = SDL_malloc(128 * sizeof(WCHAR));
-    if (!guid_str) {
+    WCHAR tmp[128];
+    int len = StringFromGUID2(&guid, tmp, SDL_arraysize(tmp));
+    if (len <= 0) {
         return false;
     }
-    StringFromGUID2(&guid, guid_str, 128);
+    hr = WIN_WindowsCreateString(tmp, (UINT32)len - 1, &hsGUID);
 
-format_reg_key:
-{
-    const size_t key_size = sizeof(REG_CLSID_FMT) + 128;
-    guid_reg_key = SDL_malloc(key_size);
-    SDL_swprintf(guid_reg_key, key_size, REG_CLSID_FMT, guid_str);
-}
-    return true;
+    return SUCCEEDED(hr);
 }
 
 static WCHAR *GetAppMetadata(const char *metadata_name)
@@ -550,6 +433,7 @@ static bool InitToastSystem()
     RESOLVE(RoActivateInstance);
     RESOLVE(WindowsCreateString);
     RESOLVE(WindowsCreateStringReference);
+    RESOLVE(WindowsGetStringRawBuffer);
     RESOLVE(WindowsDeleteString);
 #undef RESOLVE
 
@@ -572,18 +456,11 @@ static bool InitToastSystem()
     }
     ro_initialized = true;
 
-    // Get the execuable path
-    WCHAR *wszExePath = GetExePath();
+    InitGUID();
 
     // Get the application ID and name.
     WCHAR *app_id = GetAppMetadata(SDL_PROP_APP_METADATA_IDENTIFIER_STRING);
     WCHAR *app_name = GetAppMetadata(SDL_PROP_APP_METADATA_NAME_STRING);
-
-    // Create the group string;
-    hr = WIN_WindowsCreateString(GROUP_ID_STRING, (UINT32)SDL_wcslen(GROUP_ID_STRING), &hsGroupId);
-    if (FAILED(hr)) {
-        goto cleanup;
-    }
 
     // Create the persistent appID string.
     hr = WIN_WindowsCreateString(app_id, (UINT32)SDL_wcslen(app_id), &hsAppId);
@@ -601,39 +478,8 @@ static bool InitToastSystem()
         SDL_swprintf(app_reg_key, reg_key_len, L"%ls%ls", REG_KEY_BASE, app_id);
     }
 
-    /* Allocate class factory. This factory produces our implementation of the INotificationActivationCallback interface.
-     * This interface has an ::Activate member method that gets called when someone interacts with the toast notification.
-     */
-    pClassFactory = SDL_malloc(sizeof(Impl_IGeneric));
-    if (!pClassFactory) {
-        goto cleanup;
-    }
-    pClassFactory->lpVtbl = (IUnknownVtbl *)(&Impl_IClassFactory_Vtbl);
-    SDL_SetAtomicInt(&pClassFactory->refCount, 1);
-
-    /* Initialize the GUID. If a registry key for this app already exists,
-     * the existing key will be reused. Otherwise, a new key will be created.
-     */
-    if (!InitGUID()) {
-        goto cleanup;
-    }
-
-    /*
-     * Instead of having to register our COM class in the registry beforehand, we opt to registering it at runtime;
-     * we associate our GUID with the class factory that provides our INotificationActivationCallback interface.
-     */
-    hr = CoRegisterClassObject(&guid, (LPUNKNOWN)pClassFactory, CLSCTX_LOCAL_SERVER, REGCLS_MULTIPLEUSE, &dwCookie);
-    if (FAILED(hr)) {
-        goto cleanup;
-    }
-
-    hr = HRESULT_FROM_WIN32(RegSetValueW(HKEY_CURRENT_USER, guid_reg_key, REG_SZ, wszExePath, (DWORD)SDL_wcslen(wszExePath)));
-    if (FAILED(hr)) {
-        goto cleanup;
-    }
-
     {
-        /* Set the app name, icon, and associate our AUMID with the GUID from above.
+        /* Set the app name, and icon.
          * Windows notifications load images from disk, so save the header icon to temporary storage.
          */
         SDL_Surface *image = SDL_GetPointerProperty(SDL_GetGlobalProperties(), SDL_PROP_GLOBAL_NOTIFICATION_HEADER_ICON_POINTER, NULL);
@@ -651,11 +497,6 @@ static bool InitToastSystem()
     }
 
     hr = HRESULT_FROM_WIN32(RegSetKeyValueW(HKEY_CURRENT_USER, app_reg_key, L"DisplayName", REG_SZ, app_name, (DWORD)(SDL_wcslen(app_name) * sizeof(WCHAR))));
-    if (FAILED(hr)) {
-        goto cleanup;
-    }
-
-    hr = HRESULT_FROM_WIN32(RegSetKeyValueW(HKEY_CURRENT_USER, app_reg_key, L"CustomActivator", REG_SZ, guid_str, (DWORD)(SDL_wcslen(guid_str) * sizeof(WCHAR))));
     if (FAILED(hr)) {
         goto cleanup;
     }
@@ -706,14 +547,14 @@ static bool AppendXmlAudio(SDL_IOStream *dst, bool silent)
     return SDL_WriteIO(dst, buf, size) == size;
 }
 
-static bool AppendXmlAction(SDL_IOStream *dst, SDL_NotificationID id, const char *label, const char *action)
+static bool AppendXmlAction(SDL_IOStream *dst, const char *label, const char *action)
 {
     char static_buf[512];
     char *buf = static_buf;
     int buf_len = SDL_arraysize(static_buf);
 
     for (;;) {
-        int ret = SDL_snprintf(buf, buf_len, "<action content=\"%s\" activationType=\"foreground\" arguments=\"notification_id=%" SDL_PRIu32 ",action=%s\"/>", label, id, action);
+        int ret = SDL_snprintf(buf, buf_len, "<action content=\"%s\" activationType=\"foreground\" arguments=\"%s\"/>", label, action);
         if (ret < buf_len) {
             buf_len = ret + 1;
             break;
@@ -786,10 +627,9 @@ static bool AppendXmlImage(SDL_IOStream *dst, const WCHAR *image_path)
     return ret;
 }
 
-#define XML_TOAST_OPENING_STR_PART_1 L"<toast scenario=\"default\" activationType=\"foreground\" launch=\"action:"
-#define XML_TOAST_OPENING_STR_PART_2 L",default\">" \
-                                     L"<visual>"    \
-                                     L"<binding template=\"ToastGeneric\">"
+#define XML_TOAST_OPENING_STR L"<toast scenario=\"default\" activationType=\"foreground\" launch=\"default\">" \
+                              L"<visual>"                                                                      \
+                              L"<binding template=\"ToastGeneric\">"
 #define XML_TOAST_CLOSING_STR   L"</toast>"
 #define XML_TEXT_OPENING_STR    L"<text><![CDATA["
 #define XML_TEXT_CLOSING_STR    L"]]></text>"
@@ -840,24 +680,8 @@ static WCHAR *BuildNotificationXml(SDL_PropertiesID props, const WCHAR *icon_pat
     const SDL_NotificationAction **actions = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_ACTIONS_POINTER, NULL);
     const bool silent = SDL_GetBooleanProperty(props, SDL_PROP_NOTIFICATION_SILENT_BOOLEAN, false);
 
-    size_t size = sizeof(XML_TOAST_OPENING_STR_PART_1) - sizeof(WCHAR);
-    if (SDL_WriteIO(dst, XML_TOAST_OPENING_STR_PART_1, size) < size) {
-        goto done;
-    }
-    {
-        WCHAR wcid[32];
-        const int ret = SDL_swprintf(wcid, SDL_arraysize(wcid), L"%" SDL_PRIu32, id);
-        if (ret <= 0) {
-            goto done;
-        }
-
-        size = (size_t)ret * sizeof(WCHAR);
-        if (SDL_WriteIO(dst, wcid, size) < size) {
-            goto done;
-        }
-    }
-    size = sizeof(XML_TOAST_OPENING_STR_PART_2) - sizeof(WCHAR);
-    if (SDL_WriteIO(dst, XML_TOAST_OPENING_STR_PART_2, size) < size) {
+    size_t size = sizeof(XML_TOAST_OPENING_STR) - sizeof(WCHAR);
+    if (SDL_WriteIO(dst, XML_TOAST_OPENING_STR, size) < size) {
         goto done;
     }
     if (!AppendXmlImage(dst, icon_path)) {
@@ -886,7 +710,7 @@ static WCHAR *BuildNotificationXml(SDL_PropertiesID props, const WCHAR *icon_pat
         }
 
         for (int i = 0; actions[i]; ++i) {
-            if (!AppendXmlAction(dst, id, actions[i]->button_label, actions[i]->button_id)) {
+            if (!AppendXmlAction(dst, actions[i]->button_label, actions[i]->button_id)) {
                 goto done;
             }
         }
@@ -937,7 +761,7 @@ static void ClearNotificationWithID(SDL_NotificationID id)
         goto cleanup;
     }
 
-    pToastNotificationHistory->lpVtbl->RemoveGroupedTagWithId(pToastNotificationHistory, hsTag, hsGroupId, hsAppId);
+    pToastNotificationHistory->lpVtbl->RemoveGroupedTagWithId(pToastNotificationHistory, hsTag, hsGUID, hsAppId);
 
 cleanup:
     WIN_WindowsDeleteString(hsTag);
@@ -949,7 +773,7 @@ cleanup:
     }
 }
 
-static void SDL_SYS_CleanupNotifications(bool cleanup_reg_keys);
+static void SDL_SYS_CleanupNotifications();
 
 NTSTATUS WIN_BCryptGenRandom(BCRYPT_ALG_HANDLE hAlgorithm, PUCHAR pbBuffer, ULONG cbBuffer, ULONG dwFlags)
 {
@@ -984,7 +808,7 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
     }
 
     if (!InitToastSystem()) {
-        SDL_SYS_CleanupNotifications(true);
+        SDL_SYS_CleanupNotifications();
         return 0;
     }
 
@@ -1060,9 +884,16 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
     }
 
     // Register the OnDismissed notifier to clear transient notifications when cancelled or timed out.
-    if (transient & SDL_NOTIFICATION_TRANSIENT) {
+    if (transient) {
         EventRegistrationToken dismissedToken;
         hr = pToastNotification->lpVtbl->add_Dismissed(pToastNotification, &OnDismissed, &dismissedToken);
+        if (FAILED(hr)) {
+            goto cleanup;
+        }
+    }
+    {
+        EventRegistrationToken activatedToken;
+        hr = pToastNotification->lpVtbl->add_Activated(pToastNotification, &OnActivated, &activatedToken);
         if (FAILED(hr)) {
             goto cleanup;
         }
@@ -1086,7 +917,7 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
             goto cleanup;
         }
 
-        hr = pToastNotification2->lpVtbl->put_Group(pToastNotification2, hsGroupId);
+        hr = pToastNotification2->lpVtbl->put_Group(pToastNotification2, hsGUID);
         if (FAILED(hr)) {
             goto cleanup;
         }
@@ -1150,7 +981,7 @@ cleanup:
     return ret;
 }
 
-static void SDL_SYS_CleanupNotifications(bool cleanup_reg_keys)
+static void SDL_SYS_CleanupNotifications()
 {
     if (pNotificationFactory) {
         pNotificationFactory->lpVtbl->Release(pNotificationFactory);
@@ -1164,10 +995,6 @@ static void SDL_SYS_CleanupNotifications(bool cleanup_reg_keys)
         pToastNotificationManager->lpVtbl->Release(pToastNotificationManager);
         pToastNotificationManager = NULL;
     }
-    if (dwCookie) {
-        CoRevokeClassObject(dwCookie);
-        dwCookie = 0;
-    }
     if (pClassFactory) {
         pClassFactory->lpVtbl->Release((IUnknown *)pClassFactory);
         pClassFactory = NULL;
@@ -1176,34 +1003,12 @@ static void SDL_SYS_CleanupNotifications(bool cleanup_reg_keys)
         WIN_WindowsDeleteString(hsAppId);
         hsAppId = NULL;
     }
-    if (hsGroupId) {
-        WIN_WindowsDeleteString(hsGroupId);
-        hsGroupId = NULL;
+    if (hsGUID) {
+        WIN_WindowsDeleteString(hsGUID);
+        hsGUID = NULL;
     }
 
     CleanupIcons();
-
-    // Clean up the registry entries.
-    if (guid_reg_key) {
-        RegDeleteKeyW(HKEY_CURRENT_USER, guid_reg_key);
-        const size_t len = SDL_wcslen(guid_reg_key);
-        for (size_t i = len; i > 0; --i) {
-            if (guid_reg_key[i] == L'\\') {
-                guid_reg_key[i] = L'\0';
-                break;
-            }
-        }
-        RegDeleteKeyW(HKEY_CURRENT_USER, guid_reg_key);
-
-        if (app_reg_key && cleanup_reg_keys) {
-            RegDeleteKeyW(HKEY_CURRENT_USER, app_reg_key);
-        }
-    }
-
-    SDL_free(guid_reg_key);
-    SDL_free(app_reg_key);
-    guid_reg_key = NULL;
-    app_reg_key = NULL;
 
     if (ro_initialized) {
         WIN_RoUninitialize();
@@ -1217,7 +1022,7 @@ static void SDL_SYS_CleanupNotifications(bool cleanup_reg_keys)
 
 void SDL_CleanupNotifications()
 {
-    SDL_SYS_CleanupNotifications(false);
+    SDL_SYS_CleanupNotifications();
 }
 
 bool SDL_RequestNotificationPermission()
