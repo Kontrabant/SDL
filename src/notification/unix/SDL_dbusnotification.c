@@ -799,7 +799,7 @@ void SDL_CleanupNotifications()
     }
 }
 
-bool SDL_RequestNotificationPermission(void)
+bool SDL_RequestNotificationPermission()
 {
     // TODO: Anything to do here?
     return true;

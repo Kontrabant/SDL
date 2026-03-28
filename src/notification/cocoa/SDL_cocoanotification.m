@@ -30,6 +30,7 @@
 #include "../../video/SDL_surface_c.h"
 
 #import <Foundation/Foundation.h>
+#import <UserNotifications/UNNotification.h>
 #import <UserNotifications/UNNotificationAction.h>
 #import <UserNotifications/UNNotificationAttachment.h>
 #import <UserNotifications/UNNotificationCategory.h>
@@ -57,11 +58,19 @@
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center didReceiveNotificationResponse:(UNNotificationResponse *)response withCompletionHandler:(void (^)(void))completionHandler
     API_AVAILABLE(macos(10.14))
 {
-    Uint32 id;
-    char action[256];
+    const char *identifier = [[[[response notification] request] identifier] UTF8String];
+    SDL_NotificationID id;
 
-    if (SDL_sscanf([response.actionIdentifier UTF8String], "SDL_notification=%" SDL_PRIu32 ",button=%s", &id, action) == 2) {
-        SDL_SendNotificationAction(id, action);
+    if (SDL_sscanf(identifier, "SDL_LocalNotification-%" SDL_PRIu32, &id) == 1) {
+        if ([[response actionIdentifier] isEqualToString:UNNotificationDefaultActionIdentifier]) {
+            SDL_SendNotificationAction(id, "default");
+        } else {
+            char action[256];
+
+            if (SDL_sscanf([response.actionIdentifier UTF8String], "SDL_button=%s", action) == 1) {
+                SDL_SendNotificationAction(id, action);
+            }
+        }
     }
 
     completionHandler();
@@ -86,7 +95,7 @@ static bool ShouldEnableNotifications()
     CFStringRef uti;
     if (CFURLCopyResourcePropertyForKey(bundleUrl, kCFURLTypeIdentifierKey, &uti, NULL) &&
         uti && UTTypeConformsTo(uti, kUTTypeApplicationBundle)) {
-        true;
+        return true;
     }
 
     return false;
@@ -160,9 +169,11 @@ bool SDL_RequestNotificationPermission()
                 SDL_SetError("Notifications not authorized");
                 return false;
             }
+
+            return true;
         } else {
             SDL_SetError("Notifications require macOS 10.14 or higher");
-                return false;
+            return false;
         }
     }
 
@@ -199,7 +210,7 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
             if (sdlactions) {
                 actions = [NSMutableArray array];
                 for (int i = 0; sdlactions[i]; ++i) {
-                    UNNotificationAction *action = [UNNotificationAction actionWithIdentifier:[NSString stringWithFormat:@"SDL_notification=%u,button=%s", new_id, sdlactions[i]->button_id]
+                    UNNotificationAction *action = [UNNotificationAction actionWithIdentifier:[NSString stringWithFormat:@"SDL_button=%s", sdlactions[i]->button_id]
                                                                                         title:[NSString stringWithUTF8String:sdlactions[i]->button_label]
                                                                                       options:UNNotificationActionOptionNone];
 
@@ -260,7 +271,7 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
                 }
             }
 
-            NSString *identifier = [NSString stringWithFormat:@"SDLLocalNotification-%u", new_id];
+            NSString *identifier = [NSString stringWithFormat:@"SDL_LocalNotification-%u", new_id];
             UNNotificationRequest *request = [UNNotificationRequest requestWithIdentifier:identifier
                                                                                   content:content
                                                                                   trigger:nil];
@@ -288,7 +299,8 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
     return 0;
 }
 
-bool SDL_RequestNotificationPermission() {
+bool SDL_RequestNotificationPermission()
+{
     SDL_SetError("Notifications not supported on tvOS");
     return false;
 }

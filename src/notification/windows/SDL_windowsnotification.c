@@ -1200,7 +1200,7 @@ void SDL_CleanupNotifications()
     SDL_SYS_CleanupNotifications(false);
 }
 
-bool SDL_RequestNotificationPermission(void)
+bool SDL_RequestNotificationPermission()
 {
     // Notifications are supported on Win10 or higher.
     return (bool)WIN_IsWindows10OrGreater();
