@@ -145,8 +145,7 @@ bool SDL_RequestNotificationPermission()
         if (@available(macOS 10.14, *)) {
             // Notifications not initialized (not in a bundle).
             if (!center) {
-                SDL_SetError("macOS notifications not supported outside an application bundle");
-                return false;
+                return SDL_SetError("macOS notifications not supported outside an application bundle");
             }
 
             // Check authorization to send notifications, and request it if necessary.
@@ -291,6 +290,24 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
         return 0;
     }
 }
+
+bool SDL_RemoveNotification(SDL_NotificationID notification)
+{
+    @autoreleasepool {
+        if (@available(macOS 10.14, *)) {
+            // Notifications not initialized (not in a bundle).
+            if (!center) {
+                return SDL_SetError("macOS notifications not supported outside an application bundle");
+            }
+
+            NSString *identifier = [NSString stringWithFormat:@"SDL_LocalNotification-%u", notification];
+            [center removePendingNotificationRequestsWithIdentifiers:@[identifier]];
+            [center removeDeliveredNotificationsWithIdentifiers:@[identifier]];
+        }
+    }
+    
+    return true;
+}
 #else
 // Notifications are too limited on tvOS to be of use
 SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
@@ -301,8 +318,12 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
 
 bool SDL_RequestNotificationPermission()
 {
-    SDL_SetError("Notifications not supported on tvOS");
-    return false;
+    return SDL_SetError("Notifications not supported on tvOS");
+}
+
+bool SDL_RemoveNotification(SDL_NotificationID notification)
+{
+    return SDL_SetError("Notifications not supported on tvOS");
 }
 #endif
 

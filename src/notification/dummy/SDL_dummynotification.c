@@ -33,6 +33,11 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
     return 0;
 }
 
+bool SDL_RemoveNotification(SDL_NotificationID notification)
+{
+    return SDL_Unsupported();
+}
+
 void SDL_CleanupNotifications()
 {
     // Nothing to do.

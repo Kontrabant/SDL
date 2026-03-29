@@ -20,9 +20,29 @@
 */
 
 /**
- *  \file SDL_notification.h
+ * # CategoryNotifications
  *
- *  \brief Header file for notification API
+ * Notifications are temporary popup dialogs that passively present
+ * information to the user, or prompt user action. They are managed
+ * and presented by the system, and can present simple options for
+ * user feedback, usually in the form of buttons.
+ *
+ * The capabilities of notifications, and how they are displayed,
+ * vary between systems, but they generally allow for a title,
+ * body text, an associated image, and buttons to allow the user
+ * to provide feedback.
+ *
+ * How notifications are presented and handled are subject to system
+ * policy, and it should not be assumed that showing a notification
+ * means that the user will see it immediately, if at all. The
+ * user may disable notifications for certain applications, and most
+ * systems provide a "do not disturb" mode that universally silences
+ * notifications when activated.
+ *
+ * There is both a customizable function (SDL_ShowNotificationWithProperties())
+ * that offers many options for what is displayed, and also a much-simplified
+ * version (SDL_ShowSimpleNotification()), that simply takes a header (required),
+ * body (optional), and image (optional).
  */
 
 #ifndef SDL_notification_h_
@@ -138,6 +158,19 @@ extern SDL_DECLSPEC SDL_NotificationID SDLCALL SDL_ShowNotificationWithPropertie
  *  \sa SDL_NotificationData
  */
 extern SDL_DECLSPEC SDL_NotificationID SDLCALL SDL_ShowSimpleNotification(const char *title, const char *message, SDL_Surface *icon);
+
+/**
+ *  \brief Remove a notification
+ *
+ *  \param notification the ID of the notification to remove
+ *  \returns True on success or false on failure; call
+ *           SDL_GetError() for more information.
+ *
+ *  \since This function is available since SDL 3.6.0
+ *
+ *  \sa SDL_ShowNotification
+ */
+extern SDL_DECLSPEC bool SDLCALL SDL_RemoveNotification(SDL_NotificationID notification);
 
 // Ends C function definitions when using C++
 #ifdef __cplusplus

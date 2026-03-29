@@ -75,25 +75,30 @@ int main(int argc, char *argv[])
 
         while (1) {
             while (SDL_PollEvent(&event)) {
-                if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_SPACE) {
-
-                    if (event.key.mod & SDL_KMOD_CTRL) {
-                        SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_REPLACES_NUMBER, last_id);
-                    } else {
-                        SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_REPLACES_NUMBER, 0);
-                    }
-                    if (event.key.mod & SDL_KMOD_ALT) {
-                        SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_TRANSIENT_BOOLEAN, true);
-                    } else {
-                        SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_TRANSIENT_BOOLEAN, false);
-                    }
-                    // Test showing a system notification message.
-                    const SDL_NotificationID new_id = SDL_ShowNotificationWithProperties(props);
-                    if (new_id) {
-                        SDL_Log("Notification successfully dispatched. ID: %" SDL_PRIu32, new_id);
-                        last_id = new_id;
-                    } else {
-                        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s", SDL_GetError());
+                if (event.type == SDL_EVENT_KEY_DOWN) {
+                    if (event.key.key == SDLK_SPACE) {
+                        if (event.key.mod & SDL_KMOD_CTRL) {
+                            SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_REPLACES_NUMBER, last_id);
+                        } else {
+                            SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_REPLACES_NUMBER, 0);
+                        }
+                        if (event.key.mod & SDL_KMOD_ALT) {
+                            SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_TRANSIENT_BOOLEAN, true);
+                        } else {
+                            SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_TRANSIENT_BOOLEAN, false);
+                        }
+                        // Test showing a system notification message.
+                        const SDL_NotificationID new_id = SDL_ShowNotificationWithProperties(props);
+                        if (new_id) {
+                            SDL_Log("Notification successfully dispatched. ID: %" SDL_PRIu32, new_id);
+                            last_id = new_id;
+                        } else {
+                            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s", SDL_GetError());
+                        }
+                    } else if (event.key.key == SDLK_H) {
+                        if (last_id) {
+                            SDL_RemoveNotification(last_id);
+                        }
                     }
                 } else if (event.type == SDL_EVENT_NOTIFICATION_ACTION) {
                     SDL_Log("User responded to notification %" SDL_PRIu32 " with action \"%s\"", event.notification.which, event.notification.button_id);

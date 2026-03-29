@@ -526,6 +526,24 @@ failure:
     return 0;
 }
 
+static bool RemoveCoreNotification(SDL_DBusContext *dbus, SDL_NotificationID id)
+{
+    DBusMessageIter iter;
+
+    // Call org.freedesktop.Notifications.CloseNotification()
+    DBusMessage *msg = dbus->message_new_method_call(NOTIFICATION_CORE_NODE, NOTIFICATION_CORE_PATH, NOTIFICATION_CORE_INTERFACE, "CloseNotification");
+    if (msg == NULL) {
+        return false;
+    }
+
+    dbus->message_iter_init_append(msg, &iter);
+    dbus->message_iter_append_basic(&iter, DBUS_TYPE_UINT32, &id);
+    dbus->connection_send(dbus->session_conn, msg, NULL);
+    dbus->message_unref(msg);
+
+    return true;
+}
+
 // org.freedesktop.portal.Notification interface, used when running in a Flatpak or SNAP container
 static DBusHandlerResult PortalNotificationFilter(DBusConnection *conn, DBusMessage *msg, void *data)
 {
@@ -544,10 +562,9 @@ static DBusHandlerResult PortalNotificationFilter(DBusConnection *conn, DBusMess
         dbus->message_iter_get_basic(&signal_iter, &str);
 
         // Parse the ID.
-        Uint64 session = 0;
         Uint32 id = 0;
-        const int ret = SDL_sscanf(str, "SDL3_DBusPortalNotification:%" SDL_PRIu64 ",%" SDL_PRIu32, &session, &id);
-        if (ret != 2) {
+        const int ret = SDL_sscanf(str, "SDL3_DBusPortalNotification:%" SDL_PRIu32, &id);
+        if (ret != 1) {
             goto not_our_signal;
         }
 
@@ -559,7 +576,16 @@ static DBusHandlerResult PortalNotificationFilter(DBusConnection *conn, DBusMess
         }
         dbus->message_iter_get_basic(&signal_iter, &str);
         if (str) {
-            SDL_SendNotificationAction(id, str);
+            Uint64 session = 0;
+            char action[512];
+            if (SDL_sscanf(str, "action=%" SDL_PRIu64 ",%s", &session_id, action) != 2) {
+                goto not_our_signal;
+            }
+            if (session != session_id) {
+                goto not_our_signal;
+            }
+
+            SDL_SendNotificationAction(id, action);
         }
 
         return DBUS_HANDLER_RESULT_HANDLED;
@@ -644,7 +670,9 @@ static void AddPortalButtons(SDL_DBusContext *dbus, DBusMessageIter *iterInit, c
     for (int i = 0; actions[i]; ++i) {
         dbus->message_iter_open_container(&button_array, DBUS_TYPE_ARRAY, "{sv}", &properties_array);
 
-        AppendStringOption(dbus, &properties_array, "action", actions[i]->button_id);
+        char id_str[512];
+        SDL_snprintf(id_str, sizeof(id_str), "action:%" SDL_PRIu64 ",%s", session_id, actions[i]->button_id);
+        AppendStringOption(dbus, &properties_array, "action", id_str);
         AppendStringOption(dbus, &properties_array, "label", actions[i]->button_label);
 
         dbus->message_iter_close_container(&button_array, &properties_array);
@@ -746,8 +774,8 @@ static SDL_NotificationID ShowPortalNotification(SDL_DBusContext *dbus, SDL_Prop
     }
 
     {
-        char id_str[512];
-        SDL_snprintf(id_str, SDL_arraysize(id_str), "SDL3_DBusPortalNotification:%" SDL_PRIu64 ",%" SDL_PRIu32, session_id, new_id);
+        char id_str[128];
+        SDL_snprintf(id_str, SDL_arraysize(id_str), "SDL3_DBusPortalNotification:%" SDL_PRIu32, new_id);
         const char *id = id_str;
         dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &id);
     }
@@ -756,7 +784,12 @@ static SDL_NotificationID ShowPortalNotification(SDL_DBusContext *dbus, SDL_Prop
     dbus->message_iter_open_container(&iter, DBUS_TYPE_ARRAY, "{sv}", &array);
     AppendStringOption(dbus, &array, "title", title);
     AppendStringOption(dbus, &array, "body", message);
-    AppendStringOption(dbus, &array, "default-action", "default");
+
+    {
+        char id_str[128];
+        SDL_snprintf(id_str, SDL_arraysize(id_str), "action:%" SDL_PRIu64 ",%" SDL_PRIu32, session_id, new_id);
+        AppendStringOption(dbus, &array, "default-action", id_str);
+    }
 
     SetPortalSound(dbus, &array, silent);
 
@@ -825,6 +858,28 @@ failure:
     return 0;
 }
 
+static bool RemovePortalNotification(SDL_DBusContext *dbus, SDL_NotificationID id)
+{
+    char id_str[128];
+    DBusMessageIter iter;
+
+    // Call org.freedesktop.Notifications.CloseNotification()
+    DBusMessage *msg = dbus->message_new_method_call(NOTIFICATION_PORTAL_NODE, NOTIFICATION_PORTAL_PATH, NOTIFICATION_PORTAL_INTERFACE, "RemoveNotification");
+    if (msg == NULL) {
+        return false;
+    }
+
+    dbus->message_iter_init_append(msg, &iter);
+
+    SDL_snprintf(id_str, SDL_arraysize(id_str), "SDL3_DBusPortalNotification:%" SDL_PRIu32, id);
+    const char *cstr = id_str;
+    dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &cstr);
+    dbus->connection_send(dbus->session_conn, msg, NULL);
+    dbus->message_unref(msg);
+
+    return true;
+}
+
 SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
 {
     SDL_DBusContext *dbus = SDL_DBus_GetContext();
@@ -834,10 +889,26 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
     }
 
     // The portal is only used if inside a container, or the app association can be wrong.
-    if (!IsInContainer()) {
+    if (IsInContainer()) {
         return ShowPortalNotification(dbus, props);
     } else {
         return ShowCoreNotification(dbus, props);
+    }
+}
+
+bool SDL_RemoveNotification(SDL_NotificationID notification)
+{
+    SDL_DBusContext *dbus = SDL_DBus_GetContext();
+
+    if (!dbus || !dbus->session_conn) {
+        return false;
+    }
+
+    // The portal is only used if inside a container, or the app association can be wrong.
+    if (IsInContainer()) {
+        return RemovePortalNotification(dbus, notification);
+    } else {
+        return RemoveCoreNotification(dbus, notification);
     }
 }
 

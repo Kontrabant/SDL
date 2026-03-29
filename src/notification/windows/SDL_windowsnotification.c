@@ -981,6 +981,16 @@ cleanup:
     return ret;
 }
 
+bool SDL_RemoveNotification(SDL_NotificationID notification)
+{
+    if (!WIN_IsWindows10OrGreater()) {
+        return SDL_Unsupported();
+    }
+
+    ClearNotificationWithID(notification);
+    return true;
+}
+
 static void SDL_SYS_CleanupNotifications()
 {
     if (pNotificationFactory) {

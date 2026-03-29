@@ -1316,3 +1316,4 @@
 #define SDL_RequestNotificationPermission SDL_RequestNotificationPermission_REAL
 #define SDL_ShowNotificationWithProperties SDL_ShowNotificationWithProperties_REAL
 #define SDL_ShowSimpleNotification SDL_ShowSimpleNotification_REAL
+#define SDL_RemoveNotification SDL_RemoveNotification_REAL
