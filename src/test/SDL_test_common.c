@@ -1985,6 +1985,10 @@ void SDLTest_PrintEvent(const SDL_Event *event)
         SDL_Log("SDL EVENT: Camera device %" SDL_PRIu32 " permission denied",
                 event->cdevice.which);
         break;
+    case SDL_EVENT_NOTIFICATION_ACTION:
+        SDL_Log("SDL EVENT: Notification action for %" SDL_PRIu32 " button_id=%s",
+                event->notification.which, event->notification.button_id);
+        break;
     case SDL_EVENT_SENSOR_UPDATE:
         SDL_Log("SDL EVENT: Sensor update for %" SDL_PRIu32,
                 event->sensor.which);

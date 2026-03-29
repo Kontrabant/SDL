@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
                         } else {
                             SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_REPLACES_NUMBER, 0);
                         }
-                        if (event.key.mod & SDL_KMOD_ALT) {
+                        if (event.key.mod & SDL_KMOD_SHIFT) {
                             SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_TRANSIENT_BOOLEAN, true);
                         } else {
                             SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_TRANSIENT_BOOLEAN, false);
@@ -102,6 +102,7 @@ int main(int argc, char *argv[])
                     }
                 } else if (event.type == SDL_EVENT_NOTIFICATION_ACTION) {
                     SDL_Log("User responded to notification %" SDL_PRIu32 " with action \"%s\"", event.notification.which, event.notification.button_id);
+                    SDL_RaiseWindow(window);
                 } else if (event.type == SDL_EVENT_QUIT) {
                     goto breakout;
                 }
@@ -116,7 +117,7 @@ int main(int argc, char *argv[])
 
     breakout:
         SDL_DestroyWindow(window);
-        //SDL_DestroySurface(header_icon);
+        SDL_DestroySurface(header_icon);
     }
 
     SDL_Quit();
