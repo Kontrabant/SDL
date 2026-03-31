@@ -49,6 +49,7 @@ static WindowsGetStringRawBuffer_t WIN_WindowsGetStringRawBuffer;
 
 // The registry key base needed to register the app instance so notifications can be sent.
 #define REG_KEY_BASE L"SOFTWARE\\Classes\\AppUserModelId\\"
+#define GROUP_ID_STR L"SDL_LocalNotification"
 
 // IIDs for the interfaces.
 DEFINE_GUID(IID_IToastNotificationManagerStatics,
@@ -86,14 +87,13 @@ DEFINE_GUID(IID_IToastDismissedEventHandler,
 
 static struct Impl_IGeneric *pClassFactory = NULL;
 
-static HSTRING hsGUID = NULL;
+static HSTRING hsGroupId = NULL;
 static HSTRING hsAppId = NULL;
 
 static __x_ABI_CWindows_CUI_CNotifications_CIToastNotificationManagerStatics *pToastNotificationManager = NULL;
 static __x_ABI_CWindows_CUI_CNotifications_CIToastNotifier *pToastNotifier = NULL;
 static __x_ABI_CWindows_CUI_CNotifications_CIToastNotificationFactory *pNotificationFactory = NULL;
 
-static GUID guid;
 static WCHAR *app_reg_key = NULL;
 
 static bool ro_initialized = false;
@@ -313,7 +313,7 @@ static WCHAR *SaveToastIcon(SDL_Surface *icon, bool is_header)
         WCHAR file_name[MAX_PATH];
         if (is_header) {
             const Uint32 hash = SDL_murmur3_32(icon->pixels, (size_t)(icon->pitch * icon->h), 0);
-            SDL_swprintf(file_name, MAX_PATH, L"%ls_%" SDL_PRIu32, WIN_WindowsGetStringRawBuffer(hsGUID, NULL), hash);
+            SDL_swprintf(file_name, MAX_PATH, L"%ls_%" SDL_PRIu32, WIN_WindowsGetStringRawBuffer(hsGroupId, NULL), hash);
         } else {
             const UINT name_ret = GetTempFileNameW(temp_path, L"SDL", 0, file_name);
             if (!name_ret) {
@@ -356,25 +356,6 @@ static WCHAR *SaveToastIcon(SDL_Surface *icon, bool is_header)
     }
 
     return NULL;
-}
-
-static bool InitGUID()
-{
-    SDL_zero(guid);
-
-    HRESULT hr = CoCreateGuid(&guid);
-    if (FAILED(hr)) {
-        return false;
-    }
-
-    WCHAR tmp[128];
-    int len = StringFromGUID2(&guid, tmp, SDL_arraysize(tmp));
-    if (len <= 0) {
-        return false;
-    }
-    hr = WIN_WindowsCreateString(tmp, (UINT32)len - 1, &hsGUID);
-
-    return SUCCEEDED(hr);
 }
 
 static WCHAR *GetAppMetadata(const char *metadata_name)
@@ -456,14 +437,18 @@ static bool InitToastSystem()
     }
     ro_initialized = true;
 
-    InitGUID();
-
     // Get the application ID and name.
     WCHAR *app_id = GetAppMetadata(SDL_PROP_APP_METADATA_IDENTIFIER_STRING);
     WCHAR *app_name = GetAppMetadata(SDL_PROP_APP_METADATA_NAME_STRING);
 
     // Create the persistent appID string.
     hr = WIN_WindowsCreateString(app_id, (UINT32)SDL_wcslen(app_id), &hsAppId);
+    if (FAILED(hr)) {
+        goto cleanup;
+    }
+
+    // Create the persistent groupID string.
+    hr = WIN_WindowsCreateString(GROUP_ID_STR, (UINT32)SDL_wcslen(GROUP_ID_STR), &hsGroupId);
     if (FAILED(hr)) {
         goto cleanup;
     }
@@ -761,7 +746,7 @@ static void ClearNotificationWithID(SDL_NotificationID id)
         goto cleanup;
     }
 
-    pToastNotificationHistory->lpVtbl->RemoveGroupedTagWithId(pToastNotificationHistory, hsTag, hsGUID, hsAppId);
+    pToastNotificationHistory->lpVtbl->RemoveGroupedTagWithId(pToastNotificationHistory, hsTag, hsGroupId, hsAppId);
 
 cleanup:
     WIN_WindowsDeleteString(hsTag);
@@ -917,7 +902,7 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
             goto cleanup;
         }
 
-        hr = pToastNotification2->lpVtbl->put_Group(pToastNotification2, hsGUID);
+        hr = pToastNotification2->lpVtbl->put_Group(pToastNotification2, hsGroupId);
         if (FAILED(hr)) {
             goto cleanup;
         }
@@ -1013,9 +998,9 @@ static void SDL_SYS_CleanupNotifications()
         WIN_WindowsDeleteString(hsAppId);
         hsAppId = NULL;
     }
-    if (hsGUID) {
-        WIN_WindowsDeleteString(hsGUID);
-        hsGUID = NULL;
+    if (hsGroupId) {
+        WIN_WindowsDeleteString(hsGroupId);
+        hsGroupId = NULL;
     }
 
     CleanupIcons();
