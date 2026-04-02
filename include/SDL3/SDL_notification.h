@@ -48,8 +48,8 @@
 #ifndef SDL_notification_h_
 #define SDL_notification_h_
 
-#include <SDL3/SDL_stdinc.h>
 #include <SDL3/SDL_properties.h>
+#include <SDL3/SDL_stdinc.h>
 #include <SDL3/SDL_surface.h>
 
 #include <SDL3/SDL_begin_code.h>
@@ -70,42 +70,23 @@ extern "C" {
  */
 #define SDL_PROP_GLOBAL_NOTIFICATION_HEADER_ICON_POINTER "SDL.notification.header_icon"
 
-typedef Uint32 SDL_NotificationID;
-
-#define SDL_NOTIFICATION_TRANSIENT SDL_UINT64_C(0x0000000000000010) /**< Request that the notification not persist in any notification logs. */
-#define SDL_NOTIFICATION_SILENT    SDL_UINT64_C(0x0000000000000020) /**< Request that the notification not play a sound when shown. */
+typedef Uint32 SDL_NotificationID; /**< The identifier for a system notification. */
 
 typedef enum SDL_NotificationPriority
 {
-    SDL_NOTIFICATION_PRIORITY_LOW = -1,   /**< Lowest priority. */
-    SDL_NOTIFICATION_PRIORITY_NORMAL = 0, /**< Normal/medium priority. */
-    SDL_NOTIFICATION_PRIORITY_HIGH = 1,   /**< High/important priority. */
-    SDL_NOTIFICATION_PRIORITY_URGENT = 2  /**< Highest/critical priority. Note that this may override any "Do Not Disturb" settings. */
+    SDL_NOTIFICATION_PRIORITY_LOW = -1,    /**< Lowest priority. */
+    SDL_NOTIFICATION_PRIORITY_NORMAL = 0,  /**< Normal/medium priority. */
+    SDL_NOTIFICATION_PRIORITY_HIGH = 1,    /**< High/important priority. */
+    SDL_NOTIFICATION_PRIORITY_CRITICAL = 2 /**< Highest/critical priority. Note that this may override any "Do Not Disturb" settings. */
 } SDL_NotificationPriority;
 /**
  * Notification structure containing button IDs and labels
  */
 typedef struct SDL_NotificationAction
 {
-    const char *button_id;    /**< The identifier string for the button. */
+    const char *button_id;    /**< The identifier string for the button. 'default' is a reserved identifier. */
     const char *button_label; /**< The localized label string for the button. */
 } SDL_NotificationAction;
-
-#if 0
-/**
- * Notification structure containing title, message, icon, etc.
- */
-typedef struct SDL_NotificationData
-{
-    SDL_NotificationFlags flags;     /**< ::SDL_NotificationFlags */
-    const char *title;               /**< UTF-8 title text */
-    const char *message;             /**< UTF-8 message text */
-    SDL_Surface *icon;               /**< Icon data */
-    SDL_NotificationAction *actions; /**< Array of notification actions */
-    int num_actions;                 /**< Length of the actions array */
-    SDL_NotificationID replaces;     /**< ID of an existing notification to replace */
-} SDL_NotificationData;
-#endif
 
 #define SDL_PROP_NOTIFICATION_TITLE_STRING      "SDL.notification.title"
 #define SDL_PROP_NOTIFICATION_MESSAGE_STRING    "SDL.notification.message"
@@ -117,7 +98,7 @@ typedef struct SDL_NotificationData
 #define SDL_PROP_NOTIFICATION_REPLACES_NUMBER   "SDL.notification.replaces"
 
 /**
- *  \brief Requests permission to display notifications.
+ *  Requests permission to display notifications.
  *
  *  \returns True on success or false on failure; call
  *           SDL_GetError() for more information.
@@ -130,7 +111,38 @@ typedef struct SDL_NotificationData
 extern SDL_DECLSPEC bool SDLCALL SDL_RequestNotificationPermission();
 
 /**
- *  \brief Show a system notification.
+ *  Show a system notification.
+ *
+ *  System notifications are small, asynchronous popup windows that notify the user
+ *  of some information. How they are displayed is system dependent.
+ *
+ *  These are the supported properties:
+ *
+ * - `SDL_PROP_NOTIFICATION_TITLE_STRING`: the title of the notification, in
+ *   UTF-8 encoding
+ * - `SDL_PROP_NOTIFICATION_MESSAGE_STRING`: the message body of the notification,
+ *   in UTF-8 encoding
+ * - `SDL_PROP_NOTIFICATION_IMAGE_POINTER`: a pointer to an `SDL_Surface` containing
+ *   an image that will be attached to the notification
+ * - `SDL_PROP_NOTIFICATION_ACTIONS_POINTER`: An array of pointers to `SDL_NotificationAction`
+ *   structs that will add buttons to the notification. The last element in the array must be
+ *   a null pointer. Note that systems may have a limit on the maximum number of buttons a
+ *   notification can have
+ * - `SDL_PROP_NOTIFICATION_PRIORITY_NUMBER`: an `SDL_NotificationPriority` value representing
+ *   the notification priority
+ * - `SDL_PROP_NOTIFICATION_TRANSIENT_BOOLEAN`: true if the notification should not persist
+ *   in the system notification center
+ * - `SDL_PROP_NOTIFICATION_SILENT_BOOLEAN`: true if the system should not play any sound
+ *   when displaying the notification
+ * - `SDL_PROP_NOTIFICATION_REPLACES_NUMBER`: the `SDL_NotificationID` of a previously
+ *   shown notification that this notification should replace
+ *
+ * Notifications are available on:
+ *  - Windows 10 or higher
+ *  - macOS 10.14 or higher
+ *  - iOS 11 or higher
+ *  - *nix platforms that support the org.freedesktop.Notifications, or
+ *    org.freedesktop.portal.Notification interface
  *
  *  \param props the properties to be used when creating this notification
  *  \returns A non-zero SDL_NotificationID on success or 0 on failure; call
@@ -139,16 +151,17 @@ extern SDL_DECLSPEC bool SDLCALL SDL_RequestNotificationPermission();
  *  \since This function is available since SDL 3.6.0
  *
  *  \sa SDL_ShowSimpleNotification
- *  \sa SDL_NotificationData
+ *  \sa SDL_NotificationAction
+ *  \sa SDL_NotificationPriority
  */
 extern SDL_DECLSPEC SDL_NotificationID SDLCALL SDL_ShowNotificationWithProperties(SDL_PropertiesID props);
 
 /**
- *  \brief Show a simple system notification.
+ *  Show a simple system notification.
  *
- *  \param title    UTF-8 title text
- *  \param message  UTF-8 message text
- *  \param icon The image associated with is notification
+ *  \param title    UTF-8 title text (required)
+ *  \param message  UTF-8 message text (optional)
+ *  \param image The image associated with is notification (optional)
  *  \returns A non-zero SDL_NotificationID on success or 0 on failure; call
  *           SDL_GetError() for more information.
  *
@@ -157,7 +170,7 @@ extern SDL_DECLSPEC SDL_NotificationID SDLCALL SDL_ShowNotificationWithPropertie
  *  \sa SDL_ShowNotification
  *  \sa SDL_NotificationData
  */
-extern SDL_DECLSPEC SDL_NotificationID SDLCALL SDL_ShowSimpleNotification(const char *title, const char *message, SDL_Surface *icon);
+extern SDL_DECLSPEC SDL_NotificationID SDLCALL SDL_ShowSimpleNotification(const char *title, const char *message, SDL_Surface *image);
 
 /**
  *  \brief Remove a notification

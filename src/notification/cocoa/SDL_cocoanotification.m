@@ -236,10 +236,10 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
             content.body = [NSString stringWithUTF8String:message];
             content.categoryIdentifier = category_id;
 
-            if (!silent || priority == SDL_NOTIFICATION_PRIORITY_URGENT) {
+            if (!silent || priority == SDL_NOTIFICATION_PRIORITY_CRITICAL) {
                 // defaultCriticalSound is only in iOS 12+
                 if (@available(iOS 12, *)) {
-                    content.sound = priority != SDL_NOTIFICATION_PRIORITY_URGENT ? [UNNotificationSound defaultSound] : [UNNotificationSound defaultCriticalSound];
+                    content.sound = priority != SDL_NOTIFICATION_PRIORITY_CRITICAL ? [UNNotificationSound defaultSound] : [UNNotificationSound defaultCriticalSound];
                 } else {
                     content.sound = [UNNotificationSound defaultSound];
                 }
@@ -250,7 +250,7 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
                 case SDL_NOTIFICATION_PRIORITY_LOW:
                     content.interruptionLevel = UNNotificationInterruptionLevelPassive;
                     break;
-                case SDL_NOTIFICATION_PRIORITY_URGENT:
+                case SDL_NOTIFICATION_PRIORITY_CRITICAL:
                     content.interruptionLevel = UNNotificationInterruptionLevelCritical;
                     break;
                 case SDL_NOTIFICATION_PRIORITY_NORMAL:

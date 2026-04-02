@@ -392,7 +392,7 @@ static bool SetCoreHints(SDL_DBusContext *dbus, DBusMessageIter *iterInit, SDL_P
     case SDL_NOTIFICATION_PRIORITY_LOW:
         dbus_priority = 0;
         break;
-    case SDL_NOTIFICATION_PRIORITY_URGENT:
+    case SDL_NOTIFICATION_PRIORITY_CRITICAL:
         dbus_priority = 2;
         break;
     }
@@ -1100,7 +1100,7 @@ static SDL_NotificationID ShowPortalNotification(SDL_DBusContext *dbus, SDL_Prop
     case SDL_NOTIFICATION_PRIORITY_HIGH:
         priority_str = "high";
         break;
-    case SDL_NOTIFICATION_PRIORITY_URGENT:
+    case SDL_NOTIFICATION_PRIORITY_CRITICAL:
         priority_str = "urgent";
         break;
     }

@@ -916,11 +916,11 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
     }
 
     /* Set the priority.
-     * All levels except for SDL_NOTIFICATION_PRIORITY_URGENT map to normal on Windows, as selecting
+     * All levels except for SDL_NOTIFICATION_PRIORITY_CRITICAL map to normal on Windows, as selecting
      * high priority can wake the screen, and should only be done when absolutely necessary.
      */
     {
-        const __x_ABI_CWindows_CUI_CNotifications_CToastNotificationPriority toast_priority = priority != SDL_NOTIFICATION_PRIORITY_URGENT ? ToastNotificationPriority_Default : ToastNotificationPriority_High;
+        const __x_ABI_CWindows_CUI_CNotifications_CToastNotificationPriority toast_priority = priority != SDL_NOTIFICATION_PRIORITY_CRITICAL ? ToastNotificationPriority_Default : ToastNotificationPriority_High;
         __x_ABI_CWindows_CUI_CNotifications_CIToastNotification4 *pToastNotification4;
         hr = pToastNotification->lpVtbl->QueryInterface(pToastNotification, &IID_IToastNotification4, (LPVOID *)&pToastNotification4);
         if (FAILED(hr)) {

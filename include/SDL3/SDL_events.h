@@ -751,6 +751,10 @@ typedef struct SDL_CameraDeviceEvent
 /**
  * Notification dialog event structure (event.notification.*)
  *
+ * A `button_id` value of 'default' for an SDL_EVENT_NOTIFICATION_BUTTON_PRESSED
+ * event indicates that the notification was interacted with without selecting a
+ * specific action (e.g. the body of the notification was clicked on).
+ *
  * \since This struct is available since SDL 3.6.0.
  */
 typedef struct SDL_NotificationEvent
