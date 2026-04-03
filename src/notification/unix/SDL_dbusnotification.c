@@ -44,6 +44,8 @@
 #define NOTIFICATION_CLOSED_SIGNAL_NAME           "NotificationClosed"
 #define NOTIFICATION_ACTIVATION_TOKEN_SIGNAL_NAME "ActivationToken"
 
+#define SDL_NOTIFICATION_PREAMBLE "SDL_LocalNotification-"
+
 static char *icon_uri;
 static Uint64 session_id;
 
@@ -625,13 +627,13 @@ static SDL_NotificationID ShowCoreNotification(SDL_DBusContext *dbus, SDL_Proper
             goto failure;
         }
 
-        // Add the buttons
+        // Add the actions
         if (actions) {
             for (int i = 0; actions[i]; ++i) {
-                if (!dbus->message_iter_append_basic(&array, DBUS_TYPE_STRING, &actions[i]->button_id)) {
+                if (!dbus->message_iter_append_basic(&array, DBUS_TYPE_STRING, &actions[i]->action_id)) {
                     goto failure;
                 }
-                if (!dbus->message_iter_append_basic(&array, DBUS_TYPE_STRING, &actions[i]->button_label)) {
+                if (!dbus->message_iter_append_basic(&array, DBUS_TYPE_STRING, &actions[i]->action_label)) {
                     goto failure;
                 }
             }
@@ -699,18 +701,27 @@ failure:
 
 static bool RemoveCoreNotification(SDL_DBusContext *dbus, SDL_NotificationID id)
 {
+    if (!id) {
+        return SDL_InvalidParamError("id");
+    }
+
     DBusMessageIter iter;
     bool ret = false;
 
     // Call org.freedesktop.Notifications.CloseNotification()
     DBusMessage *msg = dbus->message_new_method_call(NOTIFICATION_CORE_NODE, NOTIFICATION_CORE_PATH, NOTIFICATION_CORE_INTERFACE, "CloseNotification");
-    if (msg == NULL) {
-        return false;
+    if (!msg) {
+        return SDL_OutOfMemory();
     }
 
     dbus->message_iter_init_append(msg, &iter);
     if (dbus->message_iter_append_basic(&iter, DBUS_TYPE_UINT32, &id)) {
         ret = (bool)dbus->connection_send(dbus->session_conn, msg, NULL);
+        if (!ret) {
+            SDL_SetError("Failed to send notification removal request");
+        }
+    } else {
+        ret = SDL_OutOfMemory();
     }
 
     dbus->message_unref(msg);
@@ -737,9 +748,11 @@ static DBusHandlerResult PortalNotificationFilter(DBusConnection *conn, DBusMess
         dbus->message_iter_get_basic(&signal_iter, &str);
 
         // Parse the ID.
-        Uint32 id = 0;
-        const int ret = SDL_sscanf(str, "SDL_LocalNotification-%" SDL_PRIu32, &id);
-        if (ret != 1) {
+        if (SDL_strncmp(str, SDL_NOTIFICATION_PREAMBLE, sizeof(SDL_NOTIFICATION_PREAMBLE) - 1) != 0) {
+            goto not_our_signal;
+        }
+        const Uint32 id = (Uint32)SDL_strtoul(str + sizeof(SDL_NOTIFICATION_PREAMBLE), NULL, 10);
+        if (!id) {
             goto not_our_signal;
         }
 
@@ -929,7 +942,7 @@ static bool SetPortalSound(SDL_DBusContext *dbus, DBusMessageIter *iterInit, boo
     return true;
 }
 
-static bool AddPortalButtons(SDL_DBusContext *dbus, DBusMessageIter *iterInit, const SDL_NotificationAction **actions)
+static bool AddPortalActions(SDL_DBusContext *dbus, DBusMessageIter *iterInit, const SDL_NotificationAction **actions)
 {
     DBusMessageIter options_pair, options_value, button_array, properties_array;
     const char *key = "buttons";
@@ -952,10 +965,10 @@ static bool AddPortalButtons(SDL_DBusContext *dbus, DBusMessageIter *iterInit, c
             return false;
         }
 
-        if (!AppendStringOption(dbus, &properties_array, "action", actions[i]->button_id)) {
+        if (!AppendStringOption(dbus, &properties_array, "action", actions[i]->action_id)) {
             return false;
         }
-        if (!AppendStringOption(dbus, &properties_array, "label", actions[i]->button_label)) {
+        if (!AppendStringOption(dbus, &properties_array, "label", actions[i]->action_label)) {
             return false;
         }
         if (!AppendTargetString(dbus, &properties_array, "target")) {
@@ -1073,7 +1086,7 @@ static SDL_NotificationID ShowPortalNotification(SDL_DBusContext *dbus, SDL_Prop
 
     {
         char id_str[128];
-        SDL_snprintf(id_str, SDL_arraysize(id_str), "SDL_LocalNotification-%" SDL_PRIu32, new_id);
+        SDL_snprintf(id_str, SDL_arraysize(id_str), SDL_NOTIFICATION_PREAMBLE "%" SDL_PRIu32, new_id);
         const char *id = id_str;
         dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &id);
     }
@@ -1122,7 +1135,7 @@ static SDL_NotificationID ShowPortalNotification(SDL_DBusContext *dbus, SDL_Prop
     }
 
     if (actions) {
-        AddPortalButtons(dbus, &array, actions);
+        AddPortalActions(dbus, &array, actions);
     }
 
     if (!dbus->message_iter_close_container(&iter, &array)) {
@@ -1159,6 +1172,10 @@ failure:
 
 static bool RemovePortalNotification(SDL_DBusContext *dbus, SDL_NotificationID id)
 {
+    if (!id) {
+        return SDL_InvalidParamError("id");
+    }
+
     char id_str[128];
     DBusMessageIter iter;
     bool ret = false;
@@ -1166,15 +1183,20 @@ static bool RemovePortalNotification(SDL_DBusContext *dbus, SDL_NotificationID i
     // Call org.freedesktop.Notifications.CloseNotification()
     DBusMessage *msg = dbus->message_new_method_call(NOTIFICATION_PORTAL_NODE, NOTIFICATION_PORTAL_PATH, NOTIFICATION_PORTAL_INTERFACE, "RemoveNotification");
     if (msg == NULL) {
-        return false;
+        return SDL_OutOfMemory();
     }
 
     dbus->message_iter_init_append(msg, &iter);
 
-    SDL_snprintf(id_str, SDL_arraysize(id_str), "SDL_LocalNotification-%" SDL_PRIu32, id);
+    SDL_snprintf(id_str, SDL_arraysize(id_str), SDL_NOTIFICATION_PREAMBLE "%" SDL_PRIu32, id);
     const char *cstr = id_str;
     if (dbus->message_iter_append_basic(&iter, DBUS_TYPE_STRING, &cstr)) {
         ret = (bool)dbus->connection_send(dbus->session_conn, msg, NULL);
+        if (!ret) {
+            SDL_SetError("Failed to send notification removal request");
+        }
+    } else {
+        ret = SDL_OutOfMemory();
     }
 
     dbus->message_unref(msg);
@@ -1186,6 +1208,7 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
     SDL_DBusContext *dbus = SDL_DBus_GetContext();
 
     if (!dbus || !dbus->session_conn) {
+        SDL_SetError("D-Bus not available");
         return 0;
     }
 
@@ -1202,7 +1225,7 @@ bool SDL_RemoveNotification(SDL_NotificationID notification)
     SDL_DBusContext *dbus = SDL_DBus_GetContext();
 
     if (!dbus || !dbus->session_conn) {
-        return false;
+        return SDL_SetError("D-Bus not available");
     }
 
     // The portal is only used if inside a container, or the app association can be wrong.
@@ -1259,6 +1282,12 @@ void SDL_CleanupNotifications()
 
 bool SDL_RequestNotificationPermission()
 {
-    // TODO: Anything to do here?
+    SDL_DBusContext *dbus = SDL_DBus_GetContext();
+
+    // Just make sure that D-Bus is available.
+    if (!dbus || !dbus->session_conn) {
+        return SDL_SetError("D-Bus not available");
+    }
+
     return true;
 }

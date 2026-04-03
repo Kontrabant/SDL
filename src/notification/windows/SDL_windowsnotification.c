@@ -695,7 +695,7 @@ static WCHAR *BuildNotificationXml(SDL_PropertiesID props, const WCHAR *icon_pat
         }
 
         for (int i = 0; actions[i]; ++i) {
-            if (!AppendXmlAction(dst, actions[i]->button_label, actions[i]->button_id)) {
+            if (!AppendXmlAction(dst, actions[i]->action_label, actions[i]->action_id)) {
                 goto done;
             }
         }

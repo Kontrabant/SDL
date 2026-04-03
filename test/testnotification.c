@@ -26,9 +26,13 @@ static SDL_Surface *icon;
 static SDL_NotificationID last_id;
 static SDL_PropertiesID props;
 static SDL_NotificationAction actions[] = {
-    { "button_action_1", "Button 1" },
-    { "button_action_2", "Button 2" },
+    { "action_1", "OK" },
+    { "action_2", "No Way" },
 };
+static SDL_NotificationAction *action_array[SDL_arraysize(actions) + 1];
+
+static bool transient;
+static bool silent;
 
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
 {
@@ -57,10 +61,10 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
     SDL_SetStringProperty(props, SDL_PROP_NOTIFICATION_MESSAGE_STRING, "Hey, pay attention to me!");
     SDL_SetPointerProperty(props, SDL_PROP_NOTIFICATION_IMAGE_POINTER, icon);
 
-    SDL_NotificationAction **action_array = SDL_calloc(SDL_arraysize(actions) + 1, sizeof(SDL_NotificationAction *));
     for (int i = 0; i < SDL_arraysize(actions); ++i) {
         action_array[i] = &actions[i];
     }
+    action_array[SDL_arraysize(actions)] = NULL;
     SDL_SetPointerProperty(props, SDL_PROP_NOTIFICATION_ACTIONS_POINTER, action_array);
 
     SDL_RequestNotificationPermission();
@@ -77,10 +81,15 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
             } else {
                 SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_REPLACES_NUMBER, 0);
             }
-            if (event->key.mod & SDL_KMOD_SHIFT) {
+            if (transient) {
                 SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_TRANSIENT_BOOLEAN, true);
             } else {
                 SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_TRANSIENT_BOOLEAN, false);
+            }
+            if (silent) {
+                SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_SILENT_BOOLEAN, true);
+            } else {
+                SDL_SetNumberProperty(props, SDL_PROP_NOTIFICATION_SILENT_BOOLEAN, false);
             }
             // Test showing a system notification message.
             const SDL_NotificationID new_id = SDL_ShowNotificationWithProperties(props);
@@ -94,10 +103,18 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
             if (last_id) {
                 SDL_RemoveNotification(last_id);
             }
+        } else if (event->key.key == SDLK_T) {
+            transient ^= true;
+        } else if (event->key.key == SDLK_S) {
+            silent ^= true;
         }
-    } else if (event->type == SDL_EVENT_NOTIFICATION_ACTION) {
-        SDL_Log("User responded to notification %" SDL_PRIu32 " with action \"%s\"", event->notification.which, event->notification.button_id);
-        SDL_RaiseWindow(state->windows[0]);
+    } else if (event->type == SDL_EVENT_NOTIFICATION_ACTION_INVOKED) {
+        SDL_Log("User responded to notification %" SDL_PRIu32 " with action \"%s\"", event->notification.which, event->notification.action_id);
+
+        // Raise the window of the user clicked "OK".
+        if (SDL_strcmp(event->notification.action_id, "action_1") == 0) {
+            SDL_RaiseWindow(state->windows[0]);
+        }
     }
 
     return SDLTest_CommonEventMainCallbacks(state, event);
@@ -110,7 +127,15 @@ SDL_AppResult SDL_AppIterate(void *appstate)
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-        SDL_RenderDebugText(renderer, 8, 16, "Press space to show a notification");
+
+        float y = 16.0f;
+        SDL_RenderDebugText(renderer, 8.f, y, "Press space to show a notification");
+        y += SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE + 2;
+        SDL_RenderDebugText(renderer, 8.f, y, "Press 'H' to hide the last notification");
+        y += SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE + 2;
+        SDL_RenderDebugTextFormat(renderer, 8.f, y, "Press 'T' to toggle the transient property (%s)", transient ? "ON" : "OFF");
+        y += SDL_DEBUG_TEXT_FONT_CHARACTER_SIZE + 2;
+        SDL_RenderDebugTextFormat(renderer, 8.f, y, "Press 'S' to toggle the silent property (%s)", silent ? "ON" : "OFF");
         SDL_RenderPresent(renderer);
     }
 

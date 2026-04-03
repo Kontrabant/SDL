@@ -26,18 +26,22 @@
 SDL_NotificationID SDL_ShowNotificationWithProperties(SDL_PropertiesID props)
 {
     if (!props) {
-        return SDL_InvalidParamError("props");
+        SDL_InvalidParamError("props");
+        return 0;
     }
 
-    const char *title = SDL_GetStringProperty(props, SDL_PROP_NOTIFICATION_TITLE_STRING, NULL);
-    if (!title) {
-        return SDL_SetError("Notifications must have a title");
+    CHECK_PARAM (true) {
+        const char *title = SDL_GetStringProperty(props, SDL_PROP_NOTIFICATION_TITLE_STRING, NULL);
+        if (!title) {
+            SDL_SetError("Notifications must have a title");
+            return 0;
+        }
     }
 
     return SDL_SYS_ShowNotification(props);
 }
 
-SDL_NotificationID SDL_ShowSimpleNotification(const char *title, const char *message, SDL_Surface *icon)
+SDL_NotificationID SDL_ShowSimpleNotification(const char *title, const char *message, SDL_Surface *image)
 {
     SDL_PropertiesID props = SDL_CreateProperties();
     if (!props) {
@@ -46,12 +50,15 @@ SDL_NotificationID SDL_ShowSimpleNotification(const char *title, const char *mes
 
     if (title) {
         SDL_SetStringProperty(props, SDL_PROP_NOTIFICATION_TITLE_STRING, title);
+    } else {
+        SDL_SetError("Notifications must have a title");
+        return 0;
     }
     if (message) {
         SDL_SetStringProperty(props, SDL_PROP_NOTIFICATION_MESSAGE_STRING, message);
     }
-    if (icon) {
-        SDL_SetPointerProperty(props, SDL_PROP_NOTIFICATION_IMAGE_POINTER, icon);
+    if (image) {
+        SDL_SetPointerProperty(props, SDL_PROP_NOTIFICATION_IMAGE_POINTER, image);
     }
 
     SDL_NotificationID id = SDL_ShowNotificationWithProperties(props);

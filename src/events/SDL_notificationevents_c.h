@@ -24,7 +24,7 @@
 #ifndef SDL_notificationevents_c_h_
 #define SDL_notificationevents_c_h_
 
-extern bool SDL_SendNotificationAction(SDL_NotificationID id, const char *action_label);
+extern bool SDL_SendNotificationAction(SDL_NotificationID notification_id, const char *action_id);
 
 #endif // SDL_notificationevents_c_h_
 

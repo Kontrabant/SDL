@@ -24,16 +24,16 @@
 #include "SDL_events_c.h"
 #include "SDL_notificationevents_c.h"
 
-bool SDL_SendNotificationAction(SDL_NotificationID id, const char *action_label)
+bool SDL_SendNotificationAction(SDL_NotificationID notification_id, const char *action_id)
 {
-    if (SDL_EventEnabled(SDL_EVENT_NOTIFICATION_ACTION)) {
+    if (SDL_EventEnabled(SDL_EVENT_NOTIFICATION_ACTION_INVOKED)) {
         SDL_Event event;
-        event.type = SDL_EVENT_NOTIFICATION_ACTION;
+        event.type = SDL_EVENT_NOTIFICATION_ACTION_INVOKED;
 
         SDL_NotificationEvent *nevent = &event.notification;
         nevent->timestamp = 0;
-        nevent->which = id;
-        nevent->button_id = SDL_CreateTemporaryString(action_label);
+        nevent->which = notification_id;
+        nevent->action_id = SDL_CreateTemporaryString(action_id);
         return SDL_PushEvent(&event);
     }
 

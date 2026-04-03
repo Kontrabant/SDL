@@ -67,7 +67,7 @@
         } else {
             char action[256];
 
-            if (SDL_sscanf([response.actionIdentifier UTF8String], "SDL_button=%s", action) == 1) {
+            if (SDL_sscanf([response.actionIdentifier UTF8String], "SDL_action=%s", action) == 1) {
                 SDL_SendNotificationAction(id, action);
             }
         }
@@ -209,8 +209,8 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
             if (sdlactions) {
                 actions = [NSMutableArray array];
                 for (int i = 0; sdlactions[i]; ++i) {
-                    UNNotificationAction *action = [UNNotificationAction actionWithIdentifier:[NSString stringWithFormat:@"SDL_button=%s", sdlactions[i]->button_id]
-                                                                                        title:[NSString stringWithUTF8String:sdlactions[i]->button_label]
+                    UNNotificationAction *action = [UNNotificationAction actionWithIdentifier:[NSString stringWithFormat:@"SDL_action=%s", sdlactions[i]->action_id]
+                                                                                        title:[NSString stringWithUTF8String:sdlactions[i]->action_label]
                                                                                       options:UNNotificationActionOptionNone];
 
                     actions[i] = action;
@@ -309,7 +309,8 @@ bool SDL_RemoveNotification(SDL_NotificationID notification)
     return true;
 }
 #else
-// Notifications are too limited on tvOS to be of use
+
+// Notifications on tvOS are just for updating badges, and are of no use here.
 SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
 {
     SDL_SetError("Notifications not supported on tvOS");

@@ -79,13 +79,17 @@ typedef enum SDL_NotificationPriority
     SDL_NOTIFICATION_PRIORITY_HIGH = 1,    /**< High/important priority. */
     SDL_NOTIFICATION_PRIORITY_CRITICAL = 2 /**< Highest/critical priority. Note that this may override any "Do Not Disturb" settings. */
 } SDL_NotificationPriority;
+
 /**
- * Notification structure containing button IDs and labels
+ * Notification structure containing action IDs and labels
+ *
+ * These typically take the form of buttons or menu items
+ * placed within the notification dialog.
  */
 typedef struct SDL_NotificationAction
 {
-    const char *button_id;    /**< The identifier string for the button. 'default' is a reserved identifier. */
-    const char *button_label; /**< The localized label string for the button. */
+    const char *action_id;    /**< The identifier string for the button. 'default' is a reserved identifier. */
+    const char *action_label; /**< The localized label string for the widget associated with the action. */
 } SDL_NotificationAction;
 
 #define SDL_PROP_NOTIFICATION_TITLE_STRING      "SDL.notification.title"
@@ -119,7 +123,7 @@ extern SDL_DECLSPEC bool SDLCALL SDL_RequestNotificationPermission();
  *  These are the supported properties:
  *
  * - `SDL_PROP_NOTIFICATION_TITLE_STRING`: the title of the notification, in
- *   UTF-8 encoding
+ *   UTF-8 encoding (required)
  * - `SDL_PROP_NOTIFICATION_MESSAGE_STRING`: the message body of the notification,
  *   in UTF-8 encoding
  * - `SDL_PROP_NOTIFICATION_IMAGE_POINTER`: a pointer to an `SDL_Surface` containing
@@ -137,12 +141,14 @@ extern SDL_DECLSPEC bool SDLCALL SDL_RequestNotificationPermission();
  * - `SDL_PROP_NOTIFICATION_REPLACES_NUMBER`: the `SDL_NotificationID` of a previously
  *   shown notification that this notification should replace
  *
+ * Not all properties are supported by all platforms.
+ *
  * Notifications are available on:
  *  - Windows 10 or higher
  *  - macOS 10.14 or higher
  *  - iOS 11 or higher
  *  - *nix platforms that support the org.freedesktop.Notifications, or
- *    org.freedesktop.portal.Notification interface
+ *    org.freedesktop.portal.Notification interfaces
  *
  *  \param props the properties to be used when creating this notification
  *  \returns A non-zero SDL_NotificationID on success or 0 on failure; call

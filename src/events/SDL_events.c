@@ -881,9 +881,9 @@ int SDL_GetEventDescription(const SDL_Event *event, char *buf, int buflen)
         break;
 #undef PRINT_CAMERADEV_EVENT
 
-        SDL_EVENT_CASE(SDL_EVENT_NOTIFICATION_ACTION)
+        SDL_EVENT_CASE(SDL_EVENT_NOTIFICATION_ACTION_INVOKED)
         (void)SDL_snprintf(details, sizeof(details), " (timestamp=%" SDL_PRIu64 " which=%d button_id='%s')",
-                           event->notification.timestamp, (uint)event->notification.which, event->notification.button_id);
+                           event->notification.timestamp, (uint)event->notification.which, event->notification.action_id);
         break;
 
         SDL_EVENT_CASE(SDL_EVENT_SENSOR_UPDATE)

@@ -261,7 +261,7 @@ typedef enum SDL_EventType
     SDL_EVENT_CAMERA_DEVICE_DENIED,          /**< A camera device has been denied for use by the user. */
 
     /* Notification events */
-    SDL_EVENT_NOTIFICATION_ACTION = 0x1500, /**< A response to a system notification was received. */
+    SDL_EVENT_NOTIFICATION_ACTION_INVOKED = 0x1500, /**< A user response to a system notification was received. */
 
     /* Render events */
     SDL_EVENT_RENDER_TARGETS_RESET = 0x2000, /**< The render targets have been reset and their contents need to be updated */
@@ -751,7 +751,7 @@ typedef struct SDL_CameraDeviceEvent
 /**
  * Notification dialog event structure (event.notification.*)
  *
- * A `button_id` value of 'default' for an SDL_EVENT_NOTIFICATION_BUTTON_PRESSED
+ * An `action_id` value of 'default' for an SDL_EVENT_NOTIFICATION_ACTION_INVOKED
  * event indicates that the notification was interacted with without selecting a
  * specific action (e.g. the body of the notification was clicked on).
  *
@@ -759,11 +759,11 @@ typedef struct SDL_CameraDeviceEvent
  */
 typedef struct SDL_NotificationEvent
 {
-    SDL_EventType type; /**< SDL_EVENT_NOTIFICATION_BUTTON_PRESSED */
+    SDL_EventType type; /**< SDL_EVENT_NOTIFICATION_ACTION_INVOKED */
     Uint32 reserved;
     Uint64 timestamp;         /**< In nanoseconds, populated using SDL_GetTicksNS() */
     SDL_NotificationID which; /**< The ID of the notification that generated this event. */
-    const char *button_id;    /**< The identifier string of the button pressed on the notification dialog. */
+    const char *action_id;    /**< The identifier string of the action invoked in the notification dialog. */
 } SDL_NotificationEvent;
 
 /**
