@@ -32,6 +32,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#ifdef HAVE_MEMFD_CREATE
+#include <sys/mman.h>
+#endif
+
 #define NOTIFICATION_PORTAL_NODE      "org.freedesktop.portal.Desktop"
 #define NOTIFICATION_PORTAL_PATH      "/org/freedesktop/portal/desktop"
 #define NOTIFICATION_PORTAL_INTERFACE "org.freedesktop.portal.Notification"
@@ -51,6 +55,8 @@ static Uint64 session_id;
 
 static Uint32 core_id_list[32];
 static Uint32 core_id_count;
+
+static Uint32 interface_version;
 
 static bool core_listener_registered;
 static bool portal_listener_registered;
@@ -832,14 +838,33 @@ not_our_signal:
     return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
-static bool SetPortalIcon(SDL_DBusContext *dbus, DBusMessageIter *iterInit, SDL_Surface *surface)
+static bool SetPortalImage(SDL_DBusContext *dbus, DBusMessageIter *iterInit, SDL_Surface *surface)
 {
-    DBusMessageIter options_pair, variant_iter, struct_iter, array_iter, byte_array_iter;
+    DBusMessageIter options_pair, variant_iter, struct_iter;
     const char *key = "icon";
-    const char *bytes = "bytes";
+    SDL_IOStream *png = NULL;
+    int fd = -1;
     bool ret = false;
 
-    SDL_IOStream *png = SDL_IOFromDynamicMem();
+#ifdef HAVE_MEMFD_CREATE
+    /* Version 2 of the portal interface wants images passed as a sealable file descriptor,
+     * which is only possible with memfd_create().
+     */
+    if (interface_version >= 2) {
+        fd = memfd_create("SDL_NotificationImage", MFD_ALLOW_SEALING);
+        if (fd >= 0) {
+            png = SDL_IOFromFD(fd, false);
+            if (!png) {
+                close(fd);
+                fd = -1;
+            }
+        }
+    }
+#endif
+
+    if (!png) {
+        png = SDL_IOFromDynamicMem();
+    }
     if (!png) {
         return false;
     }
@@ -848,48 +873,81 @@ static bool SetPortalIcon(SDL_DBusContext *dbus, DBusMessageIter *iterInit, SDL_
     }
     const Sint64 size = SDL_GetIOSize(png);
 
-    SDL_PropertiesID io_props = SDL_GetIOProperties(png);
-    Uint8 *png_ptr = SDL_GetPointerProperty(io_props, SDL_PROP_IOSTREAM_DYNAMIC_MEMORY_POINTER, NULL);
-
     if (!dbus->message_iter_open_container(iterInit, DBUS_TYPE_DICT_ENTRY, NULL, &options_pair)) {
         goto done;
     }
     if (!dbus->message_iter_append_basic(&options_pair, DBUS_TYPE_STRING, &key)) {
         goto done;
     }
-    if (!dbus->message_iter_open_container(&options_pair, DBUS_TYPE_VARIANT, "(sv)", &variant_iter)) {
-        goto done;
-    }
-    if (!dbus->message_iter_open_container(&variant_iter, DBUS_TYPE_STRUCT, NULL, &struct_iter)) {
-        goto done;
-    }
-    if (!dbus->message_iter_append_basic(&struct_iter, DBUS_TYPE_STRING, &bytes)) {
-        goto done;
-    }
-    if (!dbus->message_iter_open_container(&struct_iter, DBUS_TYPE_VARIANT, "ay", &byte_array_iter)) {
-        goto done;
-    }
-    if (!dbus->message_iter_open_container(&byte_array_iter, DBUS_TYPE_ARRAY, "y", &array_iter)) {
-        goto done;
-    }
+    if (fd >= 0) {
+        DBusMessageIter fd_variant_iter;
+        const char *fd_string = "file-descriptor";
 
-    for (Sint64 i = 0; i < size; ++i) {
-        if (!dbus->message_iter_append_basic(&array_iter, DBUS_TYPE_BYTE, &png_ptr[i])) {
+        if (!dbus->message_iter_open_container(&options_pair, DBUS_TYPE_VARIANT, "(sv)", &variant_iter)) {
             goto done;
         }
-    }
+        if (!dbus->message_iter_open_container(&variant_iter, DBUS_TYPE_STRUCT, NULL, &struct_iter)) {
+            goto done;
+        }
+        if (!dbus->message_iter_append_basic(&struct_iter, DBUS_TYPE_STRING, &fd_string)) {
+            goto done;
+        }
+        if (!dbus->message_iter_open_container(&struct_iter, DBUS_TYPE_VARIANT, DBUS_TYPE_UNIX_FD_AS_STRING, &fd_variant_iter)) {
+            goto done;
+        }
+        if (!dbus->message_iter_append_basic(&fd_variant_iter, DBUS_TYPE_UNIX_FD, &fd)) {
+            goto done;
+        }
+        if (!dbus->message_iter_close_container(&struct_iter, &fd_variant_iter)) {
+            goto done;
+        }
+        if (!dbus->message_iter_close_container(&variant_iter, &struct_iter)) {
+            goto done;
+        }
+        if (!dbus->message_iter_close_container(&options_pair, &variant_iter)) {
+            goto done;
+        }
+    } else {
+        DBusMessageIter array_iter, byte_array_iter;
+        const char *bytes_string = "bytes";
 
-    if (!dbus->message_iter_close_container(&byte_array_iter, &array_iter)) {
-        goto done;
-    }
-    if (!dbus->message_iter_close_container(&struct_iter, &byte_array_iter)) {
-        goto done;
-    }
-    if (!dbus->message_iter_close_container(&variant_iter, &struct_iter)) {
-        goto done;
-    }
-    if (!dbus->message_iter_close_container(&options_pair, &variant_iter)) {
-        goto done;
+        SDL_PropertiesID io_props = SDL_GetIOProperties(png);
+        Uint8 *png_ptr = SDL_GetPointerProperty(io_props, SDL_PROP_IOSTREAM_DYNAMIC_MEMORY_POINTER, NULL);
+
+        if (!dbus->message_iter_open_container(&options_pair, DBUS_TYPE_VARIANT, "(sv)", &variant_iter)) {
+            goto done;
+        }
+        if (!dbus->message_iter_open_container(&variant_iter, DBUS_TYPE_STRUCT, NULL, &struct_iter)) {
+            goto done;
+        }
+        if (!dbus->message_iter_append_basic(&struct_iter, DBUS_TYPE_STRING, &bytes_string)) {
+            goto done;
+        }
+        if (!dbus->message_iter_open_container(&struct_iter, DBUS_TYPE_VARIANT, "ay", &byte_array_iter)) {
+            goto done;
+        }
+        if (!dbus->message_iter_open_container(&byte_array_iter, DBUS_TYPE_ARRAY, "y", &array_iter)) {
+            goto done;
+        }
+
+        for (Sint64 i = 0; i < size; ++i) {
+            if (!dbus->message_iter_append_basic(&array_iter, DBUS_TYPE_BYTE, &png_ptr[i])) {
+                goto done;
+            }
+        }
+
+        if (!dbus->message_iter_close_container(&byte_array_iter, &array_iter)) {
+            goto done;
+        }
+        if (!dbus->message_iter_close_container(&struct_iter, &byte_array_iter)) {
+            goto done;
+        }
+        if (!dbus->message_iter_close_container(&variant_iter, &struct_iter)) {
+            goto done;
+        }
+        if (!dbus->message_iter_close_container(&options_pair, &variant_iter)) {
+            goto done;
+        }
     }
     ret = (bool)dbus->message_iter_close_container(iterInit, &options_pair);
 
@@ -1022,6 +1080,12 @@ static bool InitPortalSignalListener(SDL_DBusContext *dbus)
         return true;
     }
 
+    if (!SDL_DBus_QueryProperty(NULL,
+                                NOTIFICATION_PORTAL_NODE, NOTIFICATION_PORTAL_PATH, NOTIFICATION_PORTAL_INTERFACE,
+                                "version", DBUS_TYPE_UINT32, &interface_version)) {
+        return false;
+    }
+
     if (!session_id) {
         GetRandom(&session_id, sizeof(session_id));
     }
@@ -1034,7 +1098,7 @@ static bool InitPortalSignalListener(SDL_DBusContext *dbus)
                         "member='" NOTIFICATION_ACTION_SIGNAL_NAME "'",
                         &error);
     if (dbus->error_is_set(&error)) {
-        SDL_SetError("Failed to register DBus portal notification signal filter: %s", error.message);
+        SDL_SetError("Failed to register DBus portal notification filter: %s", error.message);
         dbus->error_free(&error);
         return false;
     }
@@ -1064,7 +1128,7 @@ static SDL_NotificationID ShowPortalNotification(SDL_DBusContext *dbus, SDL_Prop
     const char *title = SDL_GetStringProperty(props, SDL_PROP_NOTIFICATION_TITLE_STRING, NULL);
     const char *message = SDL_GetStringProperty(props, SDL_PROP_NOTIFICATION_MESSAGE_STRING, NULL);
     const SDL_NotificationPriority priority = SDL_GetNumberProperty(props, SDL_PROP_NOTIFICATION_PRIORITY_NUMBER, SDL_NOTIFICATION_PRIORITY_NORMAL);
-    SDL_Surface *icon = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_IMAGE_POINTER, NULL);
+    SDL_Surface *image = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_IMAGE_POINTER, NULL);
     const SDL_NotificationAction **actions = SDL_GetPointerProperty(props, SDL_PROP_NOTIFICATION_ACTIONS_POINTER, NULL);
     const bool silent = SDL_GetBooleanProperty(props, SDL_PROP_NOTIFICATION_SILENT_BOOLEAN, false);
 
@@ -1121,16 +1185,16 @@ static SDL_NotificationID ShowPortalNotification(SDL_DBusContext *dbus, SDL_Prop
     AppendStringOption(dbus, &array, "priority", priority_str);
     SetPortalDisplayHints(dbus, &array, props);
 
-    if (icon) {
-        SDL_Surface *icon_surface = icon;
-        if (icon_surface->format != SDL_PIXELFORMAT_ABGR8888) {
-            icon_surface = SDL_ConvertSurface(icon_surface, SDL_PIXELFORMAT_ABGR8888);
+    if (image) {
+        SDL_Surface *image_surface = image;
+        if (image_surface->format != SDL_PIXELFORMAT_ABGR8888) {
+            image_surface = SDL_ConvertSurface(image_surface, SDL_PIXELFORMAT_ABGR8888);
         }
 
-        SetPortalIcon(dbus, &array, icon_surface);
+        SetPortalImage(dbus, &array, image_surface);
 
-        if (icon_surface != icon) {
-            SDL_DestroySurface(icon_surface);
+        if (image_surface != image) {
+            SDL_DestroySurface(image_surface);
         }
     }
 
@@ -1284,10 +1348,14 @@ bool SDL_RequestNotificationPermission()
 {
     SDL_DBusContext *dbus = SDL_DBus_GetContext();
 
-    // Just make sure that D-Bus is available.
+    // No interface (yet) to ask permission; just make sure that notifications are available.
     if (!dbus || !dbus->session_conn) {
         return SDL_SetError("D-Bus not available");
     }
 
-    return true;
+    if (IsInContainer()) {
+        return InitPortalSignalListener(dbus);
+    } else {
+        return InitCoreSignalListener(dbus);
+    }
 }
