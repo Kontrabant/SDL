@@ -83,26 +83,6 @@ static void GetRandom(void *dst, size_t size)
     }
 }
 
-static bool IsInContainer()
-{
-    static bool in_container = false;
-    static bool in_container_set = false;
-
-    if (in_container_set) {
-        return in_container;
-    }
-
-    if (SDL_getenv("container")) { // Flatpak
-        in_container = true;
-    } else if (SDL_getenv("SNAP")) { // SNAP
-        in_container = true;
-    }
-
-    in_container_set = true;
-
-    return in_container;
-}
-
 static bool AppendOption(SDL_DBusContext *dbus, DBusMessageIter *options, const char *type, const char *key, const void *value)
 {
     DBusMessageIter options_pair, options_value;
@@ -1277,7 +1257,7 @@ SDL_NotificationID SDL_SYS_ShowNotification(SDL_PropertiesID props)
     }
 
     // The portal is only used if inside a container, or the app association can be wrong.
-    if (IsInContainer()) {
+    if (SDL_GetSandbox() != SDL_SANDBOX_NONE) {
         return ShowPortalNotification(dbus, props);
     } else {
         return ShowCoreNotification(dbus, props);
@@ -1293,7 +1273,7 @@ bool SDL_RemoveNotification(SDL_NotificationID notification)
     }
 
     // The portal is only used if inside a container, or the app association can be wrong.
-    if (IsInContainer()) {
+    if (SDL_GetSandbox() != SDL_SANDBOX_NONE) {
         return RemovePortalNotification(dbus, notification);
     } else {
         return RemoveCoreNotification(dbus, notification);
@@ -1353,7 +1333,7 @@ bool SDL_RequestNotificationPermission()
         return SDL_SetError("D-Bus not available");
     }
 
-    if (IsInContainer()) {
+    if (SDL_GetSandbox() != SDL_SANDBOX_NONE) {
         return InitPortalSignalListener(dbus);
     } else {
         return InitCoreSignalListener(dbus);
