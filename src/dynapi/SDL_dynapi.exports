@@ -1288,3 +1288,7 @@ _SDL_IsPhone
 _SDL_wcstoll
 _SDL_wcstoul
 _SDL_wcstoull
+_SDL_RequestNotificationPermission
+_SDL_ShowNotificationWithProperties
+_SDL_ShowNotification
+_SDL_RemoveNotification
