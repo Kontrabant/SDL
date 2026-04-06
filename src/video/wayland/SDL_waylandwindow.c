@@ -28,6 +28,7 @@
 #include "../SDL_sysvideo.h"
 #include "../../events/SDL_events_c.h"
 #include "../../core/unix/SDL_appid.h"
+#include "../../notification/SDL_notification_c.h"
 #include "../SDL_egl_c.h"
 #include "SDL_waylandevents_c.h"
 #include "SDL_waylandmouse.h"
@@ -2533,7 +2534,7 @@ void Wayland_RaiseWindow(SDL_VideoDevice *_this, SDL_Window *window)
          * Note that we don't check for empty strings, as that is still
          * considered a valid activation token!
          */
-        const char *activation_token = SDL_getenv("XDG_ACTIVATION_TOKEN");
+        const char *activation_token = SDL_GetNotificationActivationToken();
         if (activation_token) {
             xdg_activation_v1_activate(viddata->activation_manager,
                                        activation_token,

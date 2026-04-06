@@ -27,7 +27,8 @@ static SDL_NotificationID last_id;
 static SDL_PropertiesID props;
 static SDL_NotificationAction actions[] = {
     { "action_1", "OK" },
-    { "action_2", "No Way" },
+    { "action_2", "Cancel" },
+    {"action_url", "SDL Website" }
 };
 static SDL_NotificationAction *action_array[SDL_arraysize(actions) + 1];
 
@@ -114,6 +115,8 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
         // Raise the window of the user clicked "OK".
         if (SDL_strcmp(event->notification.action_id, "action_1") == 0) {
             SDL_RaiseWindow(state->windows[0]);
+        } else if (SDL_strcmp(event->notification.action_id, "action_url") == 0) {
+            SDL_OpenURL("https://www.libsdl.org");
         }
     }
 

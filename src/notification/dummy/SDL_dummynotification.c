@@ -42,3 +42,10 @@ void SDL_CleanupNotifications()
 {
     // Nothing to do.
 }
+
+#ifdef SDL_VIDEO_DRIVER_WAYLAND
+const char *SDL_GetNotificationActivationToken()
+{
+    return NULL;
+}
+#endif

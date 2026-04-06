@@ -50,6 +50,11 @@
 
 #define SDL_NOTIFICATION_PREAMBLE "SDL_LocalNotification-"
 
+#define ACTIVATION_TOKEN_LIFETIME SDL_SECONDS_TO_NS(1)
+
+static Uint64 activation_token_time_ns;
+static char *activation_token;
+
 static char *icon_uri;
 static Uint64 session_id;
 
@@ -260,7 +265,9 @@ static DBusHandlerResult CoreNotificationFilter(DBusConnection *conn, DBusMessag
         if (id && token) {
             for (Uint32 i = 0; i < core_id_count; ++i) {
                 if (core_id_list[i] == id) {
-                    SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "XDG_ACTIVATION_TOKEN", token, true);
+                    SDL_free(activation_token);
+                    activation_token = SDL_strdup(token);
+                    activation_token_time_ns = SDL_GetTicksNS();
                     return DBUS_HANDLER_RESULT_HANDLED;
                 }
             }
@@ -751,7 +758,8 @@ static DBusHandlerResult PortalNotificationFilter(DBusConnection *conn, DBusMess
         dbus->message_iter_get_basic(&signal_iter, &str);
 
         // Check for the target and optional XDG activation parameter.
-        const char *target = NULL, *activation_token = NULL;
+        const char *target = NULL, *token = NULL;
+
         if (dbus->message_iter_next(&signal_iter) && dbus->message_iter_get_arg_type(&signal_iter) == DBUS_TYPE_ARRAY) {
             DBusMessageIter param_iter;
             dbus->message_iter_recurse(&signal_iter, &param_iter);
@@ -792,7 +800,7 @@ static DBusHandlerResult PortalNotificationFilter(DBusConnection *conn, DBusMess
                         dbus->message_iter_recurse(&dict_entry_iter, &dict_val_iter);
 
                         if (dbus->message_iter_get_arg_type(&dict_val_iter) == DBUS_TYPE_STRING) {
-                            dbus->message_iter_get_basic(&dict_val_iter, &activation_token);
+                            dbus->message_iter_get_basic(&dict_val_iter, &token);
                         }
 
                         // Found the activation token, nothing else to do.
@@ -805,8 +813,10 @@ static DBusHandlerResult PortalNotificationFilter(DBusConnection *conn, DBusMess
         }
 
         if (target && SDL_strtoull(target, NULL, 10) == session_id) {
-            if (activation_token) {
-                SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "XDG_ACTIVATION_TOKEN", activation_token, true);
+            if (token) {
+                SDL_free(activation_token);
+                activation_token = SDL_strdup(token);
+                activation_token_time_ns = SDL_GetTicksNS();
             }
             SDL_SendNotificationAction(id, str);
 
@@ -833,7 +843,7 @@ static bool SetPortalImage(SDL_DBusContext *dbus, DBusMessageIter *iterInit, SDL
     if (interface_version >= 2) {
         fd = memfd_create("SDL_NotificationImage", MFD_ALLOW_SEALING);
         if (fd >= 0) {
-            png = SDL_IOFromFD(fd, false);
+            png = SDL_IOFromFD(fd, true);
             if (!png) {
                 close(fd);
                 fd = -1;
@@ -1322,6 +1332,8 @@ void SDL_CleanupNotifications()
         SDL_free(icon_uri);
         icon_uri = NULL;
     }
+
+    SDL_free(activation_token);
 }
 
 bool SDL_RequestNotificationPermission()
@@ -1338,4 +1350,15 @@ bool SDL_RequestNotificationPermission()
     } else {
         return InitCoreSignalListener(dbus);
     }
+}
+
+const char *SDL_GetNotificationActivationToken()
+{
+    // Track the lifetime to avoid returning a stale token.
+    if (activation_token && SDL_GetTicksNS() - activation_token_time_ns < ACTIVATION_TOKEN_LIFETIME) {
+        activation_token_time_ns = 0;
+        return activation_token;
+    }
+
+    return NULL;
 }
