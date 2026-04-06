@@ -374,6 +374,11 @@ BOOL WIN_IsWindows8OrGreater(void)
     CHECKWINVER(TRUE, IsWindowsVersionOrGreater(HIBYTE(_WIN32_WINNT_WIN8), LOBYTE(_WIN32_WINNT_WIN8), 0));
 }
 
+BOOL WIN_IsWindows10OrGreater(void)
+{
+    CHECKWINVER(TRUE, IsWindowsVersionOrGreater(HIBYTE(_WIN32_WINNT_WIN10), LOBYTE(_WIN32_WINNT_WIN10), 0));
+}
+
 BOOL WIN_IsWindows11OrGreater(void)
 {
     return IsWindowsBuildVersionAtLeast(22000);
