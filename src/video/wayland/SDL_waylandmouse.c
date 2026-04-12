@@ -1356,7 +1356,7 @@ void Wayland_SeatWarpMouse(SDL_WaylandSeat *seat, SDL_WindowData *window, float 
         }
 
         if (wl_pointer_get_version(seat->pointer.wl_pointer) < WL_POINTER_WARP_SINCE_VERSION) {
-            SDL_SendMouseMotion(0, window->sdlwindow, seat->pointer.sdl_id, false, x, y);
+            SDL_SendMouseWarp(0, window->sdlwindow, seat->pointer.sdl_id, x, y);
         }
     }
 }
@@ -1539,6 +1539,8 @@ void Wayland_InitMouse(SDL_VideoData *data)
     mouse->WarpMouseGlobal = Wayland_WarpMouseGlobal;
     mouse->SetRelativeMouseMode = Wayland_SetRelativeMouseMode;
     mouse->GetGlobalMouseState = Wayland_GetGlobalMouseState;
+
+    mouse->have_explicit_warp_event = true;
 
     if (!Wayland_StartCursorThread(data)) {
         SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "wayland: Failed to start cursor animation event thread");
