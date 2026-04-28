@@ -213,9 +213,17 @@ struct SDL_WindowData
         bool active;
     } text_input_props;
 
+    enum
+    {
+        WAYLAND_RESIZE_EDGE_LR = 0x01,
+        WAYLAND_RESIZE_EDGE_TB = 0x02,
+        WAYLAND_RESIZE_EDGE_ALL = 0x03
+    } resize_edge;
+
     SDL_DisplayID last_displayID;
     int pending_state_deadline_count;
     Uint64 last_focus_event_time_ns;
+    Uint64 last_resize_time_ns;
     int icc_fd;
     Uint32 icc_size;
     bool floating;

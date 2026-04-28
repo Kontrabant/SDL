@@ -971,6 +971,41 @@ static void handle_xdg_toplevel_configure(void *data,
     // When resizing, dimensions other than 0 are a maximum.
     const bool new_configure_size = width != wind->last_configure.width || height != wind->last_configure.height;
 
+    if (resizing) {
+        const Uint64 current_time_ns = SDL_GetTicksNS();
+        if (current_time_ns - wind->last_resize_time_ns > SDL_MS_TO_NS(250)) {
+            wind->resize_edge = 0;
+        }
+        wind->last_resize_time_ns = current_time_ns;
+
+        // If width or height are 0, we know which dimensions is being resized, since the opposite is up to the client.
+        if (!height && width) {
+            wind->resize_edge |= WAYLAND_RESIZE_EDGE_LR;
+        } else if (!width && height) {
+            wind->resize_edge |= WAYLAND_RESIZE_EDGE_TB;
+        } else {
+            /* Try to guess from the supplied dimensions.
+             *
+             * NOTE: When resizing in one dimension, GNOME will sometimes send a value for the opposite axis
+             *       that is the new size, but off by one unit. Ignore these aberrations.
+             */
+            const int delta_width = SDL_abs(width - wind->requested.logical_width);
+            const int delta_height = SDL_abs(height - wind->requested.logical_height);
+            if (width != wind->last_configure.width && delta_width) {
+                if (!(wind->resize_edge & WAYLAND_RESIZE_EDGE_TB) || delta_width > 1) {
+                    wind->resize_edge |= WAYLAND_RESIZE_EDGE_LR;
+                }
+            }
+            if (height != wind->last_configure.height && delta_height) {
+                if (!(wind->resize_edge & WAYLAND_RESIZE_EDGE_LR) || delta_height > 1) {
+                    wind->resize_edge |= WAYLAND_RESIZE_EDGE_TB;
+                }
+            }
+        }
+    } else {
+        wind->resize_edge = 0;
+    }
+
     UpdateWindowFullscreen(window, fullscreen);
 
     /* Always send a maximized/restore event; if the event is redundant it will
@@ -1106,10 +1141,28 @@ static void handle_xdg_toplevel_configure(void *data,
                 // Aspect correction.
                 const float aspect = (float)wind->requested.logical_width / (float)wind->requested.logical_height;
 
-                if (window->min_aspect != 0.f && aspect < window->min_aspect) {
-                    wind->requested.logical_height = SDL_lroundf((float)wind->requested.logical_width / window->min_aspect);
-                } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
-                    wind->requested.logical_width = SDL_lroundf((float)wind->requested.logical_height * window->max_aspect);
+                switch (wind->resize_edge) {
+                case WAYLAND_RESIZE_EDGE_LR:
+                    if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+                        wind->requested.logical_height = SDL_lroundf((float)wind->requested.logical_width / window->min_aspect);
+                    } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+                        wind->requested.logical_height = SDL_lroundf((float)wind->requested.logical_width / window->max_aspect);
+                    }
+                    break;
+                case WAYLAND_RESIZE_EDGE_TB:
+                    if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+                        wind->requested.logical_width = SDL_lroundf((float)wind->requested.logical_height * window->min_aspect);
+                    } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+                        wind->requested.logical_width = SDL_lroundf((float)wind->requested.logical_height * window->max_aspect);
+                    }
+                    break;
+                default:
+                    if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+                        wind->requested.logical_height = SDL_lroundf((float)wind->requested.logical_width / window->min_aspect);
+                    } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+                        wind->requested.logical_width = SDL_lroundf((float)wind->requested.logical_height * window->max_aspect);
+                    }
+                    break;
                 }
             } else {
                 if (window->max_w > 0) {
@@ -1125,10 +1178,28 @@ static void handle_xdg_toplevel_configure(void *data,
                 // Aspect correction.
                 const float aspect = (float)wind->requested.pixel_width / (float)wind->requested.pixel_height;
 
-                if (window->min_aspect != 0.f && aspect < window->min_aspect) {
-                    wind->requested.pixel_height = SDL_lroundf((float)wind->requested.pixel_width / window->min_aspect);
-                } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
-                    wind->requested.pixel_width = SDL_lroundf((float)wind->requested.pixel_height * window->max_aspect);
+                switch (wind->resize_edge) {
+                case WAYLAND_RESIZE_EDGE_LR:
+                    if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+                        wind->requested.pixel_height = SDL_lroundf((float)wind->requested.pixel_width / window->min_aspect);
+                    } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+                        wind->requested.pixel_height = SDL_lroundf((float)wind->requested.pixel_width / window->max_aspect);
+                    }
+                    break;
+                case WAYLAND_RESIZE_EDGE_TB:
+                    if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+                        wind->requested.pixel_width = SDL_lroundf((float)wind->requested.pixel_height * window->min_aspect);
+                    } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+                        wind->requested.pixel_width = SDL_lroundf((float)wind->requested.pixel_height * window->max_aspect);
+                    }
+                    break;
+                default:
+                    if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+                        wind->requested.pixel_height = SDL_lroundf((float)wind->requested.pixel_width / window->min_aspect);
+                    } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+                        wind->requested.pixel_width = SDL_lroundf((float)wind->requested.pixel_height * window->max_aspect);
+                    }
+                    break;
                 }
 
                 wind->requested.logical_width = PixelToPoint(window, wind->requested.pixel_width);
@@ -1480,6 +1551,41 @@ static void decoration_frame_configure(struct libdecor_frame *frame,
 
             const bool new_configure_size = width != wind->last_configure.width || height != wind->last_configure.height;
 
+            if (resizing) {
+                const Uint64 current_time_ns = SDL_GetTicksNS();
+                if (current_time_ns - wind->last_resize_time_ns > SDL_MS_TO_NS(250)) {
+                    wind->resize_edge = 0;
+                }
+                wind->last_resize_time_ns = current_time_ns;
+
+                // If width or height are 0, we know which dimensions is being resized, since the opposite is up to the client.
+                if (!height && width) {
+                    wind->resize_edge |= WAYLAND_RESIZE_EDGE_LR;
+                } else if (!width && height) {
+                    wind->resize_edge |= WAYLAND_RESIZE_EDGE_TB;
+                } else {
+                    /* Try to guess from the supplied dimensions.
+                     *
+                     * NOTE: When resizing in one dimension, GNOME will sometimes send a value for the opposite axis
+                     *       that is the new size, but off by one unit. Ignore these aberrations.
+                     */
+                    const int delta_width = SDL_abs(width - wind->requested.logical_width);
+                    const int delta_height = SDL_abs(height - wind->requested.logical_height);
+                    if (width != wind->last_configure.width && delta_width) {
+                        if (!(wind->resize_edge & WAYLAND_RESIZE_EDGE_TB) || delta_width > 1) {
+                            wind->resize_edge |= WAYLAND_RESIZE_EDGE_LR;
+                        }
+                    }
+                    if (height != wind->last_configure.height && delta_height) {
+                        if (!(wind->resize_edge & WAYLAND_RESIZE_EDGE_LR) || delta_height > 1) {
+                            wind->resize_edge |= WAYLAND_RESIZE_EDGE_TB;
+                        }
+                    }
+                }
+            } else {
+                wind->resize_edge = 0;
+            }
+
             if (!width) {
                 /* This happens when we're being restored from a non-floating state,
                  * or the compositor indicates that the size is up to the client, so
@@ -1593,10 +1699,28 @@ static void decoration_frame_configure(struct libdecor_frame *frame,
                 // Aspect correction.
                 const float aspect = (float)wind->requested.logical_width / (float)wind->requested.logical_height;
 
-                if (window->min_aspect != 0.f && aspect < window->min_aspect) {
-                    wind->requested.logical_height = SDL_lroundf((float)wind->requested.logical_width / window->min_aspect);
-                } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
-                    wind->requested.logical_width = SDL_lroundf((float)wind->requested.logical_height * window->max_aspect);
+                switch (wind->resize_edge) {
+                case WAYLAND_RESIZE_EDGE_LR:
+                    if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+                        wind->requested.logical_height = SDL_lroundf((float)wind->requested.logical_width / window->min_aspect);
+                    } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+                        wind->requested.logical_height = SDL_lroundf((float)wind->requested.logical_width / window->max_aspect);
+                    }
+                    break;
+                case WAYLAND_RESIZE_EDGE_TB:
+                    if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+                        wind->requested.logical_width = SDL_lroundf((float)wind->requested.logical_height * window->min_aspect);
+                    } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+                        wind->requested.logical_width = SDL_lroundf((float)wind->requested.logical_height * window->max_aspect);
+                    }
+                    break;
+                default:
+                    if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+                        wind->requested.logical_height = SDL_lroundf((float)wind->requested.logical_width / window->min_aspect);
+                    } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+                        wind->requested.logical_width = SDL_lroundf((float)wind->requested.logical_height * window->max_aspect);
+                    }
+                    break;
                 }
             } else {
                 if (window->max_w > 0) {
@@ -1612,10 +1736,28 @@ static void decoration_frame_configure(struct libdecor_frame *frame,
                 // Aspect correction.
                 const float aspect = (float)wind->requested.pixel_width / (float)wind->requested.pixel_height;
 
-                if (window->min_aspect != 0.f && aspect < window->min_aspect) {
-                    wind->requested.pixel_height = SDL_lroundf((float)wind->requested.pixel_width / window->min_aspect);
-                } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
-                    wind->requested.pixel_width = SDL_lroundf((float)wind->requested.pixel_height * window->max_aspect);
+                switch (wind->resize_edge) {
+                case WAYLAND_RESIZE_EDGE_LR:
+                    if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+                        wind->requested.pixel_height = SDL_lroundf((float)wind->requested.pixel_width / window->min_aspect);
+                    } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+                        wind->requested.pixel_height = SDL_lroundf((float)wind->requested.pixel_width / window->max_aspect);
+                    }
+                    break;
+                case WAYLAND_RESIZE_EDGE_TB:
+                    if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+                        wind->requested.pixel_width = SDL_lroundf((float)wind->requested.pixel_height * window->min_aspect);
+                    } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+                        wind->requested.pixel_width = SDL_lroundf((float)wind->requested.pixel_height * window->max_aspect);
+                    }
+                    break;
+                default:
+                    if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+                        wind->requested.pixel_height = SDL_lroundf((float)wind->requested.pixel_width / window->min_aspect);
+                    } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+                        wind->requested.pixel_width = SDL_lroundf((float)wind->requested.pixel_height * window->max_aspect);
+                    }
+                    break;
                 }
 
                 wind->requested.logical_width = PixelToPoint(window, wind->requested.pixel_width);
