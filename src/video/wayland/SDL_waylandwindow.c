@@ -2837,6 +2837,7 @@ bool Wayland_SetWindowKeyboardGrab(SDL_VideoDevice *_this, SDL_Window *window, b
 
 bool Wayland_ReconfigureWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_WindowFlags flags)
 {
+    SDL_VideoData *viddata = _this->internal;
     SDL_WindowData *data = window->internal;
 
     if (data->shell_surface_status == WAYLAND_SHELL_SURFACE_STATUS_SHOWN) {
@@ -2861,7 +2862,7 @@ bool Wayland_ReconfigureWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_W
         }
 #endif
 
-        if (!data->gles_swap_frame_event_queue) {
+        if (viddata->egl_swap_hack_enabled && !data->gles_swap_frame_event_queue) {
             data->gles_swap_frame_event_queue = WAYLAND_wl_display_create_queue(data->waylandData->display);
             data->gles_swap_frame_surface_wrapper = WAYLAND_wl_proxy_create_wrapper(data->surface);
             WAYLAND_wl_proxy_set_queue((struct wl_proxy *)data->gles_swap_frame_surface_wrapper, data->gles_swap_frame_event_queue);
@@ -2995,7 +2996,7 @@ bool Wayland_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Proper
      * wait timeout that avoids getting deadlocked by the compositor when the
      * window isn't visible.
      */
-    if (window->flags & SDL_WINDOW_OPENGL) {
+    if ((window->flags & SDL_WINDOW_OPENGL) && c->egl_swap_hack_enabled) {
         data->gles_swap_frame_event_queue = WAYLAND_wl_display_create_queue(data->waylandData->display);
         data->gles_swap_frame_surface_wrapper = WAYLAND_wl_proxy_create_wrapper(data->surface);
         WAYLAND_wl_proxy_set_queue((struct wl_proxy *)data->gles_swap_frame_surface_wrapper, data->gles_swap_frame_event_queue);

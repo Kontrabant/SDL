@@ -97,6 +97,7 @@ typedef struct SDL_EGL_VideoData
     PFNEGLQUERYDEVICESEXTPROC eglQueryDevicesEXT;
     PFNEGLGETPLATFORMDISPLAYPROC eglGetPlatformDisplay;
     PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT;
+    PFNEGLQUERYDEVICESTRINGEXTPROC eglQueryDeviceStringEXT;
 
     // Atomic functions
     PFNEGLCREATESYNCKHRPROC eglCreateSyncKHR;

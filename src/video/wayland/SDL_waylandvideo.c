@@ -1425,6 +1425,8 @@ static void handle_registry_global(void *data, struct wl_registry *registry, uin
         Wayland_DisplayInitPointerGestureManager(d);
     } else if (SDL_strcmp(interface, wp_single_pixel_buffer_manager_v1_interface.name) == 0) {
         d->single_pixel_buffer_manager = wl_registry_bind(d->registry, id, &wp_single_pixel_buffer_manager_v1_interface, 1);
+    } else if (SDL_strcmp(interface, "wp_fifo_manager_v1") == 0) {
+        d->has_fifo_v1 = true; // We don't actually need the interface, just need to know if it is supported.
     }
 #ifdef SDL_WL_FIXES_VERSION
     else if (SDL_strcmp(interface, wl_fixes_interface.name) == 0) {

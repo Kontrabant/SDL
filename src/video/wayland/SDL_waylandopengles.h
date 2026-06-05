@@ -35,11 +35,11 @@ typedef struct SDL_PrivateGLESData
 #define Wayland_GLES_GetAttribute   SDL_EGL_GetAttribute
 #define Wayland_GLES_GetProcAddress SDL_EGL_GetProcAddressInternal
 #define Wayland_GLES_UnloadLibrary  SDL_EGL_UnloadLibrary
+#define Wayland_GLES_GetSwapInterval SDL_EGL_GetSwapInterval
 
 extern bool Wayland_GLES_LoadLibrary(SDL_VideoDevice *_this, const char *path);
 extern SDL_GLContext Wayland_GLES_CreateContext(SDL_VideoDevice *_this, SDL_Window *window);
 extern bool Wayland_GLES_SetSwapInterval(SDL_VideoDevice *_this, int interval);
-extern bool Wayland_GLES_GetSwapInterval(SDL_VideoDevice *_this, int *interval);
 extern bool Wayland_GLES_SwapWindow(SDL_VideoDevice *_this, SDL_Window *window);
 extern bool Wayland_GLES_MakeCurrent(SDL_VideoDevice *_this, SDL_Window *window, SDL_GLContext context);
 extern bool Wayland_GLES_DestroyContext(SDL_VideoDevice *_this, SDL_GLContext context);

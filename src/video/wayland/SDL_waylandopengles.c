@@ -30,8 +30,6 @@
 #include "SDL_waylandwindow.h"
 #include "SDL_waylandevents_c.h"
 
-#include "xdg-shell-client-protocol.h"
-
 // EGL implementation of SDL OpenGL ES support
 
 void Wayland_GLES_SetDefaultProfileConfig(SDL_VideoDevice *_this)
@@ -44,44 +42,61 @@ void Wayland_GLES_SetDefaultProfileConfig(SDL_VideoDevice *_this)
 
 bool Wayland_GLES_LoadLibrary(SDL_VideoDevice *_this, const char *path)
 {
-    bool result;
     SDL_VideoData *data = _this->internal;
-
-    result = SDL_EGL_LoadLibrary(_this, path, (NativeDisplayType)data->display);
+    const bool result = SDL_EGL_LoadLibrary(_this, path, (NativeDisplayType)data->display);
 
     Wayland_PumpEvents(_this);
-    WAYLAND_wl_display_flush(data->display);
+
+    if (result) {
+        _this->internal->egl_swap_hack_enabled = true;
+
+        /* If the compositor supports the fifo-v1 protocol, the EGL swap hack is not needed on:
+         *
+         * - NVIDIA (egl-wayland2)
+         * - The Zink renderer in Mesa (uses Vulkan presentation).
+         *
+         * The general EGL presentation path in Mesa is not yet wired up for this:
+         * https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/26528
+         *
+         * The presentation hack is always required the double buffering hint is set.
+         */
+        if (data->has_fifo_v1 && !SDL_GetHintBoolean(SDL_HINT_VIDEO_DOUBLE_BUFFER, false)) {
+            const char *str = _this->egl_data->eglQueryString(_this->egl_data->egl_display, EGL_VENDOR);
+            if (!str || SDL_strcasecmp(str, "NVIDIA") == 0) {
+                _this->internal->egl_swap_hack_enabled = false;
+            }
+            if (_this->egl_data->eglQueryDeviceStringEXT) {
+                str = _this->egl_data->eglQueryDeviceStringEXT(_this->egl_data->egl_display, EGL_RENDERER_EXT);
+                if (!str || SDL_strcasecmp(str, "zink") == 0) {
+                    _this->internal->egl_swap_hack_enabled = false;
+                }
+            }
+        }
+    }
 
     return result;
 }
 
 SDL_GLContext Wayland_GLES_CreateContext(SDL_VideoDevice *_this, SDL_Window *window)
 {
-    SDL_GLContext context;
-    context = SDL_EGL_CreateContext(_this, window->internal->egl_surface);
+    SDL_GLContext context = SDL_EGL_CreateContext(_this, window->internal->egl_surface);
     WAYLAND_wl_display_flush(_this->internal->display);
 
     return context;
 }
 
-/* Wayland wants to tell you when to provide new frames, and if you have a non-zero
-   swap interval, Mesa will block until a callback tells it to do so. On some
-   compositors, they might decide that a minimized window _never_ gets a callback,
-   which causes apps to hang during swapping forever. So we always set the official
-   eglSwapInterval to zero to avoid blocking inside EGL, and manage this ourselves.
-   If a swap blocks for too long waiting on a callback, we just go on, under the
-   assumption the frame will be wasted, but this is better than freezing the app.
-   I frown upon platforms that dictate this sort of control inversion (the callback
-   is intended for _rendering_, not stalling until vsync), but we can work around
-   this for now.  --ryan. */
-/* Addendum: several recent APIs demand this sort of control inversion: Emscripten,
-   libretro, Wayland, probably others...it feels like we're eventually going to have
-   to give in with a future SDL API revision, since we can bend the other APIs to
-   this style, but this style is much harder to bend the other way.  :/ */
+/* Compositors and drivers that don't support the fifo-v1 protocol can stall presentation indefinitely when
+ * the window is occluded. In these cases the swap interval is always set to 0, so that forward progress can
+ * be guaranteed, even if frame callbacks stop.
+ */
 bool Wayland_GLES_SetSwapInterval(SDL_VideoDevice *_this, int interval)
 {
     if (!_this->egl_data) {
         return SDL_SetError("EGL not initialized");
+    }
+
+    if (!_this->internal->egl_swap_hack_enabled) {
+        return SDL_EGL_SetSwapInterval(_this, interval);
     }
 
     /* technically, this is _all_ adaptive vsync (-1), because we can't
@@ -100,27 +115,16 @@ bool Wayland_GLES_SetSwapInterval(SDL_VideoDevice *_this, int interval)
     return true;
 }
 
-bool Wayland_GLES_GetSwapInterval(SDL_VideoDevice *_this, int *interval)
-{
-    if (!_this->egl_data) {
-        return SDL_SetError("EGL not initialized");
-    }
-
-    *interval =_this->egl_data->egl_swapinterval;
-    return true;
-}
-
 bool Wayland_GLES_SwapWindow(SDL_VideoDevice *_this, SDL_Window *window)
 {
     SDL_WindowData *data = window->internal;
     const int swap_interval = _this->egl_data->egl_swapinterval;
 
-    /* For windows that we know are hidden, skip swaps entirely, if we don't do
-     * this compositors will intentionally stall us indefinitely and there's no
+    /* For windows with no backing window object, skip swaps entirely. If we don't do
+     * this, compositors will intentionally stall us indefinitely and there's no
      * way for an end user to show the window, unlike other situations (i.e.
      * the window is minimized, behind another window, etc.).
      *
-     * FIXME: Request EGL_WAYLAND_swap_buffers_with_timeout.
      * -flibit
      */
     if (data->shell_surface_status != WAYLAND_SHELL_SURFACE_STATUS_SHOWN &&
@@ -128,9 +132,17 @@ bool Wayland_GLES_SwapWindow(SDL_VideoDevice *_this, SDL_Window *window)
         return true;
     }
 
-    /* By default, we wait for the Wayland frame callback and then issue the pageflip (eglSwapBuffers),
-     * but if we want low latency (double buffer scheme), we issue the pageflip and then wait
-     * immediately for the Wayland frame callback.
+    if (!_this->internal->egl_swap_hack_enabled) {
+        return SDL_EGL_SwapBuffers(_this, data->egl_surface);
+    }
+
+    /* Compositors and drivers that don't support the fifo-v1 protocol rely on frame callbacks for presentation
+     * timing, and compositors may stop sending frame callbacks when the window is occluded, which can stall
+     * presentation indefinitely. In these cases the swap interval is always set to 0, and, in the event that frame
+     * callbacks stop, a 20hz timer is used instead to maintain forward progress.
+     *
+     * Due to the unpredictable timing of frame callbacks, using a higher timeout value can result in
+     * false-positives, and is not recommended.
      */
     if (data->double_buffer) {
         // Feed the frame to Wayland. This will set it so the wl_surface_frame callback can fire again.
@@ -206,7 +218,7 @@ bool Wayland_GLES_MakeCurrent(SDL_VideoDevice *_this, SDL_Window *window, SDL_GL
 
     WAYLAND_wl_display_flush(_this->internal->display);
 
-    _this->egl_data->eglSwapInterval(_this->egl_data->egl_display, 0); // see comments on Wayland_GLES_SetSwapInterval.
+    //_this->egl_data->eglSwapInterval(_this->egl_data->egl_display, 0); // see comments on Wayland_GLES_SetSwapInterval.
 
     return result;
 }

@@ -103,6 +103,8 @@ struct SDL_VideoData
     bool display_disconnected;
     bool display_externally_owned;
     bool scale_to_display_enabled;
+    bool egl_swap_hack_enabled;
+    bool has_fifo_v1;
 };
 
 struct SDL_DisplayData
