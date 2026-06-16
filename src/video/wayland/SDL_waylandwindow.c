@@ -912,6 +912,76 @@ static const struct xdg_surface_listener _xdg_surface_listener = {
     handle_xdg_surface_configure
 };
 
+static void ApplyGeometryLimits(SDL_Window *window, int req_w, int req_h, int *w, int *h)
+{
+    SDL_WindowData *wind = window->internal;
+
+    const float aspect = (float)req_w / (float)req_h;
+
+    if (!wind->resizing || (wind->resize_edge & WAYLAND_RESIZE_EDGE_CORNER) == WAYLAND_RESIZE_EDGE_CORNER) {
+        if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+            *h = SDL_max(SDL_lroundf((float)req_w / window->min_aspect), 1);
+        } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+            *w = SDL_max(SDL_lroundf((float)req_h * window->max_aspect), 1);
+        }
+    } else if (wind->resize_edge & WAYLAND_RESIZE_EDGE_LR) {
+        if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+            *h = SDL_max(SDL_lroundf((float)req_w / window->min_aspect), 1);
+        } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+            *h = SDL_max(SDL_lroundf((float)req_w / window->max_aspect), 1);
+        }
+    } else if (wind->resize_edge & WAYLAND_RESIZE_EDGE_TB) {
+        if (window->min_aspect != 0.f && aspect < window->min_aspect) {
+            *w = SDL_max(SDL_lroundf((float)req_h * window->min_aspect), 1);
+        } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
+            *w = SDL_max(SDL_lroundf((float)req_h * window->max_aspect), 1);
+        }
+    }
+
+    if (window->max_w > 0) {
+        *w = SDL_min(*w, window->max_w);
+    }
+    *w = SDL_max(*w, window->min_w);
+
+    if (window->max_h > 0) {
+        *h = SDL_min(*h, window->max_h);
+    }
+    *h = SDL_max(*h, window->min_h);
+}
+
+static void DetermineResizeAxis(SDL_WindowData *wind, int width, int height, bool resizing)
+{
+    /* Try to determine the axis along which the window is being resized.
+     *
+     * Every compositor is different, and some will start sending strange values once the resize
+     * begins, so only the first change is safe to try and determine the resize edge.
+     *
+     * Some compositors don't send a configure event with the resize flag cleared when the resize ends,
+     * so a reset timer is required.
+     */
+    if (resizing) {
+        const Uint64 now = SDL_GetTicksNS();
+        if (now >= wind->last_resize_event_time_ns + SDL_MS_TO_NS(250)) {
+            wind->resize_edge = 0;
+        }
+
+        wind->last_resize_event_time_ns = now;
+
+        if (!wind->resize_edge) {
+            if (width != wind->last_configure.width || !height) {
+                wind->resize_edge |= WAYLAND_RESIZE_EDGE_LR;
+            }
+            if (height != wind->last_configure.height || !width) {
+                wind->resize_edge |= WAYLAND_RESIZE_EDGE_TB;
+            }
+        }
+    } else {
+        wind->resize_edge = 0;
+    }
+
+    wind->resizing = resizing;
+}
+
 static void handle_xdg_toplevel_configure(void *data,
                                           struct xdg_toplevel *xdg_toplevel,
                                           int32_t width,
@@ -976,6 +1046,7 @@ static void handle_xdg_toplevel_configure(void *data,
     // When resizing, dimensions other than 0 are a maximum.
     const bool new_configure_size = width != wind->last_configure.width || height != wind->last_configure.height;
 
+    DetermineResizeAxis(wind, width, height, resizing);
     UpdateWindowFullscreen(window, fullscreen);
 
     /* Always send a maximized/restore event; if the event is redundant it will
@@ -1087,54 +1158,15 @@ static void handle_xdg_toplevel_configure(void *data,
          * - Only floating windows are truly safe to resize: maximized windows must have
          *   their exact dimensions respected, or a protocol violation can occur, and tiled
          *   windows can technically use dimensions smaller than the ones supplied by the
-         *   compositor, but doing so can cause odd behavior. In these cases it's best to use
-         *   the supplied dimensions and use a viewport + mask to enforce the size limits and/or
-         *   aspect ratio.
-         *
-         * - When resizing a window, the width/height are maximum values, so aspect ratio
-         *   correction can't resize beyond the existing dimensions, or a protocol violation
-         *   can occur. However, in practice, nothing seems to kill clients that do this, but
-         *   doing so can cause certain compositors to glitch out.
+         *   compositor, but doing so can cause visual glitches and odd behavior. In these cases
+         *   it's best to use the supplied dimensions and use a viewport + mask to enforce the
+         *   size limits and/or aspect ratio.
          */
         if (floating) {
             if (!wind->scale_to_display) {
-                if (window->max_w > 0) {
-                    wind->requested.logical_width = SDL_min(wind->requested.logical_width, window->max_w);
-                }
-                wind->requested.logical_width = SDL_max(wind->requested.logical_width, window->min_w);
-
-                if (window->max_h > 0) {
-                    wind->requested.logical_height = SDL_min(wind->requested.logical_height, window->max_h);
-                }
-                wind->requested.logical_height = SDL_max(wind->requested.logical_height, window->min_h);
-
-                // Aspect correction.
-                const float aspect = (float)wind->requested.logical_width / (float)wind->requested.logical_height;
-
-                if (window->min_aspect != 0.f && aspect < window->min_aspect) {
-                    wind->requested.logical_height = SDL_max(SDL_lroundf((float)wind->requested.logical_width / window->min_aspect), 1);
-                } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
-                    wind->requested.logical_width = SDL_max(SDL_lroundf((float)wind->requested.logical_height * window->max_aspect), 1);
-                }
+                ApplyGeometryLimits(window, wind->requested.logical_width, wind->requested.logical_height, &wind->requested.logical_width, &wind->requested.logical_height);
             } else {
-                if (window->max_w > 0) {
-                    wind->requested.pixel_width = SDL_min(wind->requested.pixel_width, window->max_w);
-                }
-                wind->requested.pixel_width = SDL_max(wind->requested.pixel_width, window->min_w);
-
-                if (window->max_h > 0) {
-                    wind->requested.pixel_height = SDL_min(wind->requested.pixel_height, window->max_h);
-                }
-                wind->requested.pixel_height = SDL_max(wind->requested.pixel_height, window->min_h);
-
-                // Aspect correction.
-                const float aspect = (float)wind->requested.pixel_width / (float)wind->requested.pixel_height;
-
-                if (window->min_aspect != 0.f && aspect < window->min_aspect) {
-                    wind->requested.pixel_height = SDL_max(SDL_lroundf((float)wind->requested.pixel_width / window->min_aspect), 1);
-                } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
-                    wind->requested.pixel_width = SDL_max(SDL_lroundf((float)wind->requested.pixel_height * window->max_aspect), 1);
-                }
+                ApplyGeometryLimits(window, wind->requested.pixel_width, wind->requested.pixel_height, &wind->requested.pixel_width, &wind->requested.pixel_height);
 
                 wind->requested.logical_width = PixelToPoint(window, wind->requested.pixel_width);
                 wind->requested.logical_height = PixelToPoint(window, wind->requested.pixel_height);
@@ -1162,7 +1194,6 @@ static void handle_xdg_toplevel_configure(void *data,
     wind->suspended = suspended;
     wind->active = active;
     window->tiled = tiled;
-    wind->resizing = resizing;
 }
 
 static void handle_xdg_toplevel_close(void *data, struct xdg_toplevel *xdg_toplevel)
@@ -1484,6 +1515,7 @@ static void decoration_frame_configure(struct libdecor_frame *frame,
             }
 
             const bool new_configure_size = width != wind->last_configure.width || height != wind->last_configure.height;
+            DetermineResizeAxis(wind, width, height, resizing);
 
             if (!width) {
                 /* This happens when we're being restored from a non-floating state,
@@ -1585,43 +1617,9 @@ static void decoration_frame_configure(struct libdecor_frame *frame,
          */
         if (floating) {
             if (!wind->scale_to_display) {
-                if (window->max_w > 0) {
-                    wind->requested.logical_width = SDL_min(wind->requested.logical_width, window->max_w);
-                }
-                wind->requested.logical_width = SDL_max(wind->requested.logical_width, window->min_w);
-
-                if (window->max_h > 0) {
-                    wind->requested.logical_height = SDL_min(wind->requested.logical_height, window->max_h);
-                }
-                wind->requested.logical_height = SDL_max(wind->requested.logical_height, window->min_h);
-
-                // Aspect correction.
-                const float aspect = (float)wind->requested.logical_width / (float)wind->requested.logical_height;
-
-                if (window->min_aspect != 0.f && aspect < window->min_aspect) {
-                    wind->requested.logical_height = SDL_max(SDL_lroundf((float)wind->requested.logical_width / window->min_aspect), 1);
-                } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
-                    wind->requested.logical_width = SDL_max(SDL_lroundf((float)wind->requested.logical_height * window->max_aspect), 1);
-                }
+                ApplyGeometryLimits(window, wind->requested.logical_width, wind->requested.logical_height, &wind->requested.logical_width, &wind->requested.logical_height);
             } else {
-                if (window->max_w > 0) {
-                    wind->requested.pixel_width = SDL_min(wind->requested.pixel_width, window->max_w);
-                }
-                wind->requested.pixel_width = SDL_max(wind->requested.pixel_width, window->min_w);
-
-                if (window->max_h > 0) {
-                    wind->requested.pixel_height = SDL_min(wind->requested.pixel_height, window->max_h);
-                }
-                wind->requested.pixel_height = SDL_max(wind->requested.pixel_height, window->min_h);
-
-                // Aspect correction.
-                const float aspect = (float)wind->requested.pixel_width / (float)wind->requested.pixel_height;
-
-                if (window->min_aspect != 0.f && aspect < window->min_aspect) {
-                    wind->requested.pixel_height = SDL_max(SDL_lroundf((float)wind->requested.pixel_width / window->min_aspect), 1);
-                } else if (window->max_aspect != 0.f && aspect > window->max_aspect) {
-                    wind->requested.pixel_width = SDL_max(SDL_lroundf((float)wind->requested.pixel_height * window->max_aspect), 1);
-                }
+                ApplyGeometryLimits(window, wind->requested.pixel_width, wind->requested.pixel_height, &wind->requested.pixel_width, &wind->requested.pixel_height);
 
                 wind->requested.logical_width = PixelToPoint(window, wind->requested.pixel_width);
                 wind->requested.logical_height = PixelToPoint(window, wind->requested.pixel_height);
