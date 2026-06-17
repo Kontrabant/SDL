@@ -721,6 +721,7 @@ void Wayland_UpdateWindowPosition(SDL_Window *window)
     wind->last_displayID = display->display;
     if (wind->shell_surface_type != WAYLAND_SHELL_SURFACE_TYPE_XDG_POPUP) {
         if (!wind->waylandData->scale_to_display_enabled) {
+            SDL_Log("Moved");
             SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_MOVED, display->logical.x, display->logical.y);
         } else {
             SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_MOVED, display->pixel.x, display->pixel.y);

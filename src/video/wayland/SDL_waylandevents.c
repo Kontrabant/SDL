@@ -37,17 +37,17 @@
 #include "SDL_waylandclipboard.h"
 #include "SDL_waylandkeyboard.h"
 
-#include "pointer-constraints-unstable-v1-client-protocol.h"
-#include "relative-pointer-unstable-v1-client-protocol.h"
-#include "xdg-shell-client-protocol.h"
-#include "keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h"
-#include "text-input-unstable-v3-client-protocol.h"
-#include "tablet-v2-client-protocol.h"
-#include "primary-selection-unstable-v1-client-protocol.h"
-#include "input-timestamps-unstable-v1-client-protocol.h"
-#include "pointer-gestures-unstable-v1-client-protocol.h"
 #include "cursor-shape-v1-client-protocol.h"
+#include "input-timestamps-unstable-v1-client-protocol.h"
+#include "keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h"
+#include "pointer-constraints-unstable-v1-client-protocol.h"
+#include "pointer-gestures-unstable-v1-client-protocol.h"
+#include "primary-selection-unstable-v1-client-protocol.h"
+#include "relative-pointer-unstable-v1-client-protocol.h"
+#include "tablet-v2-client-protocol.h"
+#include "text-input-unstable-v3-client-protocol.h"
 #include "viewporter-client-protocol.h"
+#include "xdg-shell-client-protocol.h"
 #include "xdg-toplevel-drag-v1-client-protocol.h"
 
 #ifdef HAVE_LIBDECOR_H
@@ -946,8 +946,12 @@ bool Wayland_BeginWindowDrag(SDL_WindowData *window_data, uint32_t serial)
     SDL_WaylandSeat *seat = vid->last_implicit_grab_seat;
 
     if (vid->xdg_toplevel_drag_manager_v1) {
-        const int offset_x = seat->pointer.last_motion.x - window_data->sdlwindow->x;
-        const int offset_y = seat->pointer.last_motion.y - window_data->sdlwindow->y;
+        SDL_Mouse *m = SDL_GetMouse();
+        const int m_x = seat->pointer.last_motion.x + (m->focus ? m->focus->x : 0);
+        const int m_y = seat->pointer.last_motion.y + (m->focus ? m->focus->y : 0);
+
+        const int offset_x = m_x - window_data->sdlwindow->x;
+        const int offset_y = m_y - window_data->sdlwindow->y;
 
         SDL_WaylandDataSource *drag_source = Wayland_data_source_create(seat);
         Wayland_data_source_set_callback(drag_source, DragWindowCallback, DragCleanupCallback, window_data, 0);
