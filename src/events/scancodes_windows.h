@@ -18,6 +18,7 @@
      misrepresented as being the original software.
   3. This notice may not be removed or altered from any source distribution.
 */
+#include "../../include/SDL3/SDL_scancode.h"
 #include "SDL_internal.h"
 
 /*
@@ -187,7 +188,7 @@ static const SDL_Scancode windows_scancode_table[] = {
     /*0xe01e*/ SDL_SCANCODE_UNKNOWN,
     /*0xe01f*/ SDL_SCANCODE_UNKNOWN,
     /*0xe020*/ SDL_SCANCODE_MUTE,
-    /*0xe021*/ SDL_SCANCODE_UNKNOWN, // LaunchApp2
+    /*0xe021*/ SDL_SCANCODE_AL_CALCULATOR, // LaunchApp2
     /*0xe022*/ SDL_SCANCODE_MEDIA_PLAY_PAUSE,
     /*0xe023*/ SDL_SCANCODE_UNKNOWN,
     /*0xe024*/ SDL_SCANCODE_MEDIA_STOP,
@@ -261,8 +262,8 @@ static const SDL_Scancode windows_scancode_table[] = {
     /*0xe068*/ SDL_SCANCODE_AC_STOP,
     /*0xe069*/ SDL_SCANCODE_AC_FORWARD,
     /*0xe06a*/ SDL_SCANCODE_AC_BACK,
-    /*0xe06b*/ SDL_SCANCODE_UNKNOWN,    // LaunchApp1
-    /*0xe06c*/ SDL_SCANCODE_UNKNOWN,    // LaunchMail
+    /*0xe06b*/ SDL_SCANCODE_AL_LOCAL_MACHINE_BROWSER, // LaunchApp1
+    /*0xe06c*/ SDL_SCANCODE_AL_EMAIL_READER,          // LaunchMail
     /*0xe06d*/ SDL_SCANCODE_MEDIA_SELECT,
     /*0xe06e*/ SDL_SCANCODE_UNKNOWN,
     /*0xe06f*/ SDL_SCANCODE_UNKNOWN,

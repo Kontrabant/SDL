@@ -418,6 +418,25 @@ typedef enum SDL_Scancode
 
     /* @} *//* Mobile keys */
 
+    /**
+     *  \name Application launcher keys
+     *
+     *  These are keys that are used to launch applications.
+     *
+     *  There are way more keys in the spec than we can represent in the
+     *  current scancode range, so pick the ones that commonly come up in
+     *  real world usage.
+     */
+    /* @{ */
+
+    SDL_SCANCODE_AL_CALCULATOR = 291,            /**< AL Calculator */
+    SDL_SCANCODE_AL_EMAIL_READER = 292,          /**< AL Email Reader */
+    SDL_SCANCODE_AL_FILE_BROWSER = 293,          /**< AL File Explorer */
+    SDL_SCANCODE_AL_LOCAL_MACHINE_BROWSER = 294, /**< AL Local Machine Browser */
+    SDL_SCANCODE_AL_INTERNET_BROWSER = 295,      /**< AL Internet Browser */
+
+    /* @} *//* Application launcher keys */
+
     /* Add any other keys here. */
 
     SDL_SCANCODE_RESERVED = 400,    /**< 400-500 reserved for dynamic keycodes */
