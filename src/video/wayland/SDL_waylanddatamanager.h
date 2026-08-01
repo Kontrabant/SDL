@@ -30,6 +30,7 @@
 #define TEXT_MIME            "text/plain;charset=utf-8"
 #define FILE_MIME            "text/uri-list"
 #define FILE_PORTAL_MIME     "application/vnd.portal.filetransfer"
+#define DOCKABLE_WINDOW_MIME "application/x-sdl3-dockable-window"
 #define SDL_DATA_ORIGIN_MIME "application/x-sdl3-source-id"
 
 typedef struct SDL_WaylandDataDevice SDL_WaylandDataDevice;
@@ -66,6 +67,7 @@ typedef struct
     SDL_WaylandDataDevice *data_device;
 
     // Callback data for queued receive.
+    void *userdata;
     struct wl_callback *callback;
     int read_fd;
 } SDL_WaylandDataOffer;
@@ -84,11 +86,12 @@ struct SDL_WaylandDataDevice
     char *id_str;
 
     // Drag and Drop
-    uint32_t drag_serial;
+    Uint32 drag_serial;
     SDL_WaylandDataOffer *drag_offer;
     SDL_WaylandDataOffer *selection_offer;
     const char *mime_type;
-    bool has_mime_file, has_mime_text;
+    float x, y;
+    bool has_mime_file, has_mime_text, has_mime_window;
     SDL_Window *dnd_window;
     struct wl_surface *dnd_surface;
 
@@ -118,6 +121,8 @@ extern void Wayland_DataSourceDestroy(SDL_WaylandDataSource *source);
 extern void Wayland_PrimarySelectionSourceDestroy(SDL_WaylandPrimarySelectionSource *source);
 
 // Wayland Data / Primary Selection Offer - (Receiving)
+extern bool Wayland_DataOfferRequestRemoteData(SDL_WaylandDataOffer *offer, const char *mime_type, const struct wl_callback_listener *completion_listener, void *userdata);
+extern void *Wayland_DataOfferGetRequestedData(SDL_WaylandDataOffer *offer, size_t *length);
 extern void *Wayland_DataOfferReceive(SDL_WaylandDataOffer *offer, const char *mime_type, size_t *length, bool extended_timeout);
 extern void *Wayland_PrimarySelectionOfferReceive(SDL_WaylandPrimarySelectionOffer *offer, const char *mime_type, size_t *length);
 extern bool Wayland_DataOfferHasMIME(SDL_WaylandDataOffer *offer, const char *mime_type);
