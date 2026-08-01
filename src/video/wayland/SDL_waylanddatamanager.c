@@ -174,11 +174,11 @@ static ssize_t ReadPipe(int fd, void **buffer, size_t *total_length, Sint64 time
     return bytes_read;
 }
 
-static SDL_MimeDataList *MIMEDataListFind(struct wl_list *list, const char *mime_type)
+static SDL_MimeData *MIMEDataListFind(struct wl_list *list, const char *mime_type)
 {
-    SDL_MimeDataList *found = NULL;
+    SDL_MimeData *found = NULL;
 
-    SDL_MimeDataList *item = NULL;
+    SDL_MimeData *item = NULL;
     wl_list_for_each (item, list, link) {
         if (!item->mime_type) {
             continue;
@@ -205,7 +205,7 @@ static bool MIMEDataListAdd(struct wl_list *list, const char *mime_type, const v
         SDL_memcpy(internal_buffer, buffer, length);
     }
 
-    SDL_MimeDataList *mime_data = MIMEDataListFind(list, mime_type);
+    SDL_MimeData *mime_data = MIMEDataListFind(list, mime_type);
 
     if (!mime_data) {
         mime_data = SDL_calloc(1, sizeof(*mime_data));
@@ -237,10 +237,16 @@ static bool MIMEDataListAdd(struct wl_list *list, const char *mime_type, const v
 
 static void MIMEDataListFree(struct wl_list *list)
 {
-    SDL_MimeDataList *mime_data = NULL;
-    SDL_MimeDataList *next = NULL;
+    SDL_MimeData *mime_data = NULL;
+    SDL_MimeData *next = NULL;
 
     wl_list_for_each_safe (mime_data, next, list, link) {
+        if (mime_data->callback) {
+            wl_callback_destroy(mime_data->callback);
+        }
+        if (mime_data->read_fd >= 0) {
+            close(mime_data->read_fd);
+        }
         SDL_free(mime_data->data);
         SDL_free(mime_data->mime_type);
         SDL_free(mime_data);
@@ -270,6 +276,10 @@ static void data_source_handle_dnd_drop_performed(void *data, struct wl_data_sou
 
 static void data_source_handle_dnd_finished(void *data, struct wl_data_source *wl_data_source)
 {
+    SDL_WaylandDataSource *source = data;
+    if (source) {
+        Wayland_DataSourceDestroy(source);
+    }
 }
 
 static void data_source_handle_action(void *data, struct wl_data_source *wl_data_source, uint32_t dnd_action)
@@ -370,10 +380,11 @@ ssize_t Wayland_PrimarySelectionSourceSend(SDL_WaylandPrimarySelectionSource *so
     return SendData(data, length, fd);
 }
 
-void Wayland_DataSourceSetCallback(SDL_WaylandDataSource *source, SDL_ClipboardDataCallback callback, void *userdata, Uint32 sequence)
+void Wayland_DataSourceSetCallback(SDL_WaylandDataSource *source, SDL_ClipboardDataCallback callback, Wayland_UserdataCleanupCallback cleanup_callback, void *userdata, Uint32 sequence)
 {
     if (source) {
         source->callback = callback;
+        source->cleanup_callback = cleanup_callback;
         source->userdata.sequence = sequence;
         source->userdata.data = userdata;
     }
@@ -439,10 +450,13 @@ void Wayland_DataSourceDestroy(SDL_WaylandDataSource *source)
             data_device->selection_source = NULL;
         }
         wl_data_source_destroy(source->source);
-        if (source->userdata.sequence) {
-            SDL_CancelClipboardData(source->userdata.sequence);
+        if (source->cleanup_callback) {
+            source->cleanup_callback(source->userdata.data);
         } else {
             SDL_free(source->userdata.data);
+        }
+        if (source->userdata.sequence) {
+            SDL_CancelClipboardData(source->userdata.sequence);
         }
         SDL_free(source);
     }
@@ -463,6 +477,72 @@ void Wayland_PrimarySelectionSourceDestroy(SDL_WaylandPrimarySelectionSource *so
     }
 }
 
+static void offer_mime_done_handler(void *data, struct wl_callback *callback, uint32_t callback_data)
+{
+    if (!callback) {
+        return;
+    }
+
+    SDL_MimeData *mime = (SDL_MimeData *)data;
+    size_t length = 0;
+
+    wl_callback_destroy(mime->callback);
+    mime->callback = NULL;
+
+    SDL_free(mime->data);
+    mime->length = 0;
+
+    while (ReadPipe(mime->read_fd, &mime->data, &length, DEFAULT_PIPE_TIMEOUT_NS) > 0) {
+    }
+    close(mime->read_fd);
+    mime->read_fd = -1;
+    mime->length = length;
+}
+
+static struct wl_callback_listener offer_mime_listener = {
+    offer_mime_done_handler
+};
+
+void Wayland_DataOfferGetMIMEDataAsync(SDL_WaylandDataOffer *offer, const char *mime_type, const struct wl_callback_listener *callback_listener, void *callback_userdata)
+{
+    int pipefd[2];
+
+    if (!offer) {
+        return;
+    }
+
+    SDL_MimeData *mime = MIMEDataListFind(&offer->mimes, mime_type);
+    if (!mime) {
+        return;
+    }
+
+    if (pipe2(pipefd, O_CLOEXEC | O_NONBLOCK) == 0) {
+        if (mime->callback) {
+            wl_callback_destroy(mime->callback);
+        }
+        if (offer->read_fd >= 0) {
+            close(mime->read_fd);
+        }
+
+        SDL_free(mime->data);
+        mime->data = NULL;
+        mime->length = 0;
+        mime->read_fd = pipefd[0];
+
+        wl_data_offer_receive(offer->offer, mime_type, pipefd[1]);
+        close(pipefd[1]);
+
+        mime->callback = wl_display_sync(offer->data_device->seat->display->display);
+        wl_callback_add_listener(mime->callback, &offer_mime_listener, mime);
+
+        if (callback_listener) {
+            offer->callback = wl_display_sync(offer->data_device->seat->display->display);
+            wl_callback_add_listener(offer->callback, callback_listener, callback_userdata);
+            WAYLAND_wl_display_flush(offer->data_device->seat->display->display);
+        }
+    }
+}
+
 static void offer_source_done_handler(void *data, struct wl_callback *callback, uint32_t callback_data)
 {
     if (!callback) {
@@ -470,20 +550,14 @@ static void offer_source_done_handler(void *data, struct wl_callback *callback, 
     }
 
     SDL_WaylandDataOffer *offer = (SDL_WaylandDataOffer *)data;
-    char *id = NULL;
-    size_t length = 0;
-
     wl_callback_destroy(offer->callback);
     offer->callback = NULL;
 
-    while (ReadPipe(offer->read_fd, (void **)&id, &length, DEFAULT_PIPE_TIMEOUT_NS) > 0) {
-    }
-    close(offer->read_fd);
-    offer->read_fd = -1;
+    size_t length = 0;
+    const char *id = Wayland_DataOfferGetMIMEData(offer, SDL_DATA_ORIGIN_MIME, &length);
 
     if (id) {
         const bool source_is_external = SDL_strncmp(offer->data_device->id_str, id, length) != 0;
-        SDL_free(id);
         if (source_is_external) {
             Wayland_DataOfferNotifyFromMIMEs(offer, false);
         } else {
@@ -495,38 +569,9 @@ static void offer_source_done_handler(void *data, struct wl_callback *callback, 
     }
 }
 
-static struct wl_callback_listener offer_source_listener = {
+static const struct wl_callback_listener offer_source_listener = {
     offer_source_done_handler
 };
-
-static void DataOfferCheckSource(SDL_WaylandDataOffer *offer, const char *mime_type)
-{
-    int pipefd[2];
-
-    if (!offer) {
-        return;
-    }
-    SDL_WaylandDataDevice *data_device = offer->data_device;
-
-    if (pipe2(pipefd, O_CLOEXEC | O_NONBLOCK) == 0) {
-        if (offer->callback) {
-            wl_callback_destroy(offer->callback);
-        }
-        if (offer->read_fd >= 0) {
-            close(offer->read_fd);
-        }
-
-        offer->read_fd = pipefd[0];
-
-        wl_data_offer_receive(offer->offer, mime_type, pipefd[1]);
-        close(pipefd[1]);
-
-        offer->callback = wl_display_sync(offer->data_device->seat->display->display);
-        wl_callback_add_listener(offer->callback, &offer_source_listener, offer);
-
-        WAYLAND_wl_display_flush(data_device->seat->display->display);
-    }
-}
 
 static void SetCurrentClipboardOffer(SDL_WaylandDataOffer *offer)
 {
@@ -559,7 +604,7 @@ void Wayland_DataOfferNotifyFromMIMEs(SDL_WaylandDataOffer *offer, bool check_or
         size_t alloc_size = 0;
 
         // Do a first pass to compute allocation size.
-        SDL_MimeDataList *item = NULL;
+        SDL_MimeData *item = NULL;
         wl_list_for_each(item, &offer->mimes, link) {
             if (!item->mime_type) {
                 continue;
@@ -567,7 +612,7 @@ void Wayland_DataOfferNotifyFromMIMEs(SDL_WaylandDataOffer *offer, bool check_or
 
             // If origin metadata is found, queue a check and wait for confirmation that this offer isn't recursive.
             if (check_origin && SDL_strcmp(item->mime_type, SDL_DATA_ORIGIN_MIME) == 0) {
-                DataOfferCheckSource(offer, item->mime_type);
+                Wayland_DataOfferGetMIMEDataAsync(offer, SDL_DATA_ORIGIN_MIME, &offer_source_listener, offer);
                 return;
             }
 
@@ -700,6 +745,44 @@ bool Wayland_PrimarySelectionOfferHasMIME(SDL_WaylandPrimarySelectionOffer *offe
         found = MIMEDataListFind(&offer->mimes, mime_type) != NULL;
     }
     return found;
+}
+
+bool Wayland_DataOfferSetMIMEData(SDL_WaylandDataOffer *offer, const char *mime_type, void *buffer, size_t length)
+{
+    bool set = false;
+
+    if (offer) {
+        SDL_MimeData *m = MIMEDataListFind(&offer->mimes, mime_type);
+
+        if (m) {
+            SDL_free(m->data);
+            if (buffer && length) {
+                m->data = SDL_malloc(length);
+                if (m->data) {
+                    SDL_memcpy(m->data, buffer, length);
+                    m->length = length;
+                    set = true;
+                }
+            } else {
+                set = true;
+            }
+        }
+    }
+    return set;
+}
+
+const void *Wayland_DataOfferGetMIMEData(SDL_WaylandDataOffer *offer, const char *mime_type, size_t *length)
+{
+    const void *data = NULL;
+    if (offer) {
+        SDL_MimeData *m = MIMEDataListFind(&offer->mimes, mime_type);
+        if (m) {
+            *length = m->length;
+            data = m->data;
+        }
+    }
+
+    return data;
 }
 
 void Wayland_DataOfferDestroy(SDL_WaylandDataOffer *offer)
