@@ -28,6 +28,14 @@
 #include "../SDL_clipboard_c.h"
 #include "../../events/SDL_events_c.h"
 
+static const char *const text_mime_types[] = {
+    TEXT_MIME,
+    "text/plain",
+    "TEXT",
+    "UTF8_STRING",
+    "STRING"
+};
+
 bool Wayland_SetClipboardData(SDL_VideoDevice *_this)
 {
     SDL_VideoData *video_data = _this->internal;
@@ -89,8 +97,17 @@ void *Wayland_GetClipboardData(SDL_VideoDevice *_this, const char *mime_type, si
         SDL_WaylandDataDevice *data_device = seat->data_device;
         if (data_device->selection_source) {
             buffer = SDL_GetInternalClipboardData(_this, mime_type, length);
-        } else if (Wayland_DataOfferHasMIME(data_device->selection_offer, mime_type)) {
-            buffer = Wayland_DataOfferReceive(data_device->selection_offer, mime_type, length, true);
+        } else {
+            if (Wayland_DataOfferHasMIME(data_device->selection_offer, mime_type)) {
+                buffer = Wayland_DataOfferReceive(data_device->selection_offer, mime_type, length, true);
+            } else if (SDL_IsTextMimeType(mime_type)) {
+                // If the MIME type is text, but there is no exact match, check the other compatible types.
+                for (int i = 0; !buffer && i < SDL_arraysize(text_mime_types); i++) {
+                    if (Wayland_DataOfferHasMIME(data_device->selection_offer, text_mime_types[i])) {
+                        buffer = Wayland_DataOfferReceive(data_device->selection_offer, text_mime_types[i], length, true);
+                    }
+                }
+            }
         }
     }
 
@@ -109,18 +126,17 @@ bool Wayland_HasClipboardData(SDL_VideoDevice *_this, const char *mime_type)
             result = SDL_HasInternalClipboardData(_this, mime_type);
         } else {
             result = Wayland_DataOfferHasMIME(data_device->selection_offer, mime_type);
+
+            // If the MIME type is text, but there is no exact match, check the other compatible types.
+            if (!result && SDL_IsTextMimeType(mime_type)) {
+                for (int i = 0; !result && i < SDL_arraysize(text_mime_types); i++) {
+                    result = Wayland_DataOfferHasMIME(data_device->selection_offer, text_mime_types[i]);
+                }
+            }
         }
     }
     return result;
 }
-
-static const char *const text_mime_types[] = {
-    TEXT_MIME,
-    "text/plain",
-    "TEXT",
-    "UTF8_STRING",
-    "STRING"
-};
 
 const char *const *Wayland_GetTextMimeTypes(SDL_VideoDevice *_this, size_t *num_mime_types)
 {
