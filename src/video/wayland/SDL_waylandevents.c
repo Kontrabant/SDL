@@ -2090,11 +2090,20 @@ static void keyboard_handle_enter(void *data, struct wl_keyboard *keyboard,
         return;
     }
 
+    SDL_Window *sdl_focus = window->sdlwindow;
+    if (sdl_focus->flags & SDL_WINDOW_NOT_FOCUSABLE) {
+        if (seat->keyboard.previous_focus) {
+            sdl_focus = seat->keyboard.previous_focus->sdlwindow;
+        }
+    } else {
+        seat->keyboard.previous_focus = window;
+    }
+
     ++window->keyboard_focus_count;
     seat->keyboard.focus = window;
 
     // Restore the keyboard focus to the child popup that was holding it
-    SDL_SetKeyboardFocus(window->sdlwindow->keyboard_focus ? window->sdlwindow->keyboard_focus : window->sdlwindow);
+    SDL_SetKeyboardFocus(sdl_focus->keyboard_focus ? sdl_focus->keyboard_focus : sdl_focus);
 
     // Update the keyboard grab and any relative pointer grabs related to this keyboard focus.
     Wayland_SeatUpdateKeyboardGrab(seat);

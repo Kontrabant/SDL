@@ -136,6 +136,7 @@ typedef struct SDL_WaylandSeat
         struct zwp_input_timestamps_v1 *timestamps;
         struct zwp_keyboard_shortcuts_inhibitor_v1 *key_inhibitor;
         SDL_WindowData *focus;
+        SDL_WindowData *previous_focus;
         SDL_Keymap **sdl_keymap;
         char *current_locale;
 
