@@ -835,16 +835,21 @@ static void X11_HandleClipboardEvent(SDL_VideoDevice *_this, const XEvent *xeven
         }
 #endif
 
-        /* If the requesting window was already destroyed, XChangeProperty can generate a BadWindow
-         * error. Register an error handler to catch this, and prevent it from being fatal.
-         */
-        prev_handler = X11_XSetErrorHandler(SelectionRequestErrorHandler);
-
         if (req->selection == XA_PRIMARY) {
             clipboard = &videodata->primary_selection;
         } else {
             clipboard = &videodata->clipboard;
         }
+
+        // The internal clipboard may have already been cleared if this request is out-of-date.
+        if (clipboard->mime_count == 0) {
+            break;
+        }
+
+        /* If the requesting window was already destroyed, XChangeProperty can generate a BadWindow
+         * error. Register an error handler to catch this, and prevent it from being fatal.
+         */
+        prev_handler = X11_XSetErrorHandler(SelectionRequestErrorHandler);
 
         SDL_zero(sevent);
         sevent.xany.type = SelectionNotify;
@@ -944,6 +949,9 @@ static void X11_HandleClipboardEvent(SDL_VideoDevice *_this, const XEvent *xeven
                 new_mime_types[length] = NULL;
 
                 SDL_SendClipboardUpdate(false, new_mime_types, length);
+
+                // Clear the internal selection data, as it is now stale.
+                SDL_zero(videodata->clipboard);
             }
 
             if (data) {
