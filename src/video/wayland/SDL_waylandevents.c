@@ -1614,16 +1614,13 @@ static void Wayland_KeymapIterator(struct xkb_keymap *keymap, xkb_keycode_t key,
     // Look up the scancode for hardware keyboards. Virtual keyboards get the scancode from the keysym.
     if (!seat->keyboard.is_virtual) {
         scancode = SDL_GetScancodeFromTable(SDL_SCANCODE_TABLE_XFREE86_2, (key - 8));
-        if (scancode == SDL_SCANCODE_UNKNOWN) {
-            return;
-        }
     }
 
     for (xkb_layout_index_t layout = 0; layout < seat->keyboard.xkb.num_layouts; ++layout) {
         const xkb_level_index_t num_levels = WAYLAND_xkb_keymap_num_levels_for_key(seat->keyboard.xkb.keymap, key, layout);
         for (xkb_level_index_t level = 0; level < num_levels; ++level) {
             if (WAYLAND_xkb_keymap_key_get_syms_by_level(seat->keyboard.xkb.keymap, key, layout, level, &syms) > 0) {
-                /* If the keyboard is virtual or the key didn't have a corresponding hardware scancode, try to
+                /* If the keyboard is virtual or the scancode wasn't found during the initial lookup, try to
                  * look it up from the keysym. If there is still no corresponding scancode, skip this mapping
                  * for now, as it will be dynamically added with a reserved scancode on first use.
                  */
