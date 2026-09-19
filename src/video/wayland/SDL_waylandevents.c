@@ -999,6 +999,10 @@ static void pointer_dispatch_button(SDL_WaylandSeat *seat, Uint8 sdl_button, boo
                 ignore_click = !SDL_GetHintBoolean(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, false);
             }
 
+            if ((window->sdlwindow->flags & SDL_WINDOW_NOT_FOCUSABLE) && seat->keyboard.previous_focus) {
+                Wayland_RaiseWindow(SDL_GetVideoDevice(), seat->keyboard.previous_focus->sdlwindow);
+            }
+
             window->last_focus_event_time_ns = 0;
         }
 
@@ -1050,7 +1054,7 @@ static void pointer_handle_button(void *data, struct wl_pointer *pointer, uint32
     }
 
     if (state_w) {
-        Wayland_UpdateImplicitGrabSerial(seat, serial);
+        Wayland_UpdateImplicitGrabSerial(seat, serial, true);
     }
 
     seat->pointer.pending_frame.timestamp_ns = Wayland_GetPointerTimestamp(seat, time);
@@ -1442,7 +1446,7 @@ static void touch_handler_down(void *data, struct wl_touch *touch, uint32_t seri
     }
 
     Wayland_SeatAddTouch(seat, id, fx, fy, surface);
-    Wayland_UpdateImplicitGrabSerial(seat, serial);
+    Wayland_UpdateImplicitGrabSerial(seat, serial, true);
     window_data = Wayland_GetWindowDataForOwnedSurface(surface);
 
     if (window_data && window_data->surface == surface) {
@@ -2139,6 +2143,11 @@ static void keyboard_handle_enter(void *data, struct wl_keyboard *keyboard,
             }
         }
     }
+
+    Wayland_UpdateImplicitGrabSerial(seat, serial, false);
+    if ((window->sdlwindow->flags & SDL_WINDOW_NOT_FOCUSABLE) && seat->keyboard.previous_focus) {
+        Wayland_RaiseWindow(SDL_GetVideoDevice(), seat->keyboard.previous_focus->sdlwindow);
+    }
 }
 
 static void keyboard_handle_leave(void *data, struct wl_keyboard *keyboard,
@@ -2155,6 +2164,10 @@ static void keyboard_handle_leave(void *data, struct wl_keyboard *keyboard,
     if (!window) {
         // Not a surface owned by SDL.
         return;
+    }
+
+    if (!(window->sdlwindow->flags & SDL_WINDOW_NOT_FOCUSABLE)) {
+        seat->keyboard.previous_focus = window;
     }
 
     // Stop key repeat before clearing keyboard focus
@@ -2261,7 +2274,7 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard,
     bool handled_by_ime = false;
     const Uint64 timestamp_ns = Wayland_GetKeyboardTimestamp(seat, time);
 
-    Wayland_UpdateImplicitGrabSerial(seat, serial);
+    Wayland_UpdateImplicitGrabSerial(seat, serial, true);
 
     if (state == WL_KEYBOARD_KEY_STATE_REPEATED) {
         // If this key shouldn't be repeated, just return.
@@ -3568,6 +3581,10 @@ void Wayland_DisplayRemoveWindowReferencesFromSeats(SDL_VideoData *display, SDL_
             keyboard_handle_leave(seat, seat->keyboard.wl_keyboard, 0, window->surface);
         }
 
+        if (seat->keyboard.previous_focus == window) {
+            seat->keyboard.previous_focus = NULL;
+        }
+
         if (seat->pointer.focus == window) {
             seat->pointer.pending_frame.leave_surface = seat->pointer.focus->surface;
             pointer_dispatch_leave(seat, true);
@@ -3869,13 +3886,15 @@ void Wayland_DisplayUpdateKeyboardGrabs(SDL_VideoData *display, SDL_WindowData *
     }
 }
 
-void Wayland_UpdateImplicitGrabSerial(SDL_WaylandSeat *seat, Uint32 serial)
+void Wayland_UpdateImplicitGrabSerial(SDL_WaylandSeat *seat, Uint32 serial, bool input_serial)
 {
     if (serial > seat->last_implicit_grab_serial) {
         seat->last_implicit_grab_serial = serial;
         seat->display->last_implicit_grab_seat = seat;
-        Wayland_DataDeviceSetSerial(seat->data_device, serial);
-        Wayland_PrimarySelectionDeviceSetSerial(seat->primary_selection_device, serial);
+        if (input_serial) {
+            Wayland_DataDeviceSetSerial(seat->data_device, serial);
+            Wayland_PrimarySelectionDeviceSetSerial(seat->primary_selection_device, serial);
+        }
     }
 }
 

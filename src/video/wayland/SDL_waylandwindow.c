@@ -2450,7 +2450,7 @@ void Wayland_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
     Wayland_SetWindowResizable(_this, window, !!(window->flags & SDL_WINDOW_RESIZABLE));
 
     // We're finally done putting the window together, raise if possible
-    if (c->activation_manager && SDL_GetHintBoolean(SDL_HINT_WINDOW_ACTIVATE_WHEN_SHOWN, true)) {
+    if (c->activation_manager && !(window->flags & SDL_WINDOW_NOT_FOCUSABLE) && SDL_GetHintBoolean(SDL_HINT_WINDOW_ACTIVATE_WHEN_SHOWN, true)) {
         /* if the process was passed an activation token, use it when showing
          * the initial window.
          *
@@ -2669,7 +2669,12 @@ static void Wayland_activate_window(SDL_VideoData *data, SDL_WindowData *target_
             xdg_activation_token_v1_destroy(target_wind->activation_token);
         }
 
-        target_wind->activation_token = xdg_activation_v1_get_activation_token(data->activation_manager);
+        struct wl_event_queue *queue = Wayland_DisplayCreateQueue(data->display, "SDL Activation Queue");
+        struct wl_proxy *activation_manager_wrapper = WAYLAND_wl_proxy_create_wrapper(data->activation_manager);
+        WAYLAND_wl_proxy_set_queue(activation_manager_wrapper, queue);
+
+        target_wind->activation_token = xdg_activation_v1_get_activation_token((struct xdg_activation_v1 *)activation_manager_wrapper);
+        WAYLAND_wl_proxy_wrapper_destroy(activation_manager_wrapper);
         xdg_activation_token_v1_add_listener(target_wind->activation_token,
                                              &xdg_activation_listener,
                                              target_wind);
@@ -2689,6 +2694,12 @@ static void Wayland_activate_window(SDL_VideoData *data, SDL_WindowData *target_
             xdg_activation_token_v1_set_serial(target_wind->activation_token, seat->last_implicit_grab_serial, seat->wl_seat);
         }
         xdg_activation_token_v1_commit(target_wind->activation_token);
+
+        while (target_wind->activation_token) {
+            WAYLAND_wl_display_dispatch_queue(data->display, queue);
+        }
+
+        WAYLAND_wl_event_queue_destroy(queue);
     }
 }
 
