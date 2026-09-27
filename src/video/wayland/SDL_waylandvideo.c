@@ -1478,7 +1478,7 @@ static void handle_registry_global(void *data, struct wl_registry *registry, uin
     } else if (SDL_strcmp(interface, zwp_idle_inhibit_manager_v1_interface.name) == 0) {
         d->idle_inhibit_manager = wl_registry_bind(d->registry, id, &zwp_idle_inhibit_manager_v1_interface, 1);
     } else if (SDL_strcmp(interface, xdg_activation_v1_interface.name) == 0) {
-        d->activation_manager = wl_registry_bind(d->registry, id, &xdg_activation_v1_interface, 1);
+        d->activation_manager = wl_registry_bind(d->registry, id, &xdg_activation_v1_interface, SDL_min(2, version));
     } else if (SDL_strcmp(interface, zwp_text_input_manager_v3_interface.name) == 0) {
         d->text_input_manager = wl_registry_bind(d->registry, id, &zwp_text_input_manager_v3_interface, 1);
         Wayland_InitTextInputManager(d);

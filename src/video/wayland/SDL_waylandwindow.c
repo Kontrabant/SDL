@@ -2519,12 +2519,18 @@ void Wayland_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
 #endif
     Wayland_SetWindowResizable(_this, window, !!(window->flags & SDL_WINDOW_RESIZABLE));
 
-    // We're finally done putting the window together. Try to raise it, if nothing is requesting otherwise.
-    if (!(window->flags & SDL_WINDOW_NOT_FOCUSABLE) && SDL_GetHintBoolean(SDL_HINT_WINDOW_ACTIVATE_WHEN_SHOWN, true)) {
-        Wayland_RaiseWindow(_this, window);
-    } else {
-        // Clear the ignored activation token, as it won't be used.
-        SDL_unsetenv_unsafe("XDG_ACTIVATION_TOKEN");
+    // We're finally done putting the window together, raise if possible
+    if (c->activation_manager) {
+        if (!(window->flags & SDL_WINDOW_NOT_FOCUSABLE) && SDL_GetHintBoolean(SDL_HINT_WINDOW_ACTIVATE_WHEN_SHOWN, true)) {
+            // Try to activate this window.
+            Wayland_RaiseWindow(_this, window);
+        } else {
+            if (xdg_activation_v1_get_version(c->activation_manager) >= XDG_ACTIVATION_V1_INHIBIT_SINCE_VERSION) {
+                xdg_activation_v1_inhibit(c->activation_manager, data->surface);
+            }
+            // Clear the ignored activation token, as it won't be used.
+            SDL_unsetenv_unsafe("XDG_ACTIVATION_TOKEN");
+        }
     }
 
     // No frame callback on an external surface, as it may already have one attached.
