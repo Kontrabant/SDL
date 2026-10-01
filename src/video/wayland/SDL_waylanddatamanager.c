@@ -731,6 +731,7 @@ void Wayland_DataOfferDestroy(SDL_WaylandDataOffer *offer)
         }
         wl_data_offer_destroy(offer->offer);
         MIMEDataListFree(&offer->mimes);
+        WAYLAND_wl_list_remove(&offer->link);
         SDL_free(offer);
     }
 }
