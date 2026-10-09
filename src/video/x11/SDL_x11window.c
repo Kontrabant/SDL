@@ -647,6 +647,7 @@ bool X11_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Properties
         depth = displaydata->depth;
     }
 
+    xattr.event_mask = StructureNotifyMask;
     xattr.override_redirect = ((window->flags & SDL_WINDOW_TOOLTIP) || (window->flags & SDL_WINDOW_POPUP_MENU) || force_override_redirect) ? True : False;
     xattr.backing_store = NotUseful;
     xattr.background_pixmap = None;
@@ -1633,6 +1634,10 @@ void X11_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
 void X11_HideWindow(SDL_VideoDevice *_this, SDL_Window *window)
 {
     SDL_WindowData *data = window->internal;
+    if (data->was_destroyed) {
+        return;
+    }
+
     SDL_DisplayData *displaydata = SDL_GetDisplayDriverDataForWindow(window);
     int screen = (displaydata ? displaydata->screen : 0);
     Display *display = data->videodata->display;
@@ -2267,7 +2272,7 @@ void X11_DestroyWindow(SDL_VideoDevice *_this, SDL_Window *window)
         X11_TermResizeSync(window);
 #endif /* SDL_VIDEO_DRIVER_X11_XSYNC */
 
-        if (!(window->flags & SDL_WINDOW_EXTERNAL)) {
+        if (data->was_destroyed && !(window->flags & SDL_WINDOW_EXTERNAL)) {
             X11_XDestroyWindow(display, data->xwindow);
             X11_XFlush(display);
         }

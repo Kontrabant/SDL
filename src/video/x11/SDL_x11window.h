@@ -75,6 +75,7 @@ struct SDL_WindowData
     Atom xdnd_req;
     Window xdnd_source;
     bool flashing_window;
+    bool was_destroyed;
     Uint64 flash_cancel_time;
 #ifdef SDL_VIDEO_OPENGL_EGL
     EGLSurface egl_surface;

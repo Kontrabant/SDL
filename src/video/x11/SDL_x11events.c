@@ -1496,6 +1496,12 @@ static void X11_DispatchEvent(SDL_VideoDevice *_this, XEvent *xevent)
     }
 
     switch (xevent->type) {
+    case DestroyNotify:
+    {
+        SDL_Log("Destroyed!");
+        data->was_destroyed = true;
+        SDL_DestroyWindow(data->window);
+    } break;
 
         // Gaining mouse coverage?
     case EnterNotify:
