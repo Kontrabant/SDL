@@ -51,6 +51,7 @@
 #include "color-management-v1-client-protocol.h"
 #include "xdg-session-management-v1-client-protocol.h"
 #include "xdg-toplevel-tag-v1-client-protocol.h"
+#include "fifo-v1-client-protocol.h"
 
 #ifdef HAVE_LIBDECOR_H
 #include <libdecor.h>
@@ -3062,6 +3063,15 @@ bool Wayland_ReconfigureWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_W
         return false;
     }
 
+    if (data->presentation.fifo) {
+        wp_fifo_v1_destroy(data->presentation.fifo);
+        data->presentation.fifo = NULL;
+    }
+    if (data->presentation.frame_callback) {
+        wl_callback_destroy(data->presentation.frame_callback);
+        data->presentation.frame_callback= NULL;
+    }
+
     /* The caller guarantees that only one of the GL or Vulkan flags will be set.
      * Note that Vulkan doesn't require any specific configuration, so only EGL
      * objects are added and removed as required.
@@ -3839,6 +3849,9 @@ void Wayland_DestroyWindow(SDL_VideoDevice *_this, SDL_Window *window)
         SDL_free(wind->outputs);
         SDL_free(wind->app_id);
 
+        if (wind->presentation.fifo) {
+            wp_fifo_v1_destroy(wind->presentation.fifo);
+        }
         if (wind->presentation.frame_callback) {
             wl_callback_destroy(wind->presentation.frame_callback);
         }

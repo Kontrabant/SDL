@@ -22,10 +22,16 @@
 
 #ifdef SDL_VIDEO_DRIVER_WAYLAND
 
-#include "SDL_waylandframebuffer.h"
+#include <time.h>
+
 #include "../../core/unix/SDL_poll.h"
+#include "SDL_waylandframebuffer.h"
 #include "SDL_waylandshmbuffer.h"
 #include "SDL_waylandwindow.h"
+
+#include "commit-timing-v1-client-protocol.h"
+#include "fifo-v1-client-protocol.h"
+#include "presentation-time-client-protocol.h"
 
 #define BUFFER_COUNT 3
 
@@ -41,10 +47,50 @@ struct Wayland_Framebuffer
     Wayland_Buffer buffer[BUFFER_COUNT];
     Wayland_SHMPool *pool;
     void *pixels;
-    bool vsync;
+    struct wp_presentation_feedback *presentation_feedback;
+    Uint64 last_presentation_time;
+    Uint32 last_presentation_refresh;
 };
 
-static void buffer_handle_release(void *data, struct wl_buffer *wl_buffer)
+static void handle_sync_output(void *data, struct wp_presentation_feedback *wp_presentation_feedback, struct wl_output *output)
+{
+    // NOP
+}
+
+static void handle_presented(void *data, struct wp_presentation_feedback *wp_presentation_feedback,
+                             uint32_t tv_sec_hi, uint32_t tv_sec_lo, uint32_t tv_nsec, uint32_t refresh,
+                             uint32_t seq_hi, uint32_t seq_lo, uint32_t flags)
+{
+    Wayland_Framebuffer *framebuffer = (Wayland_Framebuffer *)data;
+
+    framebuffer->last_presentation_time = SDL_SECONDS_TO_NS(((Uint64)tv_sec_hi << 32) | (Uint64)tv_sec_lo) + tv_nsec;
+    framebuffer->last_presentation_refresh = refresh;
+
+    wp_presentation_feedback_destroy(framebuffer->presentation_feedback);
+    framebuffer->presentation_feedback = NULL;
+}
+
+static void handle_discarded(void *data, struct wp_presentation_feedback *wp_presentation_feedback)
+{
+    SDL_VideoData *videodata = SDL_GetVideoDevice()->internal;
+    Wayland_Framebuffer *framebuffer = (Wayland_Framebuffer *)data;
+
+    struct timespec ts;
+    clock_gettime(videodata->presentation_clock, &ts);
+    framebuffer->last_presentation_time = SDL_SECONDS_TO_NS(ts.tv_sec) + ts.tv_nsec;
+
+    wp_presentation_feedback_destroy(framebuffer->presentation_feedback);
+    framebuffer->presentation_feedback = NULL;
+}
+
+static const struct wp_presentation_feedback_listener presentation_feedback_listener = {
+    handle_sync_output,
+    handle_presented,
+    handle_discarded
+};
+
+static void
+buffer_handle_release(void *data, struct wl_buffer *wl_buffer)
 {
     Wayland_Buffer *buffer = (Wayland_Buffer *)data;
     buffer->busy = false;
@@ -127,33 +173,26 @@ void Wayland_WaitForSwapInterval(SDL_WindowData *wind)
 
 bool Wayland_SetWindowFramebufferVSync(SDL_VideoDevice *_this, SDL_Window *window, int vsync)
 {
-    SDL_WindowData *wind = window->internal;
-    if (!wind->framebuffer) {
-        SDL_SetError("No window framebuffer");
-    }
     if (vsync < 0) {
-        return SDL_SetError("Unsupported vsync type");
+        return SDL_SetError("Unsupported Vsync type");
     }
-
-    wind->framebuffer->vsync = vsync > 0;
+    SDL_WindowData *wind = window->internal;
+    wind->presentation.vsync = vsync > 0;
     return true;
 }
 
 bool Wayland_GetWindowFramebufferVSync(SDL_VideoDevice *_this, SDL_Window *window, int *vsync)
 {
-    SDL_WindowData *wind = window->internal;
-    if (!wind->framebuffer) {
-        SDL_SetError("No window framebuffer");
-    }
-
     if (vsync) {
-        *vsync = (int)wind->framebuffer->vsync;
+        SDL_WindowData *wind = window->internal;
+        *vsync = (int)wind->presentation.vsync;
     }
     return true;
 }
 
 bool Wayland_CreateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window, SDL_PixelFormat *format, void **pixels, int *pitch)
 {
+    SDL_VideoData *videodata = _this->internal;
     SDL_WindowData *wind = window->internal;
     if (wind->framebuffer) {
         Wayland_DestroyWindowFramebuffer(_this, window);
@@ -178,6 +217,12 @@ bool Wayland_CreateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window,
     }
 
     CreatePresentationQueue(wind);
+    if (videodata->wp_fifo_manager && !wind->presentation.fifo) {
+        wind->presentation.fifo = wp_fifo_manager_v1_get_fifo(videodata->wp_fifo_manager, wind->surface);
+        if (videodata->wp_commit_timing_manager && !wind->presentation.commit_timer) {
+            wind->presentation.commit_timer = wp_commit_timing_manager_v1_get_timer(videodata->wp_commit_timing_manager, wind->surface);
+        }
+    }
 
     for (int i = 0; i < BUFFER_COUNT; ++i) {
         framebuffer->buffer[i].wl_buffer = Wayland_AllocBufferFromPool(framebuffer->pool, w, h, &framebuffer->buffer[i].mem);
@@ -212,7 +257,7 @@ failed:
 
 bool Wayland_UpdateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window, const SDL_Rect *rects, int numrects)
 {
-    SDL_VideoData *viddata = _this->internal;
+    SDL_VideoData *videodata = _this->internal;
     SDL_WindowData *wind = window->internal;
     Wayland_Framebuffer *framebuffer = wind->framebuffer;
 
@@ -220,8 +265,15 @@ bool Wayland_UpdateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window,
     SDL_GetWindowSizeInPixels(window, &w, &h);
 
     // Process the presentation queue, as a buffer release event may have already occurred.
-    if (WAYLAND_wl_display_dispatch_queue_pending(viddata->display, wind->presentation.queue) < 0) {
+    if (WAYLAND_wl_display_dispatch_queue_pending(videodata->display, wind->presentation.queue) < 0) {
         return false;
+    }
+
+    // Wait for the previous frame, so we don't get too far ahead.
+    if (wind->presentation.vsync && wind->presentation.fifo) {
+        while (framebuffer->presentation_feedback) {
+            WAYLAND_wl_display_dispatch_queue(videodata->display, wind->presentation.queue);
+        }
     }
 
     // Find a free buffer.
@@ -238,10 +290,8 @@ bool Wayland_UpdateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window,
             break;
         }
 
-        /* If there are no free buffers, wait for a buffer release event.
-         * Not all compositors flush on a release event, so round trips are used, as they cause a flush.
-         */
-        if (WAYLAND_wl_display_roundtrip_queue(viddata->display, wind->presentation.queue) < 0) {
+        // If there are no free buffers, wait for a buffer release event.
+        if (WAYLAND_wl_display_dispatch_queue(videodata->display, wind->presentation.queue) < 0) {
             return false;
         }
     }
@@ -249,7 +299,8 @@ bool Wayland_UpdateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window,
     // Copy the image data.
     SDL_memcpy(buffer->mem, framebuffer->pixels, w * h * 4);
 
-    if (framebuffer->vsync) {
+    // If we don't have fifo-v1, use the old frame event throttling method.
+    if (wind->presentation.vsync && !wind->presentation.fifo) {
         Wayland_WaitForSwapInterval(wind);
     }
 
@@ -261,9 +312,34 @@ bool Wayland_UpdateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window,
     } else {
         wl_surface_damage(wind->surface, 0, 0, SDL_MAX_SINT32, SDL_MAX_SINT32);
     }
-    wl_surface_commit(wind->surface);
 
-    WAYLAND_wl_display_flush(viddata->display);
+    if (wind->presentation.fifo) {
+        wp_fifo_v1_set_barrier(wind->presentation.fifo);
+
+        if (wind->presentation.vsync) {
+            if (wind->presentation.commit_timer && framebuffer->last_presentation_time) {
+                const Uint64 target = framebuffer->last_presentation_time + framebuffer->last_presentation_refresh;
+                const Uint64 sec = SDL_NS_TO_SECONDS(target);
+                const Uint32 nsec = target % SDL_NS_PER_SECOND;
+
+                wp_commit_timer_v1_set_timestamp(wind->presentation.commit_timer, (Uint32)(sec >> 32), (Uint32)sec, nsec);
+
+                struct wp_presentation *presentation_wrapper = WAYLAND_wl_proxy_create_wrapper(videodata->wp_presentation);
+                WAYLAND_wl_proxy_set_queue((struct wl_proxy *)presentation_wrapper, wind->presentation.queue);
+                framebuffer->presentation_feedback = wp_presentation_feedback(presentation_wrapper, wind->presentation.surface_wrapper);
+                wp_presentation_feedback_add_listener(framebuffer->presentation_feedback, &presentation_feedback_listener, framebuffer);
+                WAYLAND_wl_proxy_wrapper_destroy(presentation_wrapper);
+
+                wp_fifo_v1_wait_barrier(wind->presentation.fifo);
+                wl_surface_commit(wind->surface);
+            }
+
+            wp_fifo_v1_wait_barrier(wind->presentation.fifo);
+        }
+    }
+
+    wl_surface_commit(wind->surface);
+    WAYLAND_wl_display_flush(videodata->display);
 
     return true;
 }

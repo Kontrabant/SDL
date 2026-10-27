@@ -2460,6 +2460,9 @@ SDL_AppResult SDLTest_CommonEventMainCallbacks(SDLTest_CommonState *state, const
                     }
                     SDL_free(text);
                 }
+            } else {
+                state->render_vsync ^= 1;
+                SDL_SetRenderVSync(state->renderers[0], state->render_vsync);
             }
             break;
         case SDLK_F:

@@ -131,10 +131,13 @@ struct SDL_WindowData
 
     struct
     {
-        struct wl_callback *frame_callback;
         struct wl_event_queue *queue;
         struct wl_surface *surface_wrapper;
+        struct wl_callback *frame_callback;
+        struct wp_fifo_v1 *fifo;
+        struct wp_commit_timer_v1 *commit_timer;
         SDL_AtomicInt swap_interval_ready;
+        Uint32 vsync;
     } presentation;
 
     SDL_DisplayData **outputs;
