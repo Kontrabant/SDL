@@ -32,20 +32,17 @@
 #include "../../core/linux/SDL_ime.h"
 #include "SDL_waylandeventthread.h"
 
-struct xkb_context;
-struct SDL_WaylandSeat;
-
-typedef struct
+typedef struct Wayland_CursorTheme
 {
     struct wl_cursor_theme *theme;
     int size;
-} SDL_WaylandCursorTheme;
+} Wayland_CursorTheme;
 
-typedef struct
+typedef struct Wayland_ConnectorName
 {
     struct wl_list link;
     char wl_output_name[];
-} SDL_WaylandConnectorName;
+} Wayland_ConnectorName;
 
 struct SDL_VideoData
 {
@@ -53,7 +50,7 @@ struct SDL_VideoData
     struct wl_registry *registry;
     struct wl_compositor *compositor;
     struct wl_shm *shm;
-    SDL_WaylandCursorTheme *cursor_themes;
+    Wayland_CursorTheme *cursor_themes;
     int num_cursor_themes;
     struct
     {
@@ -95,9 +92,9 @@ struct SDL_VideoData
     struct xkb_context *xkb_context;
 
     struct wl_list seat_list;
-    struct SDL_WaylandSeat *last_implicit_grab_seat;
-    struct SDL_WaylandSeat *current_data_offer_seat;
-    struct SDL_WaylandSeat *current_primary_selection_seat;
+    struct Wayland_Seat *last_implicit_grab_seat;
+    struct Wayland_Seat *current_data_offer_seat;
+    struct Wayland_Seat *current_primary_selection_seat;
     Wayland_EventThreadContext *event_thread_context;
     Wayland_JobThreadContext *job_thread_context;
 

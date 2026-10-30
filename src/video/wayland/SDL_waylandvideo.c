@@ -1563,7 +1563,7 @@ static void handle_registry_remove_global(void *data, struct wl_registry *regist
         }
     }
 
-    SDL_WaylandSeat *seat, *temp;
+    Wayland_Seat *seat, *temp;
     wl_list_for_each_safe (seat, temp, &d->seat_list, link) {
         if (seat->registry_id == id) {
             Wayland_SeatDestroy(seat, false);
@@ -1812,7 +1812,7 @@ static bool Wayland_GetDisplayBounds(SDL_VideoDevice *_this, SDL_VideoDisplay *d
 static void Wayland_VideoCleanup(SDL_VideoDevice *_this)
 {
     SDL_VideoData *data = _this->internal;
-    SDL_WaylandSeat *seat, *tmp;
+    Wayland_Seat *seat, *tmp;
 
     Wayland_SessionDestroy(data);
 

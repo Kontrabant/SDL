@@ -57,7 +57,7 @@ bool Wayland_GetActivationTokenForExport(SDL_VideoDevice *_this, char **token, c
 
     SDL_VideoData *viddata = _this->internal;
 
-    SDL_WaylandSeat *seat = viddata->last_implicit_grab_seat;
+    Wayland_Seat *seat = viddata->last_implicit_grab_seat;
     SDL_WindowData *focus = NULL;
 
     if (seat) {
